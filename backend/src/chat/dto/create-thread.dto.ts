@@ -10,4 +10,11 @@ export class CreateThreadDto {
   @IsOptional()
   @IsUUID()
   propertyId?: string;
+
+  /// The marketplace order this thread is about, if opened from a pickup
+  /// order's "Message Vendor"/"Message Customer" — mutually exclusive
+  /// with propertyId in practice.
+  @IsOptional()
+  @IsUUID()
+  orderId?: string;
 }

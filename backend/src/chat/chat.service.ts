@@ -10,8 +10,10 @@ export class ChatService {
   constructor(private readonly prisma: PrismaService) {}
 
   /// Reuses an existing thread between the same two people about the same
-  /// property (both `undefined`/`null` counts as a match) instead of
-  /// creating a new one every time "Message Landlord" is tapped again.
+  /// property/order (both `undefined`/`null` counts as a match) instead of
+  /// creating a new one every time "Message Landlord" — or, for a
+  /// marketplace pickup order, "Message Vendor"/"Message Customer" — is
+  /// tapped again.
   async findOrCreateThread(userId: string, dto: CreateThreadDto) {
     if (dto.recipientId === userId) {
       throw new ForbiddenException('Cannot start a thread with yourself');
@@ -23,6 +25,7 @@ export class ChatService {
     const existing = await this.prisma.thread.findFirst({
       where: {
         propertyId: dto.propertyId ?? null,
+        orderId: dto.orderId ?? null,
         AND: [
           { participants: { some: { userId } } },
           { participants: { some: { userId: dto.recipientId } } },
@@ -35,6 +38,7 @@ export class ChatService {
     return this.prisma.thread.create({
       data: {
         propertyId: dto.propertyId,
+        orderId: dto.orderId,
         participants: { create: [{ userId }, { userId: dto.recipientId }] },
       },
       include: { participants: true },
@@ -47,6 +51,7 @@ export class ChatService {
       include: {
         participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
         property: { select: { id: true, title: true, imageUrl: true } },
+        order: { select: { id: true, items: { take: 1, select: { productName: true } } } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
       },
       orderBy: { updatedAt: 'desc' },
@@ -62,6 +67,7 @@ export class ChatService {
     return threads.map((thread) => ({
       id: thread.id,
       property: thread.property,
+      order: thread.order ? { id: thread.order.id, productName: thread.order.items[0]?.productName ?? null } : null,
       otherParticipants: thread.participants.filter((p) => p.userId !== userId).map((p) => p.user),
       lastMessage: thread.messages[0] ?? null,
       unreadCount: unreadByThread.get(thread.id) ?? 0,

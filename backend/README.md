@@ -1,10 +1,11 @@
 # HomeServant API
 
 NestJS + Prisma + PostgreSQL (Supabase) backend for the HomeServant Flutter
-app (mobile and web). Covers auth, user profiles, properties, bookings,
-favorites, file uploads, reviews, and chat — the pieces the current app
-screens actually call. See **Not built yet** below for what's intentionally
-out of scope for this pass.
+app (mobile and web). Covers auth (including Google Sign-In), user
+profiles, properties, bookings, favorites, file uploads, reviews, chat,
+and the marketplace (vendors, products, orders) — the pieces the current
+app screens actually call. See **Not built yet** below for what's
+intentionally out of scope for this pass.
 
 ## Local setup
 
@@ -125,20 +126,23 @@ Every route is prefixed `/api`. Auth:
   your password signs other sessions out.
 
 Everything else (`/api/users/me`, `/api/properties`, `/api/bookings`,
-`/api/favorites`, `/api/uploads`, `/api/reviews`, `/api/threads`) expects
-`Authorization: Bearer <accessToken>` except `GET /api/properties`,
-`GET /api/properties/:id`, and `GET /api/reviews`, which are public so the
-tenant browse feed doesn't require login.
+`/api/favorites`, `/api/uploads`, `/api/reviews`, `/api/threads`,
+`/api/vendors`, `/api/marketplace/*`) expects `Authorization: Bearer
+<accessToken>` except `GET /api/properties`, `GET /api/properties/:id`,
+`GET /api/reviews`, and `GET /api/marketplace/products*`, which are
+public so the browse feeds don't require login.
 
 ### File uploads
 
 `POST /api/uploads/sign` with `{ fileName, folder }` (`folder` is
-`"properties"` or `"profile-photos"`) returns a one-time
-`{ path, signedUrl, token, publicUrl }`. The client `PUT`s the raw file
-bytes to `signedUrl` (`Content-Type` matching the file), then saves
-`publicUrl` on the property (`imageUrl`/`galleryUrls`) or the user's
-`profilePhotoUrl` via the existing update endpoints — this API never
-receives the file itself, Supabase Storage does.
+`"properties"`, `"profile-photos"`, `"marketplace-products"`, or
+`"vendor-logos"`) returns a one-time `{ path, signedUrl, token,
+publicUrl }`. The client `PUT`s the raw file bytes to `signedUrl`
+(`Content-Type` matching the file), then saves `publicUrl` wherever it
+belongs (property `imageUrl`/`galleryUrls`, a user's `profilePhotoUrl`, a
+product's `imageUrls`, a vendor's `logoUrl`) via the relevant update
+endpoint — this API never receives the file itself, Supabase Storage
+does.
 
 ### Reviews
 
@@ -156,9 +160,11 @@ are computed from this table, not stored on `Property` itself.
 - `GET /api/threads` — the caller's conversations, each with the other
   participant(s), the property it's about (if any), the last message, and
   an unread count.
-- `POST /api/threads` with `{ recipientId, propertyId? }` — opens a thread,
-  reusing an existing one between the same two people about the same
-  property instead of duplicating it.
+- `POST /api/threads` with `{ recipientId, propertyId? }` or `{
+  recipientId, orderId? }` — opens a thread, reusing an existing one
+  between the same two people about the same property/order instead of
+  duplicating it. `orderId` is how marketplace pickup-coordination chats
+  (buyer <-> vendor) plug into the same chat system as property chats.
 - `GET /api/threads/:id/messages` (optional `?before=<ISO timestamp>` to
   page backwards) / `POST /api/threads/:id/messages` with `{ body }`.
 - `PATCH /api/threads/:id/read` — marks the other participant's messages
@@ -173,6 +179,48 @@ and this API has its own JWT auth instead — wiring it up means either
 switching auth to Supabase Auth, or issuing this API's access tokens signed
 with Supabase's own JWT secret so `auth.jwt()` resolves correctly in RLS.
 Neither is done here; treat it as a deliberate follow-up, not an oversight.
+
+### Marketplace
+
+A vendor is a `VENDOR`-role `User` (same signup/login/OTP/Google-auth flow
+as everything else) with a 1:1 `VendorProfile` — deliberately *not* a
+second, parallel auth system, so vendors get real sessions/password
+handling/2FA for free instead of the app's previous "any email/password
+logs in, signup form data is discarded" placeholder.
+
+- `POST /api/vendors/me` with `{ businessName, category, state, rcNumber?,
+  logoUrl? }` — creates the caller's shop (`VENDOR` role only, one per
+  account). `GET/PATCH /api/vendors/me` read/update it; `PATCH` also
+  accepts `bankName`/`accountNumber`/`accountName` (payout details — see
+  **Not built yet**, payouts themselves aren't automated), and `isActive:
+  false` is "Deactivate Shop" — hides every one of the vendor's products
+  from the public catalog without deleting anything.
+- `GET /api/marketplace/products` (public; `?category=`, `?search=`,
+  `?vendorId=`) / `GET /api/marketplace/products/:id` (public) — only
+  ever returns `isAvailable` products from `isActive` vendors.
+  `GET /api/marketplace/products/mine` (vendor only) includes unavailable
+  ones too, so a vendor can see and re-enable something they deleted.
+  `POST`/`PATCH /api/marketplace/products/:id` (vendor, own products
+  only) create/update a listing; `DELETE` is a soft delete
+  (`isAvailable = false`) rather than a real row delete, since a hard
+  delete would orphan any past order that references it.
+- `POST /api/marketplace/orders` with `{ items: [{ productId, quantity,
+  fulfillment }], paymentMethod }` — buyer info (`customerName/Phone/
+  Address`) comes from the authenticated account's own profile, not a
+  separate checkout form. Stock is checked and decremented atomically per
+  item inside a transaction (a conditional update guarded by `stock >=
+  quantity`, not a plain read-then-write), so two concurrent buyers can't
+  both oversell the last unit. `GET /api/marketplace/orders/mine` is the
+  buyer's own order history (scoped by buyer id — every buyer used to see
+  every order ever placed, by everyone, before this existed).
+  `GET /api/marketplace/orders/vendor` (vendor only) is the flattened
+  order-item view for that vendor's own sales.
+  `PATCH /api/marketplace/orders/items/:itemId/status` (vendor, own items
+  only) with `{ status: "COMPLETED" | "CANCELLED" }`, and `PATCH
+  .../items/:itemId/read` mark a notification seen.
+- **No payment gateway is wired up** — an order is recorded with whatever
+  `paymentMethod` label the client sends; nothing actually charges the
+  buyer. See **Not built yet**.
 
 ## Wiring this into the Flutter app
 
@@ -193,15 +241,20 @@ preferences (theme, notification toggles, app lock) still live in
 Scoped out of this pass on purpose, to ship something real rather than a
 half-built everything:
 
-- **Marketplace** — vendors, products, orders, and payments aren't
-  modelled at all yet; the Flutter Marketplace screens are still fully
-  mocked and have their own separate vendor-auth flow this API doesn't
-  cover.
 - **Tenancy agreement storage** — PDF generation is client-side only
   (`lib/features/dashboard/legal/tenancy_agreement_pdf.dart`); nothing
   persists the generated document server-side yet.
 - **Payments** — no Paystack/Flutterwave integration for rent or
-  marketplace checkout. Needs a real merchant account and API keys.
+  marketplace checkout; a marketplace order is recorded with whatever
+  `paymentMethod` label the client sends, nothing actually charges
+  anyone. Needs a real merchant account and API keys.
+- **Marketplace vendor payouts** — `VendorProfile.bankName/accountNumber/
+  accountName` are stored but nothing automates paying a vendor out;
+  that's tied to the payments gap above.
+- **Vendor application review** — every vendor is active immediately on
+  signup; there's no pending/approved/rejected moderation workflow (the
+  old mocked signup's "we'll review your application" message implied
+  one, but nothing modelled it either).
 - **SMS OTP delivery** — email (`OTP_PROVIDER=resend`, see below) is
   wired up; SMS via Termii (for Nigerian phone numbers) isn't. Implement
   `OtpProvider` (see `src/otp/otp-provider.interface.ts`) for it if a

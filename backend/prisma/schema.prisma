@@ -1,8 +1,8 @@
 // HomeServant API data model — v1. Covers auth, profiles, properties,
-// bookings, favorites, reviews, and chat: the pieces the redesigned
-// landlord/tenant screens actually call today. Tenancy agreement storage
-// and the marketplace (vendors/products/orders) are intentionally not
-// modelled yet — see backend/README.md for that roadmap.
+// bookings, favorites, reviews, chat, and the marketplace (vendors,
+// products, orders): the pieces the app's screens actually call today.
+// Tenancy agreement storage is intentionally not modelled yet — see
+// backend/README.md for that roadmap.
 
 generator client {
   provider = "prisma-client-js"
@@ -21,6 +21,7 @@ datasource db {
 enum UserRole {
   TENANT
   LANDLORD
+  VENDOR
 }
 
 enum PropertyCategory {
@@ -45,6 +46,32 @@ enum OtpPurpose {
   SIGNUP
   LOGIN_2FA
   PASSWORD_RESET
+}
+
+enum MarketplaceCategory {
+  FURNITURE
+  HOME_APPLIANCES
+  ELECTRONICS
+  FITTINGS_FIXTURES
+  DECOR
+  TOOLS_EQUIPMENT
+  OTHER
+}
+
+enum FulfillmentMethod {
+  DELIVERY
+  PICKUP
+}
+
+enum MarketplacePaymentMethod {
+  CARD
+  BANK_TRANSFER
+}
+
+enum OrderItemStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
 }
 
 model User {
@@ -72,14 +99,16 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  properties        Property[]          @relation("LandlordProperties")
-  bookings          Booking[]           @relation("TenantBookings")
-  favorites         Favorite[]
-  refreshTokens     RefreshToken[]
-  otpCodes          OtpCode[]
-  reviews           Review[]
-  threadMemberships ThreadParticipant[]
-  messages          Message[]
+  properties         Property[]          @relation("LandlordProperties")
+  bookings           Booking[]           @relation("TenantBookings")
+  favorites          Favorite[]
+  refreshTokens      RefreshToken[]
+  otpCodes           OtpCode[]
+  reviews            Review[]
+  threadMemberships  ThreadParticipant[]
+  messages           Message[]
+  vendorProfile      VendorProfile?
+  marketplaceOrders  MarketplaceOrder[]
 
   @@index([role])
 }
@@ -174,16 +203,24 @@ model Review {
 /// this isn't locked to exactly two people if group threads are ever
 /// needed.
 model Thread {
-  id         String    @id @default(uuid())
+  id         String            @id @default(uuid())
   propertyId String?
-  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  property   Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  /// Set instead of propertyId for a marketplace pickup-coordination
+  /// thread (buyer <-> vendor about a specific order) — mutually
+  /// exclusive with propertyId in practice, though nothing enforces that
+  /// at the schema level since a thread with neither is also valid (not
+  /// used today, but not wrong).
+  orderId    String?
+  order      MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
 
   participants ThreadParticipant[]
   messages     Message[]
 
   @@index([propertyId])
+  @@index([orderId])
 }
 
 model ThreadParticipant {
@@ -238,4 +275,97 @@ model Favorite {
   createdAt  DateTime @default(now())
 
   @@unique([userId, propertyId])
+}
+
+/// A vendor "shop" — one per VENDOR-role User (1:1, hence the unique
+/// userId). Phone/address reuse User.phoneNumber/houseAddress rather than
+/// duplicating them here; everything shop-specific (business identity,
+/// payout details) lives on this model. [isActive] false hides every one
+/// of the vendor's products from the public catalog — "Deactivate Shop"
+/// in the app.
+model VendorProfile {
+  id            String              @id @default(uuid())
+  userId        String              @unique
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName  String
+  category      MarketplaceCategory
+  state         String
+  rcNumber      String?
+  logoUrl       String?
+  bankName      String?
+  accountNumber String?
+  accountName   String?
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  products   Product[]
+  orderItems MarketplaceOrderItem[]
+
+  @@index([category])
+}
+
+/// [isAvailable] false is a soft delete — "Delete" in the vendor's "My
+/// Products" screen sets this instead of removing the row, since a hard
+/// delete would orphan any past MarketplaceOrderItem that references it.
+model Product {
+  id                 String              @id @default(uuid())
+  vendorId           String
+  vendor             VendorProfile       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  name               String
+  description        String
+  price              Int
+  stock              Int
+  category           MarketplaceCategory
+  imageUrls          String[]            @default([])
+  videoUrl           String?
+  fulfillmentOptions FulfillmentMethod[]
+  isAvailable        Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  orderItems MarketplaceOrderItem[]
+
+  @@index([vendorId])
+  @@index([category])
+}
+
+model MarketplaceOrder {
+  id              String                   @id @default(uuid())
+  buyerId         String
+  buyer           User                     @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  paymentMethod   MarketplacePaymentMethod
+  customerName    String
+  customerPhone   String
+  customerAddress String
+  createdAt       DateTime                 @default(now())
+
+  items   MarketplaceOrderItem[]
+  threads Thread[]
+
+  @@index([buyerId])
+}
+
+/// Snapshots productName/unitPrice at purchase time — a later price or
+/// name change on the product shouldn't retroactively change past
+/// orders. Status/notificationRead are tracked per item (not per order)
+/// since one order can span multiple vendors, each managing only their
+/// own items.
+model MarketplaceOrderItem {
+  id               String            @id @default(uuid())
+  orderId          String
+  order            MarketplaceOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  vendorId         String
+  vendor           VendorProfile     @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  productName      String
+  unitPrice        Int
+  quantity         Int
+  fulfillment      FulfillmentMethod
+  status           OrderItemStatus   @default(PENDING)
+  notificationRead Boolean           @default(false)
+
+  @@index([orderId])
+  @@index([vendorId])
 }

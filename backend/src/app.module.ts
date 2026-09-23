@@ -5,11 +5,14 @@ import { BookingsModule } from './bookings/bookings.module';
 import { ChatModule } from './chat/chat.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { HealthController } from './health/health.controller';
+import { MarketplaceOrdersModule } from './marketplace-orders/marketplace-orders.module';
+import { MarketplaceProductsModule } from './marketplace-products/marketplace-products.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PropertiesModule } from './properties/properties.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
+import { VendorsModule } from './vendors/vendors.module';
 
 @Module({
   imports: [
@@ -23,6 +26,9 @@ import { UsersModule } from './users/users.module';
     StorageModule,
     ReviewsModule,
     ChatModule,
+    VendorsModule,
+    MarketplaceProductsModule,
+    MarketplaceOrdersModule,
   ],
   controllers: [HealthController],
 })
