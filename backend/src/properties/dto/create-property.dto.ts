@@ -1,4 +1,4 @@
-import { IsArray, IsEnum, IsInt, IsOptional, IsString, IsUrl, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUrl, Min, MinLength } from 'class-validator';
 import { PriceUnit, PropertyCategory } from '@prisma/client';
 
 export class CreatePropertyDto {
@@ -39,8 +39,13 @@ export class CreatePropertyDto {
   @IsUrl()
   imageUrl?: string;
 
+  /// Together with [imageUrl] (the cover), the Flutter client caps a
+  /// listing at 6 photos total and requires at least 2 — this mirrors the
+  /// upper bound server-side so that limit can't be bypassed by calling
+  /// the API directly.
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(5)
   @IsUrl({}, { each: true })
   galleryUrls?: string[];
 }

@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_landlord_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/login_tenant_screen.dart';
+import '../features/auth/reset_password_screen.dart';
 import '../features/auth/signup_landlord1_screen.dart';
 import '../features/auth/signup_landlord2_screen.dart';
 import '../features/auth/signup_landlord_screen.dart';
@@ -63,9 +65,33 @@ void _proceedAfterGoogleSignIn(BuildContext context) {
   }
 }
 
-GoRouter buildAppRouter() {
+/// Entry/pre-auth screens a returning, already-authenticated user has no
+/// reason to see again — a restored session (see AppState.load) should
+/// drop them straight into their dashboard instead of making them repeat
+/// login/signup. Deliberately excludes mid-flow screens reachable while
+/// briefly "authenticated" but not yet fully onboarded (verify-otp,
+/// signup-*-1/2, login-2fa, app-lock-verify) — redirecting away from
+/// those would break an in-progress signup.
+const _preAuthPaths = {
+  '/',
+  '/get-started',
+  '/login',
+  '/login-landlord',
+  '/login-tenant',
+  '/signup',
+  '/signup-landlord',
+  '/signup-tenant',
+};
+
+GoRouter buildAppRouter(AppState appState) {
   return GoRouter(
     initialLocation: '/',
+    refreshListenable: appState,
+    redirect: (context, state) {
+      if (!appState.isLoaded || !appState.isAuthenticated) return null;
+      if (_preAuthPaths.contains(state.matchedLocation)) return '/dashboard';
+      return null;
+    },
     routes: [
       GoRoute(
         path: '/',
@@ -115,6 +141,7 @@ GoRouter buildAppRouter() {
           onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
           onRequiresTwoFactor: () => context.push('/login-2fa'),
           onSignUp: () => context.push('/signup-landlord'),
+          onForgotPassword: () => context.push('/forgot-password', extra: UserRole.landlord),
         ),
       ),
       GoRoute(
@@ -124,7 +151,34 @@ GoRouter buildAppRouter() {
           onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
           onRequiresTwoFactor: () => context.push('/login-2fa'),
           onSignUp: () => context.push('/signup'),
+          onForgotPassword: () => context.push('/forgot-password', extra: UserRole.tenant),
         ),
+      ),
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) {
+          final role = (state.extra as UserRole?) ?? UserRole.tenant;
+          return ForgotPasswordScreen(
+            role: role,
+            onCodeSent: (email) => context.push('/reset-password', extra: (role: role, email: email)),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) {
+          final extra = state.extra as ({UserRole role, String email})?;
+          return ResetPasswordScreen(
+            role: extra?.role ?? UserRole.tenant,
+            email: extra?.email ?? '',
+            onReset: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Password reset — log in with your new password')),
+              );
+              context.go(extra?.role == UserRole.landlord ? '/login-landlord' : '/login-tenant');
+            },
+          );
+        },
       ),
       GoRoute(
         path: '/signup',

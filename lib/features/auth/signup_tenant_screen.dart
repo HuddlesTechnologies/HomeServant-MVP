@@ -11,7 +11,11 @@ import '../../widgets/terms_footer.dart';
 import '../../widgets/themed_scaffold.dart';
 
 class SignupTenantScreen extends StatefulWidget {
-  const SignupTenantScreen({super.key, required this.onContinue, required this.onGoogleSignedIn});
+  const SignupTenantScreen({
+    super.key,
+    required this.onContinue,
+    required this.onGoogleSignedIn,
+  });
 
   final ValueChanged<String> onContinue;
 
@@ -50,7 +54,10 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
     });
     try {
       final email = _email.text.trim();
-      await context.read<AppState>().signup(email: email, password: _password.text);
+      await context.read<AppState>().signup(
+        email: email,
+        password: _password.text,
+      );
       if (!mounted) return;
       widget.onContinue(email);
     } on ApiException catch (e) {
@@ -90,20 +97,27 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
             const SizedBox(height: 24),
             Center(child: HomeServantLogo(role: _role, iconSize: 60)),
             const SizedBox(height: 40),
-            Text('Sign Up', textAlign: TextAlign.center, style: AppTextStyles.heading(color: _role.foreground, size: 30)),
+            Text(
+              'Sign Up',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.heading(color: _role.foreground, size: 30),
+            ),
             const SizedBox(height: 6),
             Text(
               'Enter your email and a password to sign up',
               textAlign: TextAlign.center,
-              style: AppTextStyles.body(color: _role.foreground.withValues(alpha: 0.85)),
+              style: AppTextStyles.body(
+                color: _role.foreground.withValues(alpha: 0.85),
+              ),
             ),
             const SizedBox(height: 28),
             PillTextField(
-              hint: 'email@domain.com',
+              hint: 'Enter your email',
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               validator: (value) {
-                if (value == null || !value.contains('@')) return 'Enter a valid email';
+                if (value == null || !value.contains('@'))
+                  return 'Enter a valid email';
                 return null;
               },
             ),
@@ -113,7 +127,8 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
               controller: _password,
               obscureText: true,
               validator: (value) {
-                if (value == null || value.length < 8) return 'At least 8 characters';
+                if (value == null || value.length < 8)
+                  return 'At least 8 characters';
                 return null;
               },
             ),
@@ -129,7 +144,11 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
+              Text(
+                _error!,
+                style: AppTextStyles.body(color: Colors.redAccent, size: 13),
+                textAlign: TextAlign.center,
+              ),
             ],
             const SizedBox(height: 18),
             PillButton(
@@ -142,19 +161,32 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
             const SizedBox(height: 24),
             Row(
               children: [
-                Expanded(child: Divider(color: _role.foreground.withValues(alpha: 0.4))),
+                Expanded(
+                  child: Divider(
+                    color: _role.foreground.withValues(alpha: 0.4),
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
                     'Sign in with social media',
-                    style: AppTextStyles.body(color: _role.foreground.withValues(alpha: 0.7), size: 13),
+                    style: AppTextStyles.body(
+                      color: _role.foreground.withValues(alpha: 0.7),
+                      size: 13,
+                    ),
                   ),
                 ),
-                Expanded(child: Divider(color: _role.foreground.withValues(alpha: 0.4))),
+                Expanded(
+                  child: Divider(
+                    color: _role.foreground.withValues(alpha: 0.4),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
-            GoogleSignInButton(onPressed: _googleSubmitting ? null : _continueWithGoogle),
+            GoogleSignInButton(
+              onPressed: _googleSubmitting ? null : _continueWithGoogle,
+            ),
             const SizedBox(height: 140),
             TermsFooter(
               mutedColor: _role.foreground.withValues(alpha: 0.55),

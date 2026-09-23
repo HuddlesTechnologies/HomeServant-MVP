@@ -34,7 +34,7 @@ import '../services/google_auth_service.dart';
 /// signed-in user is re-fetched from the API on launch via [load].
 class AppState extends ChangeNotifier {
   AppState() {
-    _apiClient = ApiClient(_tokens)..onSessionExpired = _clearSession;
+    _apiClient = ApiClient(_tokens)..onSessionExpired = _handleSessionExpired;
     _authRepo = AuthRepository(_apiClient, _tokens);
     _usersRepo = UsersRepository(_apiClient);
     _propertiesRepo = PropertiesRepository(_apiClient);
@@ -88,6 +88,25 @@ class AppState extends ChangeNotifier {
   /// restored on launch — see [isAuthenticated].
   String? userId;
   bool get isAuthenticated => userId != null;
+
+  /// True right after a refresh-token failure (the session genuinely
+  /// expired, not just an access token due for renewal) clears local
+  /// session state — SessionExpiredGate watches this to show an explicit
+  /// "you were signed out" modal instead of silently dropping the user
+  /// back to a login screen with no explanation. Cleared by
+  /// [acknowledgeSessionExpired] once the user's seen it. Never set by a
+  /// deliberate [logout] — only by [_handleSessionExpired].
+  bool sessionExpired = false;
+
+  void acknowledgeSessionExpired() {
+    sessionExpired = false;
+    notifyListeners();
+  }
+
+  void _handleSessionExpired() {
+    sessionExpired = true;
+    _clearSession();
+  }
 
   UserRole role = UserRole.tenant;
   String email = '';
@@ -201,6 +220,17 @@ class AppState extends ChangeNotifier {
 
   Future<void> changePassword({required String currentPassword, required String newPassword}) {
     return _authRepo.changePassword(currentPassword: currentPassword, newPassword: newPassword);
+  }
+
+  /// Always succeeds from the caller's point of view regardless of
+  /// whether [email] has an account — see AuthService.forgotPassword on
+  /// the backend for why.
+  Future<void> forgotPassword(String email) {
+    return _authRepo.forgotPassword(email: email);
+  }
+
+  Future<void> resetPassword({required String email, required String code, required String newPassword}) {
+    return _authRepo.resetPassword(email: email, code: code, newPassword: newPassword);
   }
 
   Future<void> completeProfile({

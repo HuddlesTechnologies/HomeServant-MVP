@@ -84,6 +84,26 @@ class AuthRepository {
     });
   }
 
+  Future<void> forgotPassword({required String email}) {
+    return _client.call(() async {
+      await _client.dio.post(
+        '/auth/forgot-password',
+        data: {'email': email},
+        options: Options(extra: {'skipAuth': true}),
+      );
+    });
+  }
+
+  Future<void> resetPassword({required String email, required String code, required String newPassword}) {
+    return _client.call(() async {
+      await _client.dio.post(
+        '/auth/reset-password',
+        data: {'email': email, 'code': code, 'newPassword': newPassword},
+        options: Options(extra: {'skipAuth': true}),
+      );
+    });
+  }
+
   Future<void> changePassword({required String currentPassword, required String newPassword}) {
     return _client.call(() async {
       await _client.dio.patch('/auth/password', data: {'currentPassword': currentPassword, 'newPassword': newPassword});

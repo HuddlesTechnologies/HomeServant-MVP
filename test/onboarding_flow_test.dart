@@ -30,7 +30,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sign Up'), findsOneWidget);
-    expect(find.text('email@domain.com'), findsOneWidget);
+    expect(find.text('Enter your email'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
   });
 
@@ -50,7 +50,7 @@ void main() {
       await tester.tap(find.text('Sign up as a Tenant'));
       await tester.pumpAndSettle();
 
-      expect(find.text('email@domain.com'), findsOneWidget);
+      expect(find.text('Enter your email'), findsOneWidget);
       expect(find.text('Continue with Google'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField), 'tenant@example.com');

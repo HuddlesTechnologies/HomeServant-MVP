@@ -8,8 +8,10 @@ import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service';
 import { OtpService } from '../otp/otp.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -191,6 +193,31 @@ export class AuthService {
 
     const tokens = await this.issueTokens(user);
     return { ...tokens, user: this.toPublicUser(user) };
+  }
+
+  /// Always resolves the same way whether or not [dto.email] has an
+  /// account — a different response for "no such account" vs "code sent"
+  /// would let an attacker enumerate registered emails. A Google-only
+  /// account (no passwordHash) also gets the generic response but no code,
+  /// since there's no password on it to reset.
+  async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (user?.passwordHash) {
+      await this.otp.issue(dto.email, OtpPurpose.PASSWORD_RESET, user.id);
+    }
+    return { message: 'If an account exists for that email, a reset code has been sent.' };
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    await this.otp.verify(dto.email, OtpPurpose.PASSWORD_RESET, dto.code);
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    const user = await this.prisma.user.update({ where: { email: dto.email }, data: { passwordHash } });
+    // Same as changePassword — a password reset should sign out every
+    // other session, not just leave old refresh tokens usable.
+    await this.prisma.refreshToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {

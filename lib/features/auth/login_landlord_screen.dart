@@ -17,6 +17,7 @@ class LoginLandlordScreen extends StatefulWidget {
     required this.onGoogleSignedIn,
     required this.onRequiresTwoFactor,
     required this.onSignUp,
+    required this.onForgotPassword,
   });
 
   final VoidCallback onLoginSuccess;
@@ -27,6 +28,7 @@ class LoginLandlordScreen extends StatefulWidget {
   final VoidCallback onGoogleSignedIn;
   final VoidCallback onRequiresTwoFactor;
   final VoidCallback onSignUp;
+  final VoidCallback onForgotPassword;
 
   @override
   State<LoginLandlordScreen> createState() => _LoginLandlordScreenState();
@@ -98,6 +100,17 @@ class _LoginLandlordScreenState extends State<LoginLandlordScreen> {
           PillTextField(hint: 'Email', controller: _email, keyboardType: TextInputType.emailAddress),
           const SizedBox(height: 16),
           PillTextField(hint: 'Password', controller: _password, obscureText: true),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: GestureDetector(
+              onTap: widget.onForgotPassword,
+              child: Text(
+                'Forgot Password?',
+                style: AppTextStyles.body(color: _role.emphasis, weight: FontWeight.w600, size: 13),
+              ),
+            ),
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),

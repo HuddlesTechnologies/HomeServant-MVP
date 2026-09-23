@@ -134,10 +134,19 @@ class _SignupTenant2ScreenState extends State<SignupTenant2Screen> {
               decoration: BoxDecoration(color: panelColor, borderRadius: BorderRadius.circular(20)),
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: _role.accent.withValues(alpha: 0.3),
-                    backgroundImage: _photo != null && _photo!.isImage ? _photo!.imageProvider : null,
+                  Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _role.accent.withValues(alpha: 0.3),
+                      // Biased toward the top rather than dead-center — a plain
+                      // center-crop on an uncropped photo tends to zoom in on
+                      // the nose/mouth instead of showing the whole face.
+                      image: _photo != null && _photo!.isImage
+                          ? DecorationImage(image: _photo!.imageProvider, fit: BoxFit.cover, alignment: const Alignment(0, -0.3))
+                          : null,
+                    ),
                     child: _photo == null
                         ? Icon(Icons.person, size: 40, color: _role.foreground)
                         : (_photo!.isImage ? null : Icon(Icons.insert_drive_file_rounded, size: 32, color: _role.foreground)),

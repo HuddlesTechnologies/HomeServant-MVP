@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'routes/app_router.dart';
 import 'state/app_state.dart';
 import 'widgets/app_lock_gate.dart';
+import 'widgets/session_expired_gate.dart';
 
 class HomeServantApp extends StatefulWidget {
   const HomeServantApp({super.key});
@@ -15,7 +16,7 @@ class HomeServantApp extends StatefulWidget {
 
 class _HomeServantAppState extends State<HomeServantApp> {
   late final AppState _appState = AppState();
-  late final GoRouter _router = buildAppRouter();
+  late final GoRouter _router = buildAppRouter(_appState);
 
   @override
   void initState() {
@@ -36,7 +37,7 @@ class _HomeServantAppState extends State<HomeServantApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         routerConfig: _router,
-        builder: (context, child) => AppLockGate(child: child!),
+        builder: (context, child) => SessionExpiredGate(child: AppLockGate(child: child!)),
       ),
     );
   }

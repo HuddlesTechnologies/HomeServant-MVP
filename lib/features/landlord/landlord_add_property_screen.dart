@@ -12,12 +12,14 @@ import '../../widgets/upload_picker.dart';
 import '../dashboard/models/property.dart';
 
 const _categories = ['House', 'Shortlet', 'Self-Con', 'Apartment'];
+const _minImages = 2;
+const _maxImages = 6;
 
 /// The landlord's "Add Property" form — reached from Profile Settings.
-/// Uploads the cover photo (if any) to Supabase Storage, then creates the
-/// listing via `POST /properties` and adds it to
-/// [AppState.landlordProperties], so the new listing actually shows up in
-/// "My Properties" and the Home tab's Properties count.
+/// Uploads every picked photo (2-6, first one used as the cover) to
+/// Supabase Storage, then creates the listing via `POST /properties` and
+/// adds it to [AppState.landlordProperties], so the new listing actually
+/// shows up in "My Properties" and the Home tab's Properties count.
 class LandlordAddPropertyScreen extends StatefulWidget {
   const LandlordAddPropertyScreen({super.key});
 
@@ -36,7 +38,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
 
   String _category = _categories.first;
   String? _state;
-  PickedUpload? _photo;
+  final List<PickedUpload> _images = [];
   String? _videoPath;
   String? _videoFileName;
   bool _pickingVideo = false;
@@ -53,11 +55,15 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     super.dispose();
   }
 
-  Future<void> _pickPhoto() async {
-    final picked = await pickUpload(context);
-    if (picked != null && picked.isImage) {
-      setState(() => _photo = picked);
+  Future<void> _addImages() async {
+    final remaining = _maxImages - _images.length;
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('You can add up to $_maxImages photos')));
+      return;
     }
+    final picked = await pickMultipleImageUploads(context, maxCount: remaining);
+    if (!mounted || picked.isEmpty) return;
+    setState(() => _images.addAll(picked.take(remaining)));
   }
 
   Future<void> _pickVideo() async {
@@ -84,21 +90,28 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a state')));
       return;
     }
+    if (_images.length < _minImages) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Add at least $_minImages photos')));
+      return;
+    }
     setState(() => _saving = true);
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     final landlordName = appState.fullName.trim().isEmpty ? 'You' : appState.fullName.trim();
     try {
-      final photo = _photo;
-      final imageUrl = photo == null ? null : await appState.uploads.upload(file: photo, folder: 'properties');
+      final imageUrls = <String>[];
+      for (final image in _images) {
+        imageUrls.add(await appState.uploads.upload(file: image, folder: 'properties'));
+      }
       final property = Property(
         id: '',
         title: _title.text.trim(),
         location: _location.text.trim(),
         state: _state!,
         rating: 0,
-        image: imageUrl ?? 'assets/images/homepage.jpg',
+        image: imageUrls.first,
+        galleryImages: imageUrls.skip(1).toList(),
         category: _category,
         price: int.tryParse(_price.text.replaceAll(',', '')) ?? 0,
         priceUnit: _category == 'Shortlet' ? 'night' : 'year',
@@ -135,32 +148,43 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
-              Center(
-                child: GestureDetector(
-                  onTap: _pickPhoto,
-                  child: Container(
-                    width: double.infinity,
-                    height: 160,
-                    clipBehavior: Clip.hardEdge,
-                    decoration: BoxDecoration(
-                      color: AppColors.navy.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: AppColors.navy.withValues(alpha: 0.15)),
-                    ),
-                    child: _photo != null
-                        ? Image(image: _photo!.imageProvider, fit: BoxFit.cover)
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.add_a_photo_outlined, color: AppColors.navy, size: 28),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Add a cover photo',
-                                style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
-                              ),
-                            ],
+              Text(
+                'Photos ($_minImages-$_maxImages) · ${_images.length}/$_maxImages',
+                style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 84,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    for (final image in _images)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: _PickedPhotoTile(
+                          isCover: image == _images.first,
+                          onRemove: () => setState(() => _images.remove(image)),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: Image(image: image.imageProvider, width: 84, height: 84, fit: BoxFit.cover),
                           ),
-                  ),
+                        ),
+                      ),
+                    if (_images.length < _maxImages)
+                      GestureDetector(
+                        onTap: _addImages,
+                        child: Container(
+                          width: 84,
+                          height: 84,
+                          decoration: BoxDecoration(
+                            color: AppColors.navy.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.navy.withValues(alpha: 0.15)),
+                          ),
+                          child: const Icon(Icons.add_a_photo_outlined, color: AppColors.navy, size: 26),
+                        ),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 14),
@@ -310,6 +334,53 @@ class _VideoPicker extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// One thumbnail in the photo picker's horizontal strip — a remove button
+/// and, on the first (cover) photo, a small badge so it's clear which one
+/// becomes the listing's main image.
+class _PickedPhotoTile extends StatelessWidget {
+  const _PickedPhotoTile({required this.child, required this.isCover, required this.onRemove});
+
+  final Widget child;
+  final bool isCover;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 84,
+      height: 84,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          child,
+          if (isCover)
+            Positioned(
+              left: 4,
+              bottom: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
+                child: Text('Cover', style: AppTextStyles.body(color: Colors.white, size: 9.5, weight: FontWeight.w700)),
+              ),
+            ),
+          Positioned(
+            top: -6,
+            right: -6,
+            child: GestureDetector(
+              onTap: onRemove,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: const BoxDecoration(color: Colors.black87, shape: BoxShape.circle),
+                child: const Icon(Icons.close_rounded, color: Colors.white, size: 14),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

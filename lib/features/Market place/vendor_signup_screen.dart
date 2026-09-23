@@ -59,12 +59,21 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
   }
 
   Future<void> _pickCategory() async {
-    final result = await _showPicker(title: 'Business Category', options: marketplaceCategoryLabels, current: _category?.label);
-    if (result != null) setState(() => _category = MarketplaceCategoryApi.fromLabel(result));
+    final result = await _showPicker(
+      title: 'Business Category',
+      options: marketplaceCategoryLabels,
+      current: _category?.label,
+    );
+    if (result != null)
+      setState(() => _category = MarketplaceCategoryApi.fromLabel(result));
   }
 
   Future<void> _pickState() async {
-    final result = await _showPicker(title: 'State', options: nigerianStates, current: _state);
+    final result = await _showPicker(
+      title: 'State',
+      options: nigerianStates,
+      current: _state,
+    );
     if (result != null) setState(() => _state = result);
   }
 
@@ -170,20 +179,25 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
     try {
       appState.selectRole(UserRole.vendor);
       final email = _email.text.trim();
-      await appState.signup(email: email, password: _password.text, fullName: _ownerName.text.trim());
+      await appState.signup(
+        email: email,
+        password: _password.text,
+        fullName: _ownerName.text.trim(),
+      );
       if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => VendorVerifyOtpScreen(
-            theme: widget.theme,
-            email: email,
-            businessName: _businessName.text.trim(),
-            category: _category!,
-            state: _state!,
-            rcNumber: _rcNumber.text.trim(),
-            phone: _phone.text.trim(),
-            logo: _logo,
-          ),
+          builder:
+              (_) => VendorVerifyOtpScreen(
+                theme: widget.theme,
+                email: email,
+                businessName: _businessName.text.trim(),
+                category: _category!,
+                state: _state!,
+                rcNumber: _rcNumber.text.trim(),
+                phone: _phone.text.trim(),
+                logo: _logo,
+              ),
         ),
       );
     } on ApiException catch (e) {
@@ -282,7 +296,7 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   theme: theme,
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
-                  hint: 'email@domain.com',
+                  hint: 'Enter your email',
                 ),
                 const SizedBox(height: 16),
                 _Field(

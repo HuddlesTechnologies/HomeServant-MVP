@@ -111,7 +111,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Good morning, $firstName',
+                        '${timeOfDayGreeting()}, $firstName',
                         style: AppTextStyles.heading(color: theme.foreground, size: 17),
                         overflow: TextOverflow.ellipsis,
                       ),

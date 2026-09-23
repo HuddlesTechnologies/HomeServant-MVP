@@ -44,6 +44,17 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
   bool _hasUnreadNotifications = true;
 
   @override
+  void initState() {
+    super.initState();
+    // AppState.load() only fetches the public feed once, at cold start —
+    // a property a landlord adds afterward (including in this same
+    // session, from another tab) wouldn't otherwise show up here until a
+    // full app restart. Refreshing on entry means at least opening this
+    // tab picks up anything new, on top of the pull-to-refresh below.
+    context.read<AppState>().loadProperties();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -77,12 +88,23 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
           // "Lekki" found nothing while the House tab was selected, even
           // though a Shortlet in Lekki exists) and made the search box look
           // broken. With no query, the category tabs filter as normal.
-          final matchesCategory = query.isNotEmpty || property.category == selectedCategory;
-          final matchesState = _selectedState == null || property.state == _selectedState;
-          final matchesLocation = locationQuery.isEmpty || property.location.toLowerCase().contains(locationQuery);
-          final matchesMinPrice = _minPrice == null || property.price >= _minPrice!;
-          final matchesMaxPrice = _maxPrice == null || property.price <= _maxPrice!;
-          return matchesQuery && matchesCategory && matchesState && matchesLocation && matchesMinPrice && matchesMaxPrice;
+          final matchesCategory =
+              query.isNotEmpty || property.category == selectedCategory;
+          final matchesState =
+              _selectedState == null || property.state == _selectedState;
+          final matchesLocation =
+              locationQuery.isEmpty ||
+              property.location.toLowerCase().contains(locationQuery);
+          final matchesMinPrice =
+              _minPrice == null || property.price >= _minPrice!;
+          final matchesMaxPrice =
+              _maxPrice == null || property.price <= _maxPrice!;
+          return matchesQuery &&
+              matchesCategory &&
+              matchesState &&
+              matchesLocation &&
+              matchesMinPrice &&
+              matchesMaxPrice;
         }).toList();
     switch (_priceSort) {
       case _PriceSort.lowToHigh:
@@ -96,22 +118,36 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
   }
 
   Future<void> _openFilterSheet(DashboardTheme theme) async {
-    final categoryPrices = context
-        .read<AppState>()
-        .properties
-        .where((p) => p.category == _categories[_selectedCategory])
-        .map((p) => p.price.toDouble())
-        .toList();
-    final boundsMin = categoryPrices.isEmpty ? 0.0 : categoryPrices.reduce((a, b) => a < b ? a : b);
-    final boundsMax = categoryPrices.isEmpty ? 0.0 : categoryPrices.reduce((a, b) => a > b ? a : b);
+    final categoryPrices =
+        context
+            .read<AppState>()
+            .properties
+            .where((p) => p.category == _categories[_selectedCategory])
+            .map((p) => p.price.toDouble())
+            .toList();
+    final boundsMin =
+        categoryPrices.isEmpty
+            ? 0.0
+            : categoryPrices.reduce((a, b) => a < b ? a : b);
+    final boundsMax =
+        categoryPrices.isEmpty
+            ? 0.0
+            : categoryPrices.reduce((a, b) => a > b ? a : b);
     final hasRange = boundsMax > boundsMin;
 
-    var priceRange = RangeValues(_minPrice ?? boundsMin, _maxPrice ?? boundsMax);
+    var priceRange = RangeValues(
+      _minPrice ?? boundsMin,
+      _maxPrice ?? boundsMax,
+    );
     var priceSort = _priceSort;
     var selectedState = _selectedState;
     final locationController = TextEditingController(text: _locationQuery);
-    final minPriceController = TextEditingController(text: formatWithThousandsSeparator(priceRange.start));
-    final maxPriceController = TextEditingController(text: formatWithThousandsSeparator(priceRange.end));
+    final minPriceController = TextEditingController(
+      text: formatWithThousandsSeparator(priceRange.start),
+    );
+    final maxPriceController = TextEditingController(
+      text: formatWithThousandsSeparator(priceRange.end),
+    );
 
     await showModalBottomSheet<void>(
       context: context,
@@ -124,7 +160,12 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return Padding(
-              padding: EdgeInsets.fromLTRB(20, 20, 20, 32 + MediaQuery.of(context).viewInsets.bottom),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                32 + MediaQuery.of(context).viewInsets.bottom,
+              ),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -132,12 +173,18 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                   children: [
                     Text(
                       'Filters',
-                      style: AppTextStyles.heading(color: theme.onSurface, size: 18),
+                      style: AppTextStyles.heading(
+                        color: theme.onSurface,
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Text(
                       'Price Range',
-                      style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w600),
+                      style: AppTextStyles.body(
+                        color: theme.onSurface,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Row(
@@ -146,21 +193,39 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                           child: TextField(
                             controller: minPriceController,
                             keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, ThousandsSeparatorInputFormatter()],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              ThousandsSeparatorInputFormatter(),
+                            ],
                             style: AppTextStyles.body(color: theme.onSurface),
                             decoration: InputDecoration(
                               prefixText: '₦ ',
                               labelText: 'Min',
                               filled: true,
-                              fillColor: theme.onSurface.withValues(alpha: 0.06),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                              fillColor: theme.onSurface.withValues(
+                                alpha: 0.06,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                             onChanged: (text) {
-                              final value = double.tryParse(text.replaceAll(',', ''));
+                              final value = double.tryParse(
+                                text.replaceAll(',', ''),
+                              );
                               if (value == null) return;
                               setSheetState(() {
-                                priceRange = RangeValues(value, value > priceRange.end ? value : priceRange.end);
+                                priceRange = RangeValues(
+                                  value,
+                                  value > priceRange.end
+                                      ? value
+                                      : priceRange.end,
+                                );
                               });
                             },
                           ),
@@ -170,21 +235,39 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                           child: TextField(
                             controller: maxPriceController,
                             keyboardType: TextInputType.number,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly, ThousandsSeparatorInputFormatter()],
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                              ThousandsSeparatorInputFormatter(),
+                            ],
                             style: AppTextStyles.body(color: theme.onSurface),
                             decoration: InputDecoration(
                               prefixText: '₦ ',
                               labelText: 'Max',
                               filled: true,
-                              fillColor: theme.onSurface.withValues(alpha: 0.06),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                              fillColor: theme.onSurface.withValues(
+                                alpha: 0.06,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                             onChanged: (text) {
-                              final value = double.tryParse(text.replaceAll(',', ''));
+                              final value = double.tryParse(
+                                text.replaceAll(',', ''),
+                              );
                               if (value == null) return;
                               setSheetState(() {
-                                priceRange = RangeValues(value < priceRange.start ? value : priceRange.start, value);
+                                priceRange = RangeValues(
+                                  value < priceRange.start
+                                      ? value
+                                      : priceRange.start,
+                                  value,
+                                );
                               });
                             },
                           ),
@@ -204,8 +287,10 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                         onChanged:
                             (values) => setSheetState(() {
                               priceRange = values;
-                              minPriceController.text = formatWithThousandsSeparator(values.start);
-                              maxPriceController.text = formatWithThousandsSeparator(values.end);
+                              minPriceController.text =
+                                  formatWithThousandsSeparator(values.start);
+                              maxPriceController.text =
+                                  formatWithThousandsSeparator(values.end);
                             }),
                       )
                     else
@@ -213,7 +298,10 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Sort by Price',
-                      style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w600),
+                      style: AppTextStyles.body(
+                        color: theme.onSurface,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Wrap(
@@ -221,28 +309,35 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                       children: [
                         for (final option in _PriceSort.values)
                           ChoiceChip(
-                            label: Text(
-                              switch (option) {
-                                _PriceSort.none => 'None',
-                                _PriceSort.lowToHigh => 'Low to High',
-                                _PriceSort.highToLow => 'High to Low',
-                              },
-                            ),
+                            label: Text(switch (option) {
+                              _PriceSort.none => 'None',
+                              _PriceSort.lowToHigh => 'Low to High',
+                              _PriceSort.highToLow => 'High to Low',
+                            }),
                             selected: priceSort == option,
-                            onSelected: (_) => setSheetState(() => priceSort = option),
+                            onSelected:
+                                (_) => setSheetState(() => priceSort = option),
                             selectedColor: theme.accent,
                             labelStyle: AppTextStyles.body(
-                              color: priceSort == option ? theme.onAccent : theme.onSurface,
+                              color:
+                                  priceSort == option
+                                      ? theme.onAccent
+                                      : theme.onSurface,
                               weight: FontWeight.w600,
                             ),
-                            backgroundColor: theme.onSurface.withValues(alpha: 0.06),
+                            backgroundColor: theme.onSurface.withValues(
+                              alpha: 0.06,
+                            ),
                           ),
                       ],
                     ),
                     const SizedBox(height: 18),
                     Text(
                       'State',
-                      style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w600),
+                      style: AppTextStyles.body(
+                        color: theme.onSurface,
+                        weight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String?>(
@@ -251,14 +346,32 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: theme.onSurface.withValues(alpha: 0.06),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                       style: AppTextStyles.body(color: theme.onSurface),
                       items: [
-                        DropdownMenuItem(value: null, child: Text('Any State', style: AppTextStyles.body(color: theme.onSurface))),
+                        DropdownMenuItem(
+                          value: null,
+                          child: Text(
+                            'Any State',
+                            style: AppTextStyles.body(color: theme.onSurface),
+                          ),
+                        ),
                         for (final state in nigerianStates)
-                          DropdownMenuItem(value: state, child: Text(state, style: AppTextStyles.body(color: theme.onSurface))),
+                          DropdownMenuItem(
+                            value: state,
+                            child: Text(
+                              state,
+                              style: AppTextStyles.body(color: theme.onSurface),
+                            ),
+                          ),
                       ],
                       onChanged:
                           (value) => setSheetState(() {
@@ -270,7 +383,10 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                       const SizedBox(height: 18),
                       Text(
                         'Location in $selectedState',
-                        style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w600),
+                        style: AppTextStyles.body(
+                          color: theme.onSurface,
+                          weight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
@@ -280,8 +396,14 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                           hintText: 'e.g. Ikeja, Lekki, Yaba…',
                           filled: true,
                           fillColor: theme.onSurface.withValues(alpha: 0.06),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                       ),
                     ],
@@ -307,7 +429,10 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                             }
                             _priceSort = priceSort;
                             _selectedState = selectedState;
-                            _locationQuery = selectedState == null ? '' : locationController.text;
+                            _locationQuery =
+                                selectedState == null
+                                    ? ''
+                                    : locationController.text;
                           });
                           Navigator.of(context).pop();
                         },
@@ -341,7 +466,11 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
       return;
     }
     if (index == 2) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => TenancyAgreementsScreen(theme: theme)));
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TenancyAgreementsScreen(theme: theme),
+        ),
+      );
       return;
     }
     setState(() => _navIndex = index);
@@ -353,8 +482,15 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     final onProfileTab = _navIndex == 3;
     return DashboardTabScaffold(
       background: theme.background,
-      navBar: DashboardBottomNav(currentIndex: _navIndex, onTap: (i) => _onNavTap(i, theme), theme: theme),
-      body: onProfileTab ? ProfileScreen(onLogOut: () => _logOut(context)) : _buildHomeFeed(theme),
+      navBar: DashboardBottomNav(
+        currentIndex: _navIndex,
+        onTap: (i) => _onNavTap(i, theme),
+        theme: theme,
+      ),
+      body:
+          onProfileTab
+              ? ProfileScreen(onLogOut: () => _logOut(context))
+              : _buildHomeFeed(theme),
     );
   }
 
@@ -362,262 +498,269 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1100),
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.location_on,
-                              color: theme.locationPinColor,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Ikeja, Lagos',
-                              style: AppTextStyles.body(
-                                color: theme.foreground,
-                                weight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            GestureDetector(
-                              onTap:
-                                  () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder:
-                                          (_) => MessagesScreen(theme: theme),
-                                    ),
-                                  ),
-                              child: Icon(
-                                Icons.mail_outline_rounded,
-                                color: theme.foreground,
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            NotificationBell(
-                              color: theme.foreground,
-                              showDot: _hasUnreadNotifications,
-                              onTap: () {
-                                setState(() => _hasUnreadNotifications = false);
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder:
-                                        (_) =>
-                                            NotificationsScreen(theme: theme),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 16,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(22),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.08),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.search,
-                                  color: AppColors.navy,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: TextField(
-                                    controller: _searchController,
-                                    onChanged:
-                                        (value) => setState(
-                                          () => _searchQuery = value,
-                                        ),
-                                    style: AppTextStyles.body(
-                                      color: AppColors.navy,
-                                      size: 16,
-                                      weight: FontWeight.w600,
-                                    ),
-                                    decoration: InputDecoration(
-                                      isDense: true,
-                                      border: InputBorder.none,
-                                      hintText:
-                                          'Search by location or property',
-                                      hintStyle: AppTextStyles.body(
-                                        color: AppColors.hintGrey,
-                                        size: 15,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                if (_searchQuery.isNotEmpty)
-                                  GestureDetector(
-                                    onTap: () {
-                                      _searchController.clear();
-                                      setState(() => _searchQuery = '');
-                                    },
-                                    child: const Icon(
-                                      Icons.close_rounded,
-                                      color: AppColors.hintGrey,
-                                      size: 20,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        GestureDetector(
-                          onTap: () => _openFilterSheet(theme),
-                          child: Container(
-                            padding: const EdgeInsets.all(17),
-                            decoration: BoxDecoration(
-                              color: theme.accent,
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Icon(
-                              Icons.tune_rounded,
-                              color: theme.onAccent,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 22),
-                    Text(
-                      'Categories',
-                      style: AppTextStyles.heading(
-                        color: theme.foreground,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                  ],
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 48,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: _categories.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final selected = index == _selectedCategory;
-                    return GestureDetector(
-                      onTap: () => _selectCategory(index),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 22),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: selected ? theme.accent : Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow:
-                              selected
-                                  ? []
-                                  : [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(
-                                        alpha: 0.08,
-                                      ),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                        ),
-                        child: Text(
-                          _categories[index],
-                          style: AppTextStyles.body(
-                            color: selected ? theme.onAccent : AppColors.navy,
-                            weight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            if (_filteredProperties.isEmpty)
+        child: RefreshIndicator(
+          onRefresh: () => context.read<AppState>().loadProperties(),
+          child: CustomScrollView(
+            slivers: [
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 60),
-                  child: Center(
-                    child: Text(
-                      'No properties match your search',
-                      style: AppTextStyles.body(
-                        color: theme.foreground.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                sliver: SliverToBoxAdapter(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final columns = gridColumnsForWidth(constraints.maxWidth);
-                      if (columns <= 1) {
-                        return Column(
-                          children: [
-                            for (final property in _filteredProperties)
-                              PropertyCard(property: property, theme: theme),
-                          ],
-                        );
-                      }
-                      const spacing = 20.0;
-                      final cardWidth =
-                          (constraints.maxWidth - spacing * (columns - 1)) /
-                          columns;
-                      return Wrap(
-                        spacing: spacing,
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          for (final property in _filteredProperties)
-                            SizedBox(
-                              width: cardWidth,
-                              child: PropertyCard(
-                                property: property,
-                                theme: theme,
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                color: theme.locationPinColor,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Ikeja, Lagos',
+                                style: AppTextStyles.body(
+                                  color: theme.foreground,
+                                  weight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              GestureDetector(
+                                onTap:
+                                    () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder:
+                                            (_) => MessagesScreen(theme: theme),
+                                      ),
+                                    ),
+                                child: Icon(
+                                  Icons.mail_outline_rounded,
+                                  color: theme.foreground,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              NotificationBell(
+                                color: theme.foreground,
+                                showDot: _hasUnreadNotifications,
+                                onTap: () {
+                                  setState(
+                                    () => _hasUnreadNotifications = false,
+                                  );
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder:
+                                          (_) =>
+                                              NotificationsScreen(theme: theme),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 16,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(22),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.08),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.search,
+                                    color: AppColors.navy,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _searchController,
+                                      onChanged:
+                                          (value) => setState(
+                                            () => _searchQuery = value,
+                                          ),
+                                      style: AppTextStyles.body(
+                                        color: AppColors.navy,
+                                        size: 16,
+                                        weight: FontWeight.w600,
+                                      ),
+                                      decoration: InputDecoration(
+                                        isDense: true,
+                                        border: InputBorder.none,
+                                        hintText:
+                                            'Search by location or property',
+                                        hintStyle: AppTextStyles.body(
+                                          color: AppColors.hintGrey,
+                                          size: 15,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (_searchQuery.isNotEmpty)
+                                    GestureDetector(
+                                      onTap: () {
+                                        _searchController.clear();
+                                        setState(() => _searchQuery = '');
+                                      },
+                                      child: const Icon(
+                                        Icons.close_rounded,
+                                        color: AppColors.hintGrey,
+                                        size: 20,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
+                          ),
+                          const SizedBox(width: 12),
+                          GestureDetector(
+                            onTap: () => _openFilterSheet(theme),
+                            child: Container(
+                              padding: const EdgeInsets.all(17),
+                              decoration: BoxDecoration(
+                                color: theme.accent,
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Icon(
+                                Icons.tune_rounded,
+                                color: theme.onAccent,
+                                size: 20,
+                              ),
+                            ),
+                          ),
                         ],
+                      ),
+                      const SizedBox(height: 22),
+                      Text(
+                        'Categories',
+                        style: AppTextStyles.heading(
+                          color: theme.foreground,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 48,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    itemCount: _categories.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    itemBuilder: (context, index) {
+                      final selected = index == _selectedCategory;
+                      return GestureDetector(
+                        onTap: () => _selectCategory(index),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 22),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: selected ? theme.accent : Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow:
+                                selected
+                                    ? []
+                                    : [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.08,
+                                        ),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                          ),
+                          child: Text(
+                            _categories[index],
+                            style: AppTextStyles.body(
+                              color: selected ? theme.onAccent : AppColors.navy,
+                              weight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       );
                     },
                   ),
                 ),
               ),
-          ],
+              if (_filteredProperties.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 60),
+                    child: Center(
+                      child: Text(
+                        'No properties match your search',
+                        style: AppTextStyles.body(
+                          color: theme.foreground.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                  sliver: SliverToBoxAdapter(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = gridColumnsForWidth(
+                          constraints.maxWidth,
+                        );
+                        if (columns <= 1) {
+                          return Column(
+                            children: [
+                              for (final property in _filteredProperties)
+                                PropertyCard(property: property, theme: theme),
+                            ],
+                          );
+                        }
+                        const spacing = 20.0;
+                        final cardWidth =
+                            (constraints.maxWidth - spacing * (columns - 1)) /
+                            columns;
+                        return Wrap(
+                          spacing: spacing,
+                          children: [
+                            for (final property in _filteredProperties)
+                              SizedBox(
+                                width: cardWidth,
+                                child: PropertyCard(
+                                  property: property,
+                                  theme: theme,
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
