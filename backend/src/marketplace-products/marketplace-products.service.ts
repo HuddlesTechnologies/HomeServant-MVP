@@ -16,11 +16,14 @@ export class MarketplaceProductsService {
   ) {}
 
   /// Public catalog — only what a shopper should see: available products
-  /// from shops that haven't been deactivated.
+  /// from shops that haven't been deactivated and have passed admin
+  /// review (see VendorApplicationStatus — a newly-signed-up vendor can
+  /// set up their shop immediately, but nothing they list is publicly
+  /// visible until an admin approves them).
   async findMany(query: QueryProductsDto) {
     const where: Prisma.ProductWhereInput = {
       isAvailable: true,
-      vendor: { isActive: true },
+      vendor: { isActive: true, status: 'APPROVED' },
       category: query.category,
       vendorId: query.vendorId,
       ...(query.search

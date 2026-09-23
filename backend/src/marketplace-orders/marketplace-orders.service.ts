@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { FulfillmentMethod } from '@prisma/client';
+import { FulfillmentMethod, NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { VendorsService } from '../vendors/vendors.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -14,6 +15,7 @@ export class MarketplaceOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly vendors: VendorsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /// Buyer info comes from the authenticated account's own profile, not a
@@ -117,8 +119,16 @@ export class MarketplaceOrdersService {
 
   async respondToItem(userId: string, itemId: string, dto: RespondOrderItemDto) {
     const vendor = await this.vendors.requireOwn(userId);
-    await this.assertItemOwnership(itemId, vendor.id);
-    return this.prisma.marketplaceOrderItem.update({ where: { id: itemId }, data: { status: dto.status } });
+    const item = await this.assertItemOwnership(itemId, vendor.id);
+    const updated = await this.prisma.marketplaceOrderItem.update({ where: { id: itemId }, data: { status: dto.status } });
+    const order = await this.prisma.marketplaceOrder.findUniqueOrThrow({ where: { id: item.orderId }, select: { buyerId: true } });
+    await this.notifications.create(
+      order.buyerId,
+      NotificationType.MARKETPLACE_ORDER_STATUS,
+      dto.status === 'COMPLETED' ? 'Order completed' : dto.status === 'CANCELLED' ? 'Order cancelled' : 'Order updated',
+      `Your order for ${item.productName} from ${vendor.businessName} is now ${dto.status.toLowerCase()}.`,
+    );
+    return updated;
   }
 
   async markItemRead(userId: string, itemId: string): Promise<void> {
@@ -127,11 +137,12 @@ export class MarketplaceOrdersService {
     await this.prisma.marketplaceOrderItem.update({ where: { id: itemId }, data: { notificationRead: true } });
   }
 
-  private async assertItemOwnership(itemId: string, vendorId: string): Promise<void> {
-    const item = await this.prisma.marketplaceOrderItem.findUnique({ where: { id: itemId }, select: { vendorId: true } });
+  private async assertItemOwnership(itemId: string, vendorId: string) {
+    const item = await this.prisma.marketplaceOrderItem.findUnique({ where: { id: itemId } });
     if (!item) throw new NotFoundException('Order item not found');
     if (item.vendorId !== vendorId) {
       throw new ForbiddenException('You do not own this order item');
     }
+    return item;
   }
 }

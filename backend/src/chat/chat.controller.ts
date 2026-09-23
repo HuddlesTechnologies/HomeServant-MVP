@@ -2,6 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query,
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -9,7 +10,10 @@ import { SendMessageDto } from './dto/send-message.dto';
 @Controller('threads')
 @UseGuards(JwtAuthGuard)
 export class ChatController {
-  constructor(private readonly chat: ChatService) {}
+  constructor(
+    private readonly chat: ChatService,
+    private readonly gateway: ChatGateway,
+  ) {}
 
   @Get()
   mine(@CurrentUser() user: AuthenticatedUser) {
@@ -27,8 +31,11 @@ export class ChatController {
   }
 
   @Post(':id/messages')
-  send(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: SendMessageDto) {
-    return this.chat.sendMessage(id, user.sub, dto);
+  async send(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: SendMessageDto) {
+    const message = await this.chat.sendMessage(id, user.sub, dto);
+    const participantIds = await this.chat.participantIds(id);
+    this.gateway.broadcastMessage(participantIds, user.sub, id, message);
+    return message;
   }
 
   @Patch(':id/read')

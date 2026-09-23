@@ -22,6 +22,7 @@ enum UserRole {
   TENANT
   LANDLORD
   VENDOR
+  ADMIN
 }
 
 enum PropertyCategory {
@@ -147,10 +148,14 @@ model User {
 
 enum NotificationType {
   REFERRAL_SIGNUP
+  VENDOR_APPROVED
+  VENDOR_REJECTED
+  BOOKING_STATUS
+  MARKETPLACE_ORDER_STATUS
+  NEW_MESSAGE
 }
 
-/// A user-facing notification — currently only created for a referral
-/// signup (see UsersService.updateProfile), but modelled generically so
+/// A user-facing notification — modelled generically so
 /// other real events (booking updates, new messages, etc.) have a real
 /// home instead of the client's previous hardcoded mock list.
 model Notification {
@@ -348,7 +353,17 @@ model VendorProfile {
   bankName      String?
   accountNumber String?
   accountName   String?
+  /// Self-service pause ("Deactivate Shop") and admin suspension both use
+  /// this — distinct from [status] below, which is the one-time
+  /// onboarding moderation gate.
   isActive      Boolean             @default(true)
+  /// New vendors start PENDING and aren't shown in the public product
+  /// feed (see MarketplaceProductsService.findMany) until an admin
+  /// approves them. Existing vendors from before this field was added
+  /// were backfilled to APPROVED (see the migration) so nothing already
+  /// live went dark.
+  status          VendorApplicationStatus @default(PENDING)
+  rejectionReason String?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
@@ -356,6 +371,13 @@ model VendorProfile {
   orderItems MarketplaceOrderItem[]
 
   @@index([category])
+  @@index([status])
+}
+
+enum VendorApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 /// [isAvailable] false is a soft delete — "Delete" in the vendor's "My

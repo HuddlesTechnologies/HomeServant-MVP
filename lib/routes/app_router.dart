@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../features/admin/admin_login_screen.dart';
+import '../features/admin/admin_shell.dart';
 import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_landlord_screen.dart';
 import '../features/auth/login_screen.dart';
@@ -81,6 +83,7 @@ const _preAuthPaths = {
   '/signup',
   '/signup-landlord',
   '/signup-tenant',
+  '/admin-login',
 };
 
 GoRouter buildAppRouter(AppState appState) {
@@ -89,7 +92,15 @@ GoRouter buildAppRouter(AppState appState) {
     refreshListenable: appState,
     redirect: (context, state) {
       if (!appState.isLoaded || !appState.isAuthenticated) return null;
-      if (_preAuthPaths.contains(state.matchedLocation)) return '/dashboard';
+      if (_preAuthPaths.contains(state.matchedLocation)) {
+        return appState.role == UserRole.admin ? '/admin' : '/dashboard';
+      }
+      // An admin session has no business on the tenant/landlord dashboard
+      // (reached, e.g., by a stale bookmark) — the console is the only
+      // home screen that role has.
+      if (appState.role == UserRole.admin && state.matchedLocation == '/dashboard') {
+        return '/admin';
+      }
       return null;
     },
     routes: [
@@ -315,6 +326,18 @@ GoRouter buildAppRouter(AppState appState) {
           final theme = context.watch<AppState>().dashboardTheme;
           return MarketplaceNavigatorHost(theme: theme);
         },
+      ),
+      GoRoute(
+        // Deliberately not linked from anywhere in the normal tenant/
+        // landlord/vendor UI — reached only by navigating here directly.
+        // Admin accounts are never self-registered (see AuthService.signup),
+        // so this is purely a sign-in screen, no "Sign Up" link.
+        path: '/admin-login',
+        builder: (context, state) => AdminLoginScreen(onLoginSuccess: () => context.go('/admin')),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const AdminShell(),
       ),
     ],
   );

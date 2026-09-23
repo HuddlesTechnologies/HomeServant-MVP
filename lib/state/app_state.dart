@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../api/admin_repository.dart';
 import '../api/api_client.dart';
 import '../api/auth_repository.dart';
 import '../api/bookings_repository.dart';
@@ -25,6 +26,7 @@ import '../features/dashboard/models/rental_record.dart';
 import '../models/dashboard_theme.dart';
 import '../models/user_role.dart';
 import '../services/app_icon_service.dart';
+import '../services/chat_socket_service.dart';
 import '../services/google_auth_service.dart';
 
 /// What happened on a [AppState.login]/[AppState.loginWithGoogle] call —
@@ -54,6 +56,7 @@ class AppState extends ChangeNotifier {
     _marketplaceOrdersRepo = MarketplaceOrdersRepository(_apiClient);
     _paystackRepo = PaystackRepository(_apiClient);
     _notificationsRepo = NotificationsRepository(_apiClient);
+    _adminRepo = AdminRepository(_apiClient);
   }
 
   static const _prefsKey = 'app_state_v2';
@@ -73,6 +76,7 @@ class AppState extends ChangeNotifier {
   late final MarketplaceOrdersRepository _marketplaceOrdersRepo;
   late final PaystackRepository _paystackRepo;
   late final NotificationsRepository _notificationsRepo;
+  late final AdminRepository _adminRepo;
 
   /// Per-thread chat, file uploads, and the whole marketplace surface are
   /// screen-local concerns (each screen manages its own fetch/paginate) —
@@ -83,6 +87,7 @@ class AppState extends ChangeNotifier {
   MarketplaceProductsRepository get marketplaceProducts => _marketplaceProductsRepo;
   MarketplaceOrdersRepository get marketplaceOrders => _marketplaceOrdersRepo;
   PaystackRepository get paystack => _paystackRepo;
+  AdminRepository get admin => _adminRepo;
 
   /// True once [load] has finished restoring (or found nothing to restore).
   /// AppLockGate waits for this before deciding whether a cold start should
@@ -338,6 +343,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _clearSession() {
+    _chatSocket.disconnect();
     userId = null;
     role = UserRole.tenant;
     email = '';
@@ -381,6 +387,19 @@ class AppState extends ChangeNotifier {
       if (role == UserRole.tenant) loadMyBookings(),
       if (role == UserRole.landlord) ...[loadLandlordProperties(), loadLandlordBookings()],
     ]);
+    await _connectChatSocket();
+  }
+
+  final ChatSocketService _chatSocket = ChatSocketService();
+
+  /// One socket per session, connected right after every successful
+  /// login/signup/session-restore — see ChatSocketService's doc comment
+  /// for why this lives at the session level rather than per open thread.
+  ChatSocketService get chatSocket => _chatSocket;
+
+  Future<void> _connectChatSocket() async {
+    final token = await _tokens.readAccessToken();
+    if (token != null) _chatSocket.connect(token);
   }
 
   // --- Notifications -----------------------------------------------------

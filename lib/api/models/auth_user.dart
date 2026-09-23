@@ -59,6 +59,7 @@ class AuthUser {
 UserRole _roleFromApi(String value) => switch (value) {
   'LANDLORD' => UserRole.landlord,
   'VENDOR' => UserRole.vendor,
+  'ADMIN' => UserRole.admin,
   _ => UserRole.tenant,
 };
 
@@ -66,6 +67,7 @@ extension UserRoleApi on UserRole {
   String get apiValue => switch (this) {
     UserRole.landlord => 'LANDLORD',
     UserRole.vendor => 'VENDOR',
+    UserRole.admin => 'ADMIN',
     UserRole.tenant => 'TENANT',
   };
 }

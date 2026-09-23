@@ -175,6 +175,13 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                 ),
               ),
             ),
+            if (vendor.status != VendorApplicationStatus.approved)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  child: _VendorStatusBanner(theme: theme, vendor: vendor),
+                ),
+              ),
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
@@ -226,6 +233,52 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shown above the stats row while a vendor's shop hasn't cleared admin
+/// review yet — their products still exist and can be managed, but stay
+/// hidden from the public Marketplace feed until approved (see
+/// backend/src/marketplace-products/marketplace-products.service.ts).
+class _VendorStatusBanner extends StatelessWidget {
+  const _VendorStatusBanner({required this.theme, required this.vendor});
+
+  final DashboardTheme theme;
+  final VendorProfile vendor;
+
+  @override
+  Widget build(BuildContext context) {
+    final rejected = vendor.status == VendorApplicationStatus.rejected;
+    final color = rejected ? Colors.redAccent : Colors.orange;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(rejected ? Icons.error_outline_rounded : Icons.pending_actions_rounded, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  rejected ? 'Application not approved' : 'Your shop is under review',
+                  style: AppTextStyles.body(color: color, weight: FontWeight.w700, size: 13.5),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  rejected
+                      ? (vendor.rejectionReason ?? 'Update your shop details from Shop Profile and it will be reviewed again.')
+                      : "Your products aren't visible to shoppers yet — you can still set up your shop while you wait.",
+                  style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.7), size: 12.5),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

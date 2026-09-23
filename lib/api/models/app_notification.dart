@@ -1,8 +1,18 @@
 enum NotificationType {
-  referralSignup;
+  referralSignup,
+  vendorApproved,
+  vendorRejected,
+  bookingStatus,
+  marketplaceOrderStatus,
+  newMessage;
 
   static NotificationType fromApi(String value) => switch (value) {
     'REFERRAL_SIGNUP' => NotificationType.referralSignup,
+    'VENDOR_APPROVED' => NotificationType.vendorApproved,
+    'VENDOR_REJECTED' => NotificationType.vendorRejected,
+    'BOOKING_STATUS' => NotificationType.bookingStatus,
+    'MARKETPLACE_ORDER_STATUS' => NotificationType.marketplaceOrderStatus,
+    'NEW_MESSAGE' => NotificationType.newMessage,
     _ => NotificationType.referralSignup,
   };
 }

@@ -90,13 +90,60 @@ container.
    Supabase's current pricing page before launch; free-tier terms change.
 6. Render's free web service tier also spins down after 15 minutes idle
    and takes 30-50s to cold-start the next request. That's a bad
-   experience for login/OTP and would break a persistent chat connection
-   once that's built — move to a paid instance before real users depend
-   on this.
+   experience for login/OTP, and drops every open chat socket (see
+   **Real-time chat** below) — move to a paid instance before real users
+   depend on this.
 
 The Dockerfile runs `prisma migrate deploy` on every boot, so pushing a new
 migration and redeploying is enough to apply it — no separate migration
 step needed.
+
+## Admin console
+
+There's no public "become an admin" path — `role: ADMIN` is refused by
+both `/api/auth/signup` and `/api/auth/google` (see `AuthService`). The
+very first admin account is created once via:
+
+```bash
+curl -X POST https://<your-api>/api/admin/bootstrap \
+  -H "x-admin-bootstrap-secret: <ADMIN_BOOTSTRAP_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"you@example.com","password":"…","fullName":"…"}'
+```
+
+using the `ADMIN_BOOTSTRAP_SECRET` env var (set on Render — `render.yaml`
+generates one on first provision, but since the service already existed
+before this shipped, add it by hand on the Environment tab the same way
+as `PAYSTACK_SECRET_KEY`). That endpoint refuses once any admin exists;
+every admin after the first is created from inside the console itself
+(`POST /api/admin/admins`, admin-only) instead. Sign in at the Flutter
+app's `/admin-login` route — not linked from anywhere in the normal UI —
+with the admin account's email/password.
+
+The console (`GET/PATCH/DELETE /api/admin/*`, all `@Roles(ADMIN)`) covers
+platform stats, and full moderation of users (deactivate/delete),
+vendors (approve/reject/suspend a vendor's onboarding application),
+properties, and marketplace products/orders. A new vendor signup starts
+`VendorProfile.status: PENDING` and can set their shop up immediately,
+but nothing they list is visible in the public Marketplace feed (see
+`MarketplaceProductsService.findMany`) until an admin approves them;
+approval/rejection also sends the vendor an email and an in-app
+notification.
+
+## Real-time chat
+
+`ChatGateway` (`src/chat/chat.gateway.ts`, socket.io via
+`@nestjs/platform-socket.io`) pushes a `message:new` event to every other
+thread participant the moment `POST /threads/:id/messages` persists a
+message — before this, a thread only ever loaded once, when the screen
+opened, with no polling and no push. The socket authenticates once, at
+connection (`auth: { token: <access token> }`, verified the same way as
+the JWT guard on regular routes), not per-event; each connected socket
+joins a room named after its own user id. This is a plain in-process
+gateway — it doesn't survive the free-tier Render service sleeping/
+restarting (see **Deploying to Render** above), and doesn't fan out
+across multiple instances if this is ever scaled horizontally (would
+need a Redis adapter for that).
 
 ## API shape
 
@@ -255,16 +302,10 @@ half-built everything:
   `src/paystack/`), so what's stored is a real, confirmed account — but
   nothing automates actually paying either of them out yet. That's tied
   to the payments gap above.
-- **Vendor application review** — every vendor is active immediately on
-  signup; there's no pending/approved/rejected moderation workflow (the
-  old mocked signup's "we'll review your application" message implied
-  one, but nothing modelled it either).
 - **SMS OTP delivery** — email (`OTP_PROVIDER=resend`, see below) is
   wired up; SMS via Termii (for Nigerian phone numbers) isn't. Implement
   `OtpProvider` (see `src/otp/otp-provider.interface.ts`) for it if a
   phone-based flow is ever needed.
-- **Live chat delivery** — see the Chat section above; messages persist
-  and the client polls, but there's no Realtime/WebSocket push yet.
 - **KYC / identity verification** — the signup flow's "means of
   identification" step (NIN, driver's license, etc.) and the landlord's
   certificate-of-ownership upload are UI-only; nothing about them reaches

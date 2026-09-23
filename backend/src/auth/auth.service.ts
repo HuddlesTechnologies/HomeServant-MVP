@@ -47,6 +47,11 @@ export class AuthService {
   ) {}
 
   async signup(dto: SignupDto): Promise<{ message: string; email: string }> {
+    // Admin accounts are never self-service — see AdminService.createAdmin,
+    // which is the only way one gets created.
+    if (dto.role === 'ADMIN') {
+      throw new ForbiddenException('Admin accounts cannot be self-registered');
+    }
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) {
       throw new ConflictException('An account with this email already exists');
@@ -218,6 +223,9 @@ export class AuthService {
     } else {
       if (!dto.role) {
         throw new BadRequestException('role is required for a new account');
+      }
+      if (dto.role === 'ADMIN') {
+        throw new ForbiddenException('Admin accounts cannot be self-registered');
       }
       user = await this.prisma.user.create({
         data: {

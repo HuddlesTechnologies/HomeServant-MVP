@@ -1,4 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { NotificationType } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -7,7 +9,10 @@ const MESSAGE_PAGE_SIZE = 50;
 
 @Injectable()
 export class ChatService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /// Reuses an existing thread between the same two people about the same
   /// property/order (both `undefined`/`null` counts as a match) instead of
@@ -95,6 +100,23 @@ export class ChatService {
       }),
       this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } }),
     ]);
+
+    const otherParticipants = await this.prisma.threadParticipant.findMany({
+      where: { threadId, userId: { not: userId } },
+      select: { userId: true },
+    });
+    const senderName = message.sender.fullName ?? 'Someone';
+    await Promise.all(
+      otherParticipants.map((p) =>
+        this.notifications.create(
+          p.userId,
+          NotificationType.NEW_MESSAGE,
+          `New message from ${senderName}`,
+          dto.body.length > 140 ? `${dto.body.slice(0, 140)}…` : dto.body,
+        ),
+      ),
+    );
+
     return message;
   }
 
@@ -104,6 +126,15 @@ export class ChatService {
       where: { threadId, senderId: { not: userId }, readAt: null },
       data: { readAt: new Date() },
     });
+  }
+
+  /// Used by ChatController to know which sockets to push a just-sent
+  /// message to (see ChatGateway.broadcastMessage) — kept separate from
+  /// [sendMessage]'s own return value so the REST response shape (just
+  /// the created Message) doesn't change for existing API consumers.
+  async participantIds(threadId: string): Promise<string[]> {
+    const participants = await this.prisma.threadParticipant.findMany({ where: { threadId }, select: { userId: true } });
+    return participants.map((p) => p.userId);
   }
 
   private async assertParticipant(threadId: string, userId: string): Promise<void> {

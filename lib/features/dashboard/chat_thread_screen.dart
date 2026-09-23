@@ -8,6 +8,7 @@ import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_text_field.dart';
 import '../Market place/models/order_options.dart';
@@ -63,6 +64,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   final _scrollController = ScrollController();
   OrderItemStatus? _orderStatus;
   bool _loadingRemote = false;
+  StreamSubscription<ChatSocketMessage>? _socketSubscription;
 
   @override
   void initState() {
@@ -73,7 +75,23 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     if (threadId != null) {
       _loadingRemote = true;
       unawaited(_loadRemoteMessages(threadId));
+      _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen(_onSocketMessage);
     }
+  }
+
+  /// Appends a message pushed live over the socket (see
+  /// ChatSocketService) — only ever the *other* participant's, since the
+  /// Gateway excludes the sender from its own broadcast, so there's no
+  /// risk of double-adding whatever [_send] already appended locally.
+  void _onSocketMessage(ChatSocketMessage event) {
+    if (event.threadId != widget.threadId) return;
+    final appState = context.read<AppState>();
+    final senderId = event.message['senderId'] as String?;
+    final body = event.message['body'] as String?;
+    if (senderId == null || body == null || senderId == appState.userId) return;
+    setState(() => _messages.add(ChatMessage(text: body, fromMe: false)));
+    _scrollToBottom();
+    unawaited(appState.chat.markRead(widget.threadId!));
   }
 
   Future<void> _loadRemoteMessages(String threadId) async {
@@ -97,6 +115,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   @override
   void dispose() {
+    _socketSubscription?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();

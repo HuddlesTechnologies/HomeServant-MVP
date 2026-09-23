@@ -1,12 +1,17 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
+  // ChatGateway's realtime message delivery needs this — without it,
+  // @WebSocketGateway is registered but nothing actually listens for
+  // socket.io connections.
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   // Strips unknown fields and 400s on anything that fails a DTO's
   // class-validator decorators — every controller in this API relies on

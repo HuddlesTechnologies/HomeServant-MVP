@@ -13,10 +13,12 @@ import '../core/theme/app_colors.dart';
 enum UserRole {
   tenant,
   landlord,
-  vendor;
+  vendor,
+  admin;
 
   bool get isLandlord => this == UserRole.landlord;
   bool get isVendor => this == UserRole.vendor;
+  bool get isAdmin => this == UserRole.admin;
 
   /// Background colour of every themed screen for this role. Landlord
   /// screens use the light sand brand colour; tenant screens stay navy.

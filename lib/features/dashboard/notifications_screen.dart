@@ -10,6 +10,11 @@ import '../../widgets/empty_state.dart';
 
 IconData _iconForType(NotificationType type) => switch (type) {
   NotificationType.referralSignup => Icons.card_giftcard_rounded,
+  NotificationType.vendorApproved => Icons.storefront_rounded,
+  NotificationType.vendorRejected => Icons.storefront_outlined,
+  NotificationType.bookingStatus => Icons.event_available_rounded,
+  NotificationType.marketplaceOrderStatus => Icons.local_shipping_rounded,
+  NotificationType.newMessage => Icons.chat_bubble_rounded,
 };
 
 String _relativeTime(DateTime time) {

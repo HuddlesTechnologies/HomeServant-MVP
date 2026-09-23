@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { ChatModule } from './chat/chat.module';
@@ -35,6 +36,7 @@ import { VendorsModule } from './vendors/vendors.module';
     MarketplaceOrdersModule,
     PaystackModule,
     NotificationsModule,
+    AdminModule,
   ],
   controllers: [HealthController],
 })

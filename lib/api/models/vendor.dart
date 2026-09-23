@@ -67,6 +67,35 @@ const marketplaceCategoryLabels = [
   'Other',
 ];
 
+/// Admin moderation status — new vendors start [pending] and aren't shown
+/// in the public Marketplace feed until an admin approves them (see
+/// backend/src/marketplace-products/marketplace-products.service.ts).
+/// Distinct from [VendorProfile.isActive], which is the separate
+/// self-service pause/admin suspend toggle.
+enum VendorApplicationStatus {
+  pending,
+  approved,
+  rejected;
+
+  String get apiValue => switch (this) {
+    VendorApplicationStatus.pending => 'PENDING',
+    VendorApplicationStatus.approved => 'APPROVED',
+    VendorApplicationStatus.rejected => 'REJECTED',
+  };
+
+  String get label => switch (this) {
+    VendorApplicationStatus.pending => 'Pending Review',
+    VendorApplicationStatus.approved => 'Approved',
+    VendorApplicationStatus.rejected => 'Rejected',
+  };
+
+  static VendorApplicationStatus fromApi(String value) => switch (value) {
+    'APPROVED' => VendorApplicationStatus.approved,
+    'REJECTED' => VendorApplicationStatus.rejected,
+    _ => VendorApplicationStatus.pending,
+  };
+}
+
 class VendorProfile {
   const VendorProfile({
     required this.id,
@@ -75,6 +104,8 @@ class VendorProfile {
     required this.category,
     required this.state,
     required this.isActive,
+    required this.status,
+    this.rejectionReason,
     this.rcNumber,
     this.logoUrl,
     this.bankName,
@@ -88,6 +119,8 @@ class VendorProfile {
   final MarketplaceCategory category;
   final String state;
   final bool isActive;
+  final VendorApplicationStatus status;
+  final String? rejectionReason;
   final String? rcNumber;
   final String? logoUrl;
   final String? bankName;
@@ -101,6 +134,8 @@ class VendorProfile {
     category: MarketplaceCategoryApi.fromApi(json['category'] as String),
     state: json['state'] as String,
     isActive: json['isActive'] as bool? ?? true,
+    status: VendorApplicationStatus.fromApi(json['status'] as String? ?? 'APPROVED'),
+    rejectionReason: json['rejectionReason'] as String?,
     rcNumber: json['rcNumber'] as String?,
     logoUrl: json['logoUrl'] as String?,
     bankName: json['bankName'] as String?,
