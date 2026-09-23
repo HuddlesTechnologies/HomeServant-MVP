@@ -5,11 +5,18 @@ import 'models/auth_user.dart';
 import 'token_storage.dart';
 
 class LoginResult {
-  const LoginResult({this.tokens, this.user, this.requiresTwoFactor = false});
+  const LoginResult({this.tokens, this.user, this.requiresTwoFactor = false, this.requiresReactivation = false});
 
   final ({String accessToken, String refreshToken})? tokens;
   final AuthUser? user;
   final bool requiresTwoFactor;
+
+  /// True when the account is deactivated and this call didn't pass
+  /// `reactivate: true` — no tokens are issued yet. The caller should
+  /// confirm with the user, then resend the exact same login call with
+  /// `reactivate: true` to actually complete it (see
+  /// AuthService.login on the backend).
+  final bool requiresReactivation;
 }
 
 /// Wraps `/auth/*`. Every call that returns tokens also persists them to
@@ -42,14 +49,17 @@ class AuthRepository {
     });
   }
 
-  Future<LoginResult> login({required String email, required String password}) {
+  Future<LoginResult> login({required String email, required String password, bool reactivate = false}) {
     return _client.call(() async {
       final response = await _client.dio.post(
         '/auth/login',
-        data: {'email': email, 'password': password},
+        data: {'email': email, 'password': password, if (reactivate) 'reactivate': true},
         options: Options(extra: {'skipAuth': true}),
       );
       final data = response.data as Map<String, dynamic>;
+      if (data['requiresReactivation'] == true) {
+        return const LoginResult(requiresReactivation: true);
+      }
       if (data['requiresTwoFactor'] == true) {
         return const LoginResult(requiresTwoFactor: true);
       }
@@ -61,15 +71,21 @@ class AuthRepository {
   /// [role] is only required when the Google account doesn't match an
   /// existing user yet — the backend creates one with it; an existing
   /// user just logs in regardless of which role screen this was tapped
-  /// from.
-  Future<AuthUser> googleAuth({required String idToken, required UserRole role}) {
+  /// from. [reactivate] mirrors [login]'s — resend the same [idToken]
+  /// with it set to true once the user confirms.
+  Future<LoginResult> googleAuth({required String idToken, required UserRole role, bool reactivate = false}) {
     return _client.call(() async {
       final response = await _client.dio.post(
         '/auth/google',
-        data: {'idToken': idToken, 'role': role.apiValue},
+        data: {'idToken': idToken, 'role': role.apiValue, if (reactivate) 'reactivate': true},
         options: Options(extra: {'skipAuth': true}),
       );
-      return _saveTokensAndUser(response.data);
+      final data = response.data as Map<String, dynamic>;
+      if (data['requiresReactivation'] == true) {
+        return const LoginResult(requiresReactivation: true);
+      }
+      final user = await _saveTokensAndUser(data);
+      return LoginResult(user: user);
     });
   }
 

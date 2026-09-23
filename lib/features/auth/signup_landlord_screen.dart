@@ -7,6 +7,7 @@ import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
+import '../../widgets/reactivate_account_dialog.dart';
 import '../../widgets/terms_footer.dart';
 import '../../widgets/themed_scaffold.dart';
 
@@ -67,16 +68,22 @@ class _SignupLandlordScreenState extends State<SignupLandlordScreen> {
     }
   }
 
-  Future<void> _continueWithGoogle() async {
+  Future<void> _continueWithGoogle({bool reactivate = false}) async {
     setState(() {
       _googleSubmitting = true;
       _error = null;
     });
     try {
-      final signedIn = await context.read<AppState>().loginWithGoogle();
-      if (!mounted) return;
-      if (signedIn) {
-        widget.onGoogleSignedIn();
+      final outcome = await context.read<AppState>().loginWithGoogle(reactivate: reactivate);
+      if (!mounted || outcome == null) return;
+      switch (outcome) {
+        case LoginOutcome.success:
+          widget.onGoogleSignedIn();
+        case LoginOutcome.requiresTwoFactor:
+          break;
+        case LoginOutcome.requiresReactivation:
+          final confirmed = await showReactivateAccountDialog(context);
+          if (confirmed == true && mounted) await _continueWithGoogle(reactivate: true);
       }
     } on ApiException catch (e) {
       setState(() => _error = e.message);

@@ -27,6 +27,11 @@ import '../models/user_role.dart';
 import '../services/app_icon_service.dart';
 import '../services/google_auth_service.dart';
 
+/// What happened on a [AppState.login]/[AppState.loginWithGoogle] call —
+/// see each method's doc comment for how a caller should react to
+/// [requiresTwoFactor]/[requiresReactivation].
+enum LoginOutcome { success, requiresTwoFactor, requiresReactivation }
+
 /// Owns the app's session (real, backed by the HomeServant API) plus a
 /// handful of device-local preferences (theme, notification toggles, app
 /// lock) that have no server home. Session data is never persisted to
@@ -178,32 +183,52 @@ class AppState extends ChangeNotifier {
     await _loadInitialData();
   }
 
-  /// Returns `true` once fully logged in, `false` if the account has 2FA on
-  /// (the caller should route to an OTP screen and call
-  /// [verifyLoginTwoFactor] next — [email] is already set either way).
-  Future<bool> login({required String email, required String password}) async {
-    final result = await _authRepo.login(email: email, password: password);
+  /// [requiresReactivation]: the account is deactivated — show a confirm
+  /// prompt, then call this again with the same [email]/[password] and
+  /// `reactivate: true` to actually complete the login (see
+  /// AuthRepository.login). [requiresTwoFactor]: route to an OTP screen
+  /// and call [verifyLoginTwoFactor] next — [email] is already set either
+  /// way.
+  Future<LoginOutcome> login({required String email, required String password, bool reactivate = false}) async {
+    final result = await _authRepo.login(email: email, password: password, reactivate: reactivate);
     this.email = email;
+    if (result.requiresReactivation) {
+      notifyListeners();
+      return LoginOutcome.requiresReactivation;
+    }
     if (result.requiresTwoFactor) {
       notifyListeners();
-      return false;
+      return LoginOutcome.requiresTwoFactor;
     }
     _applyUser(result.user!);
     await _loadInitialData();
-    return true;
+    return LoginOutcome.success;
   }
 
-  /// Returns `true` once fully signed in, `false` if the user closed the
-  /// Google picker/popup without choosing an account. [role] only matters
-  /// the first time this Google account is used — see
-  /// [AuthRepository.googleAuth].
-  Future<bool> loginWithGoogle() async {
-    final idToken = await GoogleAuthService.signInAndGetIdToken();
-    if (idToken == null) return false;
-    final user = await _authRepo.googleAuth(idToken: idToken, role: role);
-    _applyUser(user);
+  /// The Google ID token from the most recent sign-in, kept only so a
+  /// [LoginOutcome.requiresReactivation] retry (`reactivate: true`) can
+  /// reuse it instead of re-triggering the native picker — Google ID
+  /// tokens stay valid for reuse within a short window after sign-in.
+  String? _pendingGoogleIdToken;
+
+  /// `null` if the user closed the Google picker/popup without choosing
+  /// an account. [role] only matters the first time this Google account
+  /// is used — see [AuthRepository.googleAuth]. On [reactivate], reuses
+  /// the ID token from the immediately preceding call rather than
+  /// prompting the picker again.
+  Future<LoginOutcome?> loginWithGoogle({bool reactivate = false}) async {
+    final idToken = reactivate ? _pendingGoogleIdToken : await GoogleAuthService.signInAndGetIdToken();
+    if (idToken == null) return null;
+    _pendingGoogleIdToken = idToken;
+    final result = await _authRepo.googleAuth(idToken: idToken, role: role, reactivate: reactivate);
+    if (result.requiresReactivation) {
+      notifyListeners();
+      return LoginOutcome.requiresReactivation;
+    }
+    _pendingGoogleIdToken = null;
+    _applyUser(result.user!);
     await _loadInitialData();
-    return true;
+    return LoginOutcome.success;
   }
 
   Future<void> verifyLoginTwoFactor(String code) async {

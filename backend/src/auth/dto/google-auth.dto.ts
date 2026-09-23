@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class GoogleAuthDto {
@@ -12,4 +12,10 @@ export class GoogleAuthDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  /// Same meaning as LoginDto.reactivate — set on the resubmitted call
+  /// after the client's confirmed reactivation prompt.
+  @IsOptional()
+  @IsBoolean()
+  reactivate?: boolean;
 }

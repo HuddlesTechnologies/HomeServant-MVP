@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/vendor.dart';
@@ -57,6 +58,17 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
       MaterialPageRoute(builder: (_) => VendorEditProfileScreen(theme: theme)),
     );
     _load();
+  }
+
+  /// Distinct from "Go to Tenant Dashboard" below — that keeps this
+  /// vendor session signed in, this ends it. A vendor only needs to
+  /// actually log out to browse the Marketplace as a *different*
+  /// account (a separate tenant/landlord login), not just to see the
+  /// main app.
+  Future<void> _logOut(BuildContext context) async {
+    final navigator = Navigator.of(context);
+    await context.read<AppState>().logout();
+    navigator.popUntil((route) => route.isFirst);
   }
 
   Future<void> _confirmDeactivate(BuildContext context) async {
@@ -185,7 +197,28 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: () => Navigator.of(context).popUntil((route) => route.isFirst),
+            onTap: () => context.go('/dashboard'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+              decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
+              child: Row(
+                children: [
+                  Icon(Icons.swap_horiz_rounded, color: theme.accent, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Go to Tenant Dashboard',
+                      style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w700, size: 14),
+                    ),
+                  ),
+                  Icon(Icons.chevron_right_rounded, color: theme.onSurface.withValues(alpha: 0.3)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () => _logOut(context),
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),

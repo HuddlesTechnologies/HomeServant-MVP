@@ -208,8 +208,9 @@ class SettingsScreen extends StatelessWidget {
                           context,
                           title: 'Deactivate account?',
                           body:
-                              "Your profile will be hidden and you'll be signed out. You can reactivate "
-                              'any time by logging back in.',
+                              "Your profile will be hidden and you'll be signed out. You can reactivate any time "
+                              "within 30 days just by logging back in — after that, your account and its data "
+                              'will be permanently deleted. We\'ll email you when this happens.',
                           actionLabel: 'Deactivate',
                           onConfirmed: () async {
                             await appState.deactivateAccount();

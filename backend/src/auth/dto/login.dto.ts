@@ -1,4 +1,4 @@
-import { IsEmail, IsString } from 'class-validator';
+import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
   @IsEmail()
@@ -6,4 +6,12 @@ export class LoginDto {
 
   @IsString()
   password!: string;
+
+  /// Set on the resubmitted login call after the client's confirmed
+  /// "this account is deactivated — reactivate it?" prompt — see
+  /// AuthService.login. Omitted/false on the first attempt, which just
+  /// reports `requiresReactivation` instead of logging in.
+  @IsOptional()
+  @IsBoolean()
+  reactivate?: boolean;
 }

@@ -5,6 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { OtpPurpose, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OtpService } from '../otp/otp.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -42,6 +43,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly otp: OtpService,
+    private readonly mail: MailService,
   ) {}
 
   async signup(dto: SignupDto): Promise<{ message: string; email: string }> {
@@ -75,8 +77,14 @@ export class AuthService {
     return { ...tokens, user: this.toPublicUser(user) };
   }
 
-  async login(dto: LoginDto): Promise<(TokenPair & { user: PublicUser; requiresTwoFactor: false }) | { requiresTwoFactor: true; email: string }> {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+  async login(
+    dto: LoginDto,
+  ): Promise<
+    | (TokenPair & { user: PublicUser; requiresTwoFactor: false; requiresReactivation: false })
+    | { requiresTwoFactor: true; requiresReactivation: false; email: string }
+    | { requiresReactivation: true; requiresTwoFactor: false; email: string }
+  > {
+    let user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user?.passwordHash) {
       // Same message whether the account doesn't exist or is Google-only
       // — telling an attacker "that email uses Google sign-in" would leak
@@ -90,13 +98,24 @@ export class AuthService {
       throw new ForbiddenException('Please verify your email before logging in');
     }
 
+    if (user.deactivatedAt) {
+      if (!dto.reactivate) {
+        // The password is already proven correct at this point — the
+        // client resubmits this same call with `reactivate: true` once
+        // the person confirms, rather than this being a bare "anyone who
+        // knows the email can reactivate" endpoint.
+        return { requiresReactivation: true, requiresTwoFactor: false, email: user.email };
+      }
+      user = await this.reactivate(user.id);
+    }
+
     if (user.twoFactorEnabled) {
       await this.otp.issue(user.email, OtpPurpose.LOGIN_2FA, user.id);
-      return { requiresTwoFactor: true, email: user.email };
+      return { requiresTwoFactor: true, requiresReactivation: false, email: user.email };
     }
 
     const tokens = await this.issueTokens(user);
-    return { ...tokens, user: this.toPublicUser(user), requiresTwoFactor: false };
+    return { ...tokens, user: this.toPublicUser(user), requiresTwoFactor: false, requiresReactivation: false };
   }
 
   /// Backs both "Resend OTP" screens (signup verification, login 2FA) —
@@ -169,7 +188,9 @@ export class AuthService {
   /// first, falling back to email — so an existing email/password account
   /// signing in with Google for the first time gets linked instead of
   /// erroring on a duplicate email.
-  async googleAuth(dto: GoogleAuthDto): Promise<TokenPair & { user: PublicUser }> {
+  async googleAuth(
+    dto: GoogleAuthDto,
+  ): Promise<(TokenPair & { user: PublicUser; requiresReactivation: false }) | { requiresReactivation: true; email: string }> {
     let payload: { email?: string; email_verified?: boolean; sub: string; name?: string; picture?: string };
     try {
       const ticket = await this.googleClient.verifyIdToken({
@@ -210,8 +231,18 @@ export class AuthService {
       });
     }
 
+    if (user.deactivatedAt) {
+      // The verified Google ID token already proves identity here (same
+      // role the password plays in [login]) — the client resubmits this
+      // call with `reactivate: true` and the same idToken once confirmed.
+      if (!dto.reactivate) {
+        return { requiresReactivation: true, email: user.email };
+      }
+      user = await this.reactivate(user.id);
+    }
+
     const tokens = await this.issueTokens(user);
-    return { ...tokens, user: this.toPublicUser(user) };
+    return { ...tokens, user: this.toPublicUser(user), requiresReactivation: false };
   }
 
   /// Always resolves the same way whether or not [dto.email] has an
@@ -260,11 +291,38 @@ export class AuthService {
 
   /// Settings > Danger Zone > "Deactivate Account". Hides this account's
   /// listings (see PropertiesService.findMany's landlord filter) and
-  /// signs out every session; reactivates itself automatically the next
-  /// time this account logs in (see [issueTokens]).
+  /// signs out every session. A deactivated account left untouched for 30
+  /// days is permanently deleted (see AccountCleanupService); logging
+  /// back in and confirming the reactivation prompt (see [login]) is the
+  /// only way to undo this before then.
   async deactivate(userId: string): Promise<void> {
-    await this.prisma.user.update({ where: { id: userId }, data: { deactivatedAt: new Date() } });
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { deactivatedAt: new Date() } });
     await this.prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.mail.send(
+      user.email,
+      'Your HomeServant account has been deactivated',
+      `<p>Hi${user.fullName ? ` ${user.fullName}` : ''},</p>
+       <p>Your HomeServant account has been deactivated, as requested. Your listings (if any) are hidden and you've been signed out everywhere.</p>
+       <p>You can reactivate any time within the next 30 days simply by logging back in — after that, your account and its data will be permanently deleted.</p>
+       <p>If you didn't request this, please log in and reactivate your account, then change your password.</p>`,
+      `Your HomeServant account has been deactivated, as requested. Your listings (if any) are hidden and you've been signed out everywhere.\n\nYou can reactivate any time within the next 30 days simply by logging back in — after that, your account and its data will be permanently deleted.\n\nIf you didn't request this, please log in and reactivate your account, then change your password.`,
+    );
+  }
+
+  /// Shared by [login] and [googleAuth] — clears the deactivation flag and
+  /// emails the account holder, so a reactivation always looks the same
+  /// regardless of which sign-in method triggered it.
+  private async reactivate(userId: string): Promise<User> {
+    const user = await this.prisma.user.update({ where: { id: userId }, data: { deactivatedAt: null } });
+    await this.mail.send(
+      user.email,
+      'Your HomeServant account has been reactivated',
+      `<p>Hi${user.fullName ? ` ${user.fullName}` : ''},</p>
+       <p>Welcome back — your HomeServant account has been reactivated and your listings (if any) are visible again.</p>
+       <p>If you didn't do this, please secure your account by changing your password right away.</p>`,
+      `Welcome back — your HomeServant account has been reactivated and your listings (if any) are visible again.\n\nIf you didn't do this, please secure your account by changing your password right away.`,
+    );
+    return user;
   }
 
   /// Settings > Danger Zone > "Delete Account". A real, permanent delete —
@@ -278,14 +336,6 @@ export class AuthService {
   }
 
   private async issueTokens(user: User): Promise<TokenPair> {
-    // A session is only actually granted here (signup/login/2FA/Google all
-    // funnel through this one place) — matches the Settings screen's
-    // "reactivate any time by logging back in" promise for an account
-    // that deactivated itself.
-    if (user.deactivatedAt) {
-      await this.prisma.user.update({ where: { id: user.id }, data: { deactivatedAt: null } });
-    }
-
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, role: user.role },
       { secret: this.config.getOrThrow('JWT_ACCESS_SECRET'), expiresIn: this.config.get('JWT_ACCESS_TTL', '15m') },

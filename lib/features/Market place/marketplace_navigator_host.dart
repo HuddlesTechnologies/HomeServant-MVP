@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../models/dashboard_theme.dart';
+import '../../models/user_role.dart';
+import '../../state/app_state.dart';
 import 'marketplace_auth_screen.dart';
+import 'vendor_dashboard_screen.dart';
 
 /// Hosts the entire Marketplace flow (customer shopping and the vendor
 /// side) in its own nested [Navigator], reached as a single push from a
@@ -31,13 +35,22 @@ class _MarketplaceNavigatorHostState extends State<MarketplaceNavigatorHost> {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.read<AppState>();
+    // A vendor who's already signed in (the same JWT session as
+    // everywhere else in the app — see VendorLoginScreen) shouldn't have
+    // to re-authenticate just to reopen the Marketplace; only an account
+    // with no session yet, or one that isn't a vendor, sees the
+    // customer/vendor choice screen.
+    final startAtVendorDashboard = appState.isAuthenticated && appState.role == UserRole.vendor;
     return NavigatorPopHandler(
       onPopWithResult: (result) => _navigatorKey.currentState?.maybePop(),
       child: Navigator(
         key: _navigatorKey,
         onGenerateRoute: (settings) => MaterialPageRoute(
           settings: settings,
-          builder: (_) => MarketplaceAuthScreen(theme: widget.theme),
+          builder: (_) => startAtVendorDashboard
+              ? VendorDashboardScreen(theme: widget.theme)
+              : MarketplaceAuthScreen(theme: widget.theme),
         ),
       ),
     );

@@ -7,6 +7,7 @@ import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
+import '../../widgets/reactivate_account_dialog.dart';
 import 'vendor_dashboard_screen.dart';
 import 'vendor_forgot_password_screen.dart';
 
@@ -34,7 +35,7 @@ class _VendorLoginScreenState extends State<VendorLoginScreen> {
     super.dispose();
   }
 
-  Future<void> _login() async {
+  Future<void> _login({bool reactivate = false}) async {
     if (_email.text.trim().isEmpty || _password.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter your email and password to continue')),
@@ -47,18 +48,22 @@ class _VendorLoginScreenState extends State<VendorLoginScreen> {
     });
     final appState = context.read<AppState>();
     try {
-      final loggedIn = await appState.login(email: _email.text.trim(), password: _password.text);
+      final outcome = await appState.login(email: _email.text.trim(), password: _password.text, reactivate: reactivate);
       if (!mounted) return;
-      if (!loggedIn) {
-        // This account has 2FA on — the main app's OTP screen isn't
-        // reachable from inside the Marketplace's own nested Navigator, so
-        // rather than duplicate that flow here too, ask them to use it.
-        setState(() => _error = 'This account has two-factor authentication on — log in from the main app first, then reopen the Marketplace.');
-        return;
+      switch (outcome) {
+        case LoginOutcome.requiresTwoFactor:
+          // This account has 2FA on — the main app's OTP screen isn't
+          // reachable from inside the Marketplace's own nested Navigator,
+          // so rather than duplicate that flow here too, ask them to use it.
+          setState(() => _error = 'This account has two-factor authentication on — log in from the main app first, then reopen the Marketplace.');
+        case LoginOutcome.requiresReactivation:
+          final confirmed = await showReactivateAccountDialog(context);
+          if (confirmed == true && mounted) await _login(reactivate: true);
+        case LoginOutcome.success:
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => VendorDashboardScreen(theme: widget.theme)),
+          );
       }
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => VendorDashboardScreen(theme: widget.theme)),
-      );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
