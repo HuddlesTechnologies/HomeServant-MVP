@@ -1,26 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/models/marketplace_api.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/thousands_separator.dart';
+import '../../features/Market place/models/order_options.dart';
 import '../../models/dashboard_theme.dart';
-import '../dashboard/models/property.dart';
-import 'models/marketplace_order.dart';
-import 'models/order_options.dart';
-import 'models/vendor.dart';
+import '../../state/app_state.dart';
 import 'vendor_order_detail_screen.dart';
 
 /// A ledger view of everything the vendor has sold — the same underlying
 /// order items as Notifications, framed for tracking payouts rather than
 /// spotting new orders. Reached from the Shop Profile screen.
-class VendorTransactionsScreen extends StatelessWidget {
+class VendorTransactionsScreen extends StatefulWidget {
   const VendorTransactionsScreen({super.key, required this.theme});
 
   final DashboardTheme theme;
 
   @override
+  State<VendorTransactionsScreen> createState() => _VendorTransactionsScreenState();
+}
+
+class _VendorTransactionsScreenState extends State<VendorTransactionsScreen> {
+  List<MarketplaceOrderItemApi>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await context.read<AppState>().marketplaceOrders.forVendor();
+      if (!mounted) return;
+      setState(() => _items = items);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _items = []);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final entries = vendorOrderEntries(mockLoggedInVendor.businessName);
-    final totalEarned = entries
-        .where((e) => e.item.status == OrderItemStatus.completed)
-        .fold<int>(0, (sum, e) => sum + e.item.subtotal);
+    final theme = widget.theme;
+    final items = _items;
+    final totalEarned = (items ?? [])
+        .where((i) => i.status == OrderItemStatus.completed)
+        .fold<int>(0, (sum, i) => sum + i.subtotal);
 
     return Scaffold(
       backgroundColor: theme.background,
@@ -31,7 +57,9 @@ class VendorTransactionsScreen extends StatelessWidget {
         title: Text('Transaction History', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
       ),
       body: SafeArea(
-        child: entries.isEmpty
+        child: items == null
+            ? const Center(child: CircularProgressIndicator())
+            : items.isEmpty
             ? Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -42,80 +70,86 @@ class VendorTransactionsScreen extends StatelessWidget {
                   ),
                 ),
               )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.only(bottom: 16),
-                    decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Total from completed orders',
-                          style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 13),
-                        ),
-                        Text(
-                          '₦${formatNaira(totalEarned)}',
-                          style: AppTextStyles.heading(color: theme.onSurface, size: 17),
-                        ),
-                      ],
-                    ),
-                  ),
-                  for (final entry in entries)
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => VendorOrderDetailScreen(theme: theme, entry: entry)),
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Total from completed orders',
+                            style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 13),
+                          ),
+                          Text(
+                            '₦${formatWithThousandsSeparator(totalEarned)}',
+                            style: AppTextStyles.heading(color: theme.onSurface, size: 17),
+                          ),
+                        ],
                       ),
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    for (final item in items)
+                      GestureDetector(
+                        onTap: () async {
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => VendorOrderDetailScreen(theme: theme, item: item)),
+                          );
+                          if (mounted) _load();
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      item.productName,
+                                      style: AppTextStyles.body(color: theme.onSurface, size: 14, weight: FontWeight.w700),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${item.order?.customerName ?? 'Customer'} · ${item.order?.paymentMethod.label ?? ''}',
+                                      style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    entry.item.productName,
-                                    style: AppTextStyles.body(color: theme.onSurface, size: 14, weight: FontWeight.w700),
+                                    '₦${formatWithThousandsSeparator(item.subtotal)}',
+                                    style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w700),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${entry.order.customerName} · ${entry.order.paymentMethod.label}',
-                                    style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: item.status.color.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      item.status.label,
+                                      style: AppTextStyles.body(color: item.status.color, size: 10.5, weight: FontWeight.w700),
+                                    ),
                                   ),
                                 ],
                               ),
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '₦${formatNaira(entry.item.subtotal)}',
-                                  style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w700),
-                                ),
-                                const SizedBox(height: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: entry.item.status.color.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    entry.item.status.label,
-                                    style: AppTextStyles.body(color: entry.item.status.color, size: 10.5, weight: FontWeight.w700),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
       ),
     );

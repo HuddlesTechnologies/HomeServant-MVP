@@ -1,29 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/models/vendor.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
-import 'models/marketplace_order.dart';
-import 'models/marketplace_product.dart';
-import 'models/vendor.dart';
-
-const _businessCategories = [
-  'Furniture',
-  'Home Appliances',
-  'Electronics',
-  'Fittings & Fixtures',
-  'Décor',
-  'Tools & Equipment',
-  'Other',
-];
 
 /// Lets the vendor update their shop's public details, logo, and payout
-/// bank account. Renaming the business cascades to every product they've
-/// already listed and every past order line item, so "My Products" and
-/// order history don't silently stop matching them.
+/// bank account.
 class VendorEditProfileScreen extends StatefulWidget {
   const VendorEditProfileScreen({super.key, required this.theme});
 
@@ -34,20 +22,49 @@ class VendorEditProfileScreen extends StatefulWidget {
 }
 
 class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
-  late final _businessName = TextEditingController(text: mockLoggedInVendor.businessName);
-  late final _ownerName = TextEditingController(text: mockLoggedInVendor.ownerName);
-  late final _email = TextEditingController(text: mockLoggedInVendor.email);
-  late final _bankName = TextEditingController(text: mockLoggedInVendor.bankName ?? '');
-  late final _accountNumber = TextEditingController(text: mockLoggedInVendor.accountNumber ?? '');
-  late final _accountName = TextEditingController(text: mockLoggedInVendor.accountName ?? '');
-  late String _category = mockLoggedInVendor.category;
-  late String? _logoPath = mockLoggedInVendor.logoPath;
+  final _businessName = TextEditingController();
+  final _ownerName = TextEditingController();
+  final _bankName = TextEditingController();
+  final _accountNumber = TextEditingController();
+  final _accountName = TextEditingController();
+  MarketplaceCategory _category = MarketplaceCategory.other;
+  String? _logoUrl;
+  PickedUpload? _newLogo;
+  VendorProfile? _vendor;
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final appState = context.read<AppState>();
+    try {
+      final vendor = await appState.vendors.me();
+      if (!mounted) return;
+      setState(() {
+        _vendor = vendor;
+        _businessName.text = vendor.businessName;
+        _ownerName.text = appState.fullName;
+        _bankName.text = vendor.bankName ?? '';
+        _accountNumber.text = vendor.accountNumber ?? '';
+        _accountName.text = vendor.accountName ?? '';
+        _category = vendor.category;
+        _logoUrl = vendor.logoUrl;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   void dispose() {
     _businessName.dispose();
     _ownerName.dispose();
-    _email.dispose();
     _bankName.dispose();
     _accountNumber.dispose();
     _accountName.dispose();
@@ -55,13 +72,18 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
   }
 
   Future<void> _pickLogo() async {
-    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
-    if (picked != null) setState(() => _logoPath = picked.path);
+    final picked = await pickUpload(context);
+    if (picked != null && picked.isImage) {
+      setState(() {
+        _newLogo = picked;
+        _logoUrl = null;
+      });
+    }
   }
 
   Future<void> _pickCategory() async {
     final theme = widget.theme;
-    final result = await showModalBottomSheet<String>(
+    final result = await showModalBottomSheet<MarketplaceCategory>(
       context: context,
       backgroundColor: theme.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
@@ -69,9 +91,9 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            for (final option in _businessCategories)
+            for (final option in MarketplaceCategory.values)
               ListTile(
-                title: Text(option, style: AppTextStyles.body(color: theme.onSurface)),
+                title: Text(option.label, style: AppTextStyles.body(color: theme.onSurface)),
                 trailing: option == _category ? Icon(Icons.check, color: theme.accent) : null,
                 onTap: () => Navigator.pop(context, option),
               ),
@@ -82,40 +104,58 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
     if (result != null) setState(() => _category = result);
   }
 
-  void _save() {
+  Future<void> _save() async {
     final newName = _businessName.text.trim();
-    final oldName = mockLoggedInVendor.businessName;
     if (newName.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Business name cannot be empty')));
       return;
     }
-    if (newName != oldName) {
-      for (final product in marketplaceCatalog) {
-        if (product.vendorName == oldName) product.vendorName = newName;
+    setState(() => _saving = true);
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      var logoUrl = _logoUrl;
+      final newLogo = _newLogo;
+      if (newLogo != null) {
+        logoUrl = await appState.uploads.upload(file: newLogo, folder: 'vendor-logos');
       }
-      for (final order in customerOrders) {
-        for (final item in order.items) {
-          if (item.vendorName == oldName) item.vendorName = newName;
-        }
+      await appState.vendors.update(
+        businessName: newName,
+        category: _category,
+        logoUrl: logoUrl,
+        bankName: _bankName.text.trim().isEmpty ? null : _bankName.text.trim(),
+        accountNumber: _accountNumber.text.trim().isEmpty ? null : _accountNumber.text.trim(),
+        accountName: _accountName.text.trim().isEmpty ? null : _accountName.text.trim(),
+      );
+      final newOwnerName = _ownerName.text.trim();
+      if (newOwnerName.isNotEmpty && newOwnerName != appState.fullName) {
+        await appState.completeProfile(fullName: newOwnerName);
       }
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('Shop profile updated')));
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    mockLoggedInVendor
-      ..businessName = newName
-      ..ownerName = _ownerName.text.trim()
-      ..email = _email.text.trim()
-      ..category = _category
-      ..logoPath = _logoPath
-      ..bankName = _bankName.text.trim().isEmpty ? null : _bankName.text.trim()
-      ..accountNumber = _accountNumber.text.trim().isEmpty ? null : _accountNumber.text.trim()
-      ..accountName = _accountName.text.trim().isEmpty ? null : _accountName.text.trim();
-
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Shop profile updated')));
-    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
+    if (_loading || _vendor == null) {
+      return Scaffold(
+        backgroundColor: theme.background,
+        appBar: AppBar(
+          backgroundColor: theme.background,
+          elevation: 0,
+          iconTheme: IconThemeData(color: theme.foreground),
+          title: Text('Edit Shop Profile', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       backgroundColor: theme.background,
       appBar: AppBar(
@@ -138,8 +178,12 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
                       CircleAvatar(
                         radius: 44,
                         backgroundColor: theme.accent.withValues(alpha: 0.15),
-                        backgroundImage: _logoPath != null ? imageProviderForPath(_logoPath!) : null,
-                        child: _logoPath == null ? Icon(Icons.storefront_rounded, color: theme.accent, size: 38) : null,
+                        backgroundImage: _newLogo != null
+                            ? _newLogo!.imageProvider
+                            : (_logoUrl != null ? imageProviderForPath(_logoUrl!) : null),
+                        child: _newLogo == null && _logoUrl == null
+                            ? Icon(Icons.storefront_rounded, color: theme.accent, size: 38)
+                            : null,
                       ),
                       Positioned(
                         right: 0,
@@ -166,13 +210,11 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _Field(theme: theme, label: 'Business Name', controller: _businessName),
+              _Field(theme: theme, label: 'Business Name', controller: _businessName, hint: 'e.g. Comfort Home Furniture'),
               const SizedBox(height: 16),
-              _Field(theme: theme, label: "Owner's Full Name", controller: _ownerName),
+              _Field(theme: theme, label: "Owner's Full Name", controller: _ownerName, hint: 'Full name'),
               const SizedBox(height: 16),
-              _Field(theme: theme, label: 'Email Address', controller: _email, keyboardType: TextInputType.emailAddress),
-              const SizedBox(height: 16),
-              _Dropdown(theme: theme, label: 'Business Category', value: _category, onTap: _pickCategory),
+              _Dropdown(theme: theme, label: 'Business Category', value: _category.label, onTap: _pickCategory),
               const SizedBox(height: 28),
               Text('Payout Account', style: AppTextStyles.heading(color: theme.foreground, size: 16)),
               const SizedBox(height: 8),
@@ -189,13 +231,19 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              _Field(theme: theme, label: 'Bank Name', controller: _bankName),
+              _Field(theme: theme, label: 'Bank Name', controller: _bankName, hint: 'e.g. GTBank'),
               const SizedBox(height: 16),
-              _Field(theme: theme, label: 'Account Number', controller: _accountNumber, keyboardType: TextInputType.number),
+              _Field(theme: theme, label: 'Account Number', controller: _accountNumber, keyboardType: TextInputType.number, hint: '10-digit account number'),
               const SizedBox(height: 16),
-              _Field(theme: theme, label: 'Account Name', controller: _accountName),
+              _Field(theme: theme, label: 'Account Name', controller: _accountName, hint: 'Account holder name'),
               const SizedBox(height: 28),
-              PillButton(label: 'Save Changes', backgroundColor: theme.accent, textColor: theme.onAccent, onPressed: _save),
+              PillButton(
+                label: _saving ? 'Saving…' : 'Save Changes',
+                backgroundColor: theme.accent,
+                textColor: theme.onAccent,
+                loading: _saving,
+                onPressed: _saving ? null : _save,
+              ),
             ],
           ),
         ),
@@ -205,12 +253,13 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.theme, required this.label, required this.controller, this.keyboardType});
+  const _Field({required this.theme, required this.label, required this.controller, this.keyboardType, this.hint = ''});
 
   final DashboardTheme theme;
   final String label;
   final TextEditingController controller;
   final TextInputType? keyboardType;
+  final String hint;
 
   @override
   Widget build(BuildContext context) {
@@ -220,7 +269,7 @@ class _Field extends StatelessWidget {
         Text(label, style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w600, size: 13.5)),
         const SizedBox(height: 8),
         PillTextField(
-          hint: '',
+          hint: hint,
           controller: controller,
           keyboardType: keyboardType,
           fillColor: theme.surface,

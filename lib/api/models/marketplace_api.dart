@@ -31,16 +31,18 @@ extension OrderItemStatusApi on OrderItemStatus {
 /// A vendor summary embedded on a product/order-item response — just
 /// enough to render "sold by X" without a separate lookup.
 class VendorSummary {
-  const VendorSummary({required this.id, required this.businessName, this.state, this.logoUrl});
+  const VendorSummary({required this.id, required this.businessName, this.userId, this.state, this.logoUrl});
 
   final String id;
   final String businessName;
+  final String? userId;
   final String? state;
   final String? logoUrl;
 
   factory VendorSummary.fromApi(Map<String, dynamic> json) => VendorSummary(
     id: json['id'] as String,
     businessName: json['businessName'] as String,
+    userId: json['userId'] as String?,
     state: json['state'] as String?,
     logoUrl: json['logoUrl'] as String?,
   );
@@ -107,6 +109,7 @@ class MarketplaceOrderItemApi {
     required this.notificationRead,
     this.productImageUrl,
     this.vendorName,
+    this.vendorUserId,
     this.order,
   });
 
@@ -122,6 +125,7 @@ class MarketplaceOrderItemApi {
   final bool notificationRead;
   final String? productImageUrl;
   final String? vendorName;
+  final String? vendorUserId;
 
   /// Only populated when this item was fetched via the vendor's flattened
   /// order-item view (`GET /marketplace/orders/vendor`), which embeds the
@@ -147,6 +151,7 @@ class MarketplaceOrderItemApi {
       notificationRead: json['notificationRead'] as bool? ?? false,
       productImageUrl: (product?['imageUrls'] as List?)?.cast<String>().firstOrNull,
       vendorName: vendor?['businessName'] as String?,
+      vendorUserId: vendor?['userId'] as String?,
       order: order != null ? MarketplaceOrderContext.fromApi(order) : null,
     );
   }
@@ -208,8 +213,13 @@ class MarketplaceOrderApi {
 
   /// Distinct vendors among this order's pickup-fulfillment items — used
   /// to decide who's messageable from order history.
-  Set<String> get pickupVendorIds =>
-      items.where((i) => i.fulfillment == FulfillmentMethod.pickup).map((i) => i.vendorId).toSet();
+  List<MarketplaceOrderItemApi> get pickupItems {
+    final seen = <String>{};
+    return items
+        .where((i) => i.fulfillment == FulfillmentMethod.pickup)
+        .where((i) => seen.add(i.vendorId))
+        .toList();
+  }
 
   factory MarketplaceOrderApi.fromApi(Map<String, dynamic> json) => MarketplaceOrderApi(
     id: json['id'] as String,

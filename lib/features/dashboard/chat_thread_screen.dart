@@ -2,13 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/models/marketplace_api.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_text_field.dart';
-import '../Market place/models/marketplace_order.dart';
 import '../Market place/models/order_options.dart';
 import 'models/property.dart';
 
@@ -27,7 +28,7 @@ class ChatThreadScreen extends StatefulWidget {
     this.initialMessages = const [],
     this.threadId,
     this.property,
-    this.orderEntry,
+    this.orderItem,
   });
 
   final DashboardTheme theme;
@@ -47,10 +48,10 @@ class ChatThreadScreen extends StatefulWidget {
   /// time through free-form messages alone.
   final Property? property;
 
-  /// The pickup order this conversation is about, if any — set when a
-  /// vendor opens a chat from VendorMessagesScreen. Lets the vendor mark
+  /// The pickup order item this conversation is about, if any — set when
+  /// a vendor opens a chat from VendorMessagesScreen. Lets the vendor mark
   /// the order fulfilled or cancel it without leaving the chat.
-  final VendorOrderEntry? orderEntry;
+  final MarketplaceOrderItemApi? orderItem;
 
   @override
   State<ChatThreadScreen> createState() => _ChatThreadScreenState();
@@ -67,7 +68,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   void initState() {
     super.initState();
     _messages = List.of(widget.initialMessages);
-    _orderStatus = widget.orderEntry?.item.status;
+    _orderStatus = widget.orderItem?.status;
     final threadId = widget.threadId;
     if (threadId != null) {
       _loadingRemote = true;
@@ -165,20 +166,24 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Inspection request sent for $formatted')));
   }
 
-  void _setOrderStatus(OrderItemStatus status) {
-    final entry = widget.orderEntry;
-    if (entry == null) return;
-    setState(() {
-      entry.item.status = status;
-      _orderStatus = status;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Order marked as ${status.label}')));
+  Future<void> _setOrderStatus(OrderItemStatus status) async {
+    final item = widget.orderItem;
+    if (item == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().marketplaceOrders.respondToItem(item.id, status: status);
+      if (!mounted) return;
+      setState(() => _orderStatus = status);
+      messenger.showSnackBar(SnackBar(content: Text('Order marked as ${status.label}')));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final orderEntry = widget.orderEntry;
+    final orderItem = widget.orderItem;
     final orderStatus = _orderStatus;
     return Scaffold(
       backgroundColor: theme.background,
@@ -191,7 +196,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           style: AppTextStyles.heading(color: theme.foreground, size: 18),
         ),
         actions: [
-          if (orderEntry != null && orderStatus == OrderItemStatus.pending)
+          if (orderItem != null && orderStatus == OrderItemStatus.pending)
             PopupMenuButton<OrderItemStatus>(
               icon: Icon(Icons.more_vert_rounded, color: theme.foreground),
               onSelected: _setOrderStatus,
@@ -207,8 +212,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           maxWidth: 680,
           child: Column(
             children: [
-              if (orderEntry != null && orderStatus != null)
-                _OrderStatusBanner(theme: theme, entry: orderEntry, status: orderStatus),
+              if (orderItem != null && orderStatus != null)
+                _OrderStatusBanner(theme: theme, item: orderItem, status: orderStatus),
               if (_loadingRemote) const LinearProgressIndicator(minHeight: 2),
               Expanded(
                 child: ListView.builder(
@@ -310,10 +315,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 }
 
 class _OrderStatusBanner extends StatelessWidget {
-  const _OrderStatusBanner({required this.theme, required this.entry, required this.status});
+  const _OrderStatusBanner({required this.theme, required this.item, required this.status});
 
   final DashboardTheme theme;
-  final VendorOrderEntry entry;
+  final MarketplaceOrderItemApi item;
   final OrderItemStatus status;
 
   @override
@@ -326,7 +331,7 @@ class _OrderStatusBanner extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              entry.item.productName,
+              item.productName,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.body(color: theme.onSurface, size: 13, weight: FontWeight.w700),
             ),

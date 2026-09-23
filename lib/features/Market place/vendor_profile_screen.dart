@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/models/vendor.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../../widgets/profile_edit_button.dart';
 import '../../widgets/support_sheet.dart';
 import '../../widgets/upload_picker.dart';
-import 'models/vendor.dart';
 import 'vendor_dashboard_screen.dart';
 import 'vendor_edit_profile_screen.dart';
 import 'vendor_products_screen.dart';
@@ -25,6 +28,23 @@ class VendorProfileScreen extends StatefulWidget {
 
 class _VendorProfileScreenState extends State<VendorProfileScreen> {
   DashboardTheme get theme => widget.theme;
+  VendorProfile? _vendor;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final vendor = await context.read<AppState>().vendors.me();
+      if (!mounted) return;
+      setState(() => _vendor = vendor);
+    } catch (_) {
+      // Handled by the loading state staying null; the screen just shows a spinner.
+    }
+  }
 
   void _onNavTap(BuildContext context, int index) {
     if (index == 2) return;
@@ -36,7 +56,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => VendorEditProfileScreen(theme: theme)),
     );
-    setState(() {});
+    _load();
   }
 
   Future<void> _confirmDeactivate(BuildContext context) async {
@@ -53,17 +73,30 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
         actionLabel: 'Deactivate',
       ),
     );
-    if (confirmed == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your shop has been deactivated')),
-      );
-      Navigator.of(context).popUntil((route) => route.isFirst);
+    if (confirmed != true || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      await context.read<AppState>().vendors.update(isActive: false);
+      messenger.showSnackBar(const SnackBar(content: Text('Your shop has been deactivated')));
+      navigator.popUntil((route) => route.isFirst);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final vendor = mockLoggedInVendor;
+    final vendor = _vendor;
+    if (vendor == null) {
+      return VendorTabScaffold(
+        theme: theme,
+        currentIndex: 2,
+        onNavTap: (index) => _onNavTap(context, index),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final appState = context.watch<AppState>();
     return VendorTabScaffold(
       theme: theme,
       currentIndex: 2,
@@ -85,20 +118,11 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 CircleAvatar(
                   radius: 40,
                   backgroundColor: theme.accent.withValues(alpha: 0.15),
-                  backgroundImage: vendor.logoPath != null ? imageProviderForPath(vendor.logoPath!) : null,
-                  child: vendor.logoPath == null ? Icon(Icons.storefront_rounded, color: theme.accent, size: 36) : null,
+                  backgroundImage: vendor.logoUrl != null ? imageProviderForPath(vendor.logoUrl!) : null,
+                  child: vendor.logoUrl == null ? Icon(Icons.storefront_rounded, color: theme.accent, size: 36) : null,
                 ),
                 const SizedBox(height: 12),
                 Text(vendor.businessName, style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.star_rounded, color: Colors.amber.shade600, size: 16),
-                    const SizedBox(width: 2),
-                    Text('${vendor.rating}', style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.7), size: 13)),
-                  ],
-                ),
               ],
             ),
           ),
@@ -108,9 +132,9 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
             child: Column(
               children: [
-                _ProfileRow(theme: theme, label: 'Owner', value: vendor.ownerName),
-                _ProfileRow(theme: theme, label: 'Email', value: vendor.email),
-                _ProfileRow(theme: theme, label: 'Category', value: vendor.category),
+                _ProfileRow(theme: theme, label: 'Owner', value: appState.fullName.isEmpty ? '—' : appState.fullName),
+                _ProfileRow(theme: theme, label: 'Email', value: appState.email),
+                _ProfileRow(theme: theme, label: 'Category', value: vendor.category.label),
                 _ProfileRow(theme: theme, label: 'State', value: vendor.state, showDivider: false),
               ],
             ),

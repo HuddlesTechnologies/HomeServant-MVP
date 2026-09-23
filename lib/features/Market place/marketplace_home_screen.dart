@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/marketplace_orders_repository.dart';
+import '../../api/models/marketplace_api.dart';
+import '../../api/models/vendor.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
-import '../dashboard/models/property.dart';
+import '../../widgets/upload_picker.dart';
 import 'marketplace_messages_screen.dart';
 import 'marketplace_product_detail_screen.dart';
-import 'models/marketplace_order.dart';
-import 'models/marketplace_product.dart';
 import 'models/order_options.dart';
 import 'order_history_screen.dart';
 import 'widgets/marketplace_product_card.dart';
@@ -27,7 +30,8 @@ class MarketplaceHomeScreen extends StatefulWidget {
 
 class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
   final _search = TextEditingController();
-  String _category = 'All';
+  MarketplaceCategory? _category;
+  List<MarketplaceProductApi>? _products;
 
   /// productId -> quantity. Kept local to this screen — checkout resets it
   /// rather than persisting an order history.
@@ -40,25 +44,46 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
   int get _cartCount => _cart.values.fold(0, (sum, qty) => sum + qty);
 
   @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final products = await context.read<AppState>().marketplaceProducts.findMany();
+      if (!mounted) return;
+      setState(() => _products = products);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _products = []);
+    }
+  }
+
+  @override
   void dispose() {
     _search.dispose();
     super.dispose();
   }
 
-  List<MarketplaceProduct> get _filtered {
+  List<MarketplaceProductApi> get _filtered {
     final query = _search.text.trim().toLowerCase();
-    return marketplaceCatalog.where((p) {
-      final matchesCategory = _category == 'All' || p.category == _category;
-      final matchesQuery = query.isEmpty || p.name.toLowerCase().contains(query) || p.vendorName.toLowerCase().contains(query);
+    return (_products ?? []).where((p) {
+      final matchesCategory = _category == null || p.category == _category;
+      final matchesQuery = query.isEmpty ||
+          p.name.toLowerCase().contains(query) ||
+          (p.vendor?.businessName.toLowerCase().contains(query) ?? false);
       return matchesCategory && matchesQuery;
     }).toList();
   }
+
+  MarketplaceProductApi? _productById(String id) => (_products ?? []).where((p) => p.id == id).firstOrNull;
 
   /// Adds [product] to the cart at exactly [quantity] units — a repeat tap
   /// with the same quantity already in the cart doesn't silently bump the
   /// count again; the shopper has to use the product card's +/- stepper to
   /// actually change how many they want first.
-  void _addToCart(MarketplaceProduct product, int quantity) {
+  void _addToCart(MarketplaceProductApi product, int quantity) {
     if (product.stock <= 0) return;
     final clampedQuantity = quantity.clamp(1, product.stock);
     if (_cart[product.id] == clampedQuantity) {
@@ -88,13 +113,14 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
   /// Adjusts an item already in the cart via the cart sheet's own stepper —
   /// clamped between 1 (use the trash icon to remove it entirely) and however
   /// many the vendor has left in stock.
-  void _setCartQuantity(MarketplaceProduct product, int quantity) {
+  void _setCartQuantity(MarketplaceProductApi product, int quantity) {
     setState(() => _cart[product.id] = quantity.clamp(1, product.stock));
   }
 
-  int get _cartTotal => marketplaceCatalog
-      .where((p) => _cart.containsKey(p.id))
-      .fold<int>(0, (sum, p) => sum + p.price * (_cart[p.id] ?? 0));
+  int get _cartTotal => _cart.entries.fold<int>(0, (sum, entry) {
+    final product = _productById(entry.key);
+    return sum + (product?.price ?? 0) * entry.value;
+  });
 
   void _openCart() {
     final theme = widget.theme;
@@ -105,7 +131,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
-          final items = marketplaceCatalog.where((p) => _cart.containsKey(p.id)).toList();
+          final items = _cart.keys.map(_productById).whereType<MarketplaceProductApi>().toList();
           return SafeArea(
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.8),
@@ -141,12 +167,12 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                                       child: SizedBox(
                                         width: 44,
                                         height: 44,
-                                        child: product.displayImages.isNotEmpty
-                                            ? Image(image: product.displayImages.first, fit: BoxFit.cover)
+                                        child: product.imageUrls.isNotEmpty
+                                            ? Image(image: imageProviderForPath(product.imageUrls.first), fit: BoxFit.cover)
                                             : DecoratedBox(
                                                 decoration: BoxDecoration(color: theme.onSurface.withValues(alpha: 0.06)),
                                                 child: Icon(
-                                                  product.icon,
+                                                  product.category.icon,
                                                   color: theme.onSurface.withValues(alpha: 0.5),
                                                   size: 20,
                                                 ),
@@ -161,7 +187,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                                       ),
                                     ),
                                     Text(
-                                      '₦${formatNaira(product.price * (_cart[product.id] ?? 0))}',
+                                      '₦${formatWithThousandsSeparator(product.price * (_cart[product.id] ?? 0))}',
                                       style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w700),
                                     ),
                                     IconButton(
@@ -261,7 +287,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                         children: [
                           Text('Total', style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w700)),
                           Text(
-                            '₦${formatNaira(_cartTotal)}',
+                            '₦${formatWithThousandsSeparator(_cartTotal)}',
                             style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w800, size: 16),
                           ),
                         ],
@@ -287,35 +313,31 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
     );
   }
 
-  void _placeOrder(PaymentMethod paymentMethod) {
+  Future<void> _placeOrder(PaymentMethod paymentMethod) async {
     final appState = context.read<AppState>();
-    final customerName = appState.fullName;
-    final items = marketplaceCatalog.where((p) => _cart.containsKey(p.id)).toList();
-    final order = MarketplaceOrder(
-      id: 'mo${DateTime.now().microsecondsSinceEpoch}',
-      date: DateTime.now(),
-      paymentMethod: paymentMethod,
-      customerName: customerName.isNotEmpty ? customerName : 'Customer',
-      customerPhone: appState.phoneNumber,
-      customerAddress: appState.houseAddress,
-      items: [
-        for (final product in items)
-          OrderItem(
-            productId: product.id,
-            productName: product.name,
-            vendorName: product.vendorName,
-            icon: product.icon,
-            price: product.price,
-            quantity: _cart[product.id] ?? 1,
-            fulfillment: _fulfillment[product.id] ?? product.fulfillmentOptions.first,
-          ),
-      ],
-    );
-    setState(() {
-      customerOrders.insert(0, order);
-      _cart.clear();
-      _fulfillment.clear();
-    });
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await appState.marketplaceOrders.create(
+        items: [
+          for (final entry in _cart.entries)
+            MarketplaceOrderItemInput(
+              productId: entry.key,
+              quantity: entry.value,
+              fulfillment: _fulfillment[entry.key] ?? FulfillmentMethod.delivery,
+            ),
+        ],
+        paymentMethod: paymentMethod,
+      );
+      if (!mounted) return;
+      setState(() {
+        _cart.clear();
+        _fulfillment.clear();
+      });
+      messenger.showSnackBar(const SnackBar(content: Text('Payment successful! Your order has been placed.')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   void _openPaymentModal() {
@@ -337,7 +359,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                 Text('Payment', style: AppTextStyles.heading(color: theme.onSurface, size: 18)),
                 const SizedBox(height: 4),
                 Text(
-                  'Amount to pay: ₦${formatNaira(total)}',
+                  'Amount to pay: ₦${formatWithThousandsSeparator(total)}',
                   style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 13.5),
                 ),
                 const SizedBox(height: 20),
@@ -376,15 +398,12 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                   ),
                 const SizedBox(height: 8),
                 PillButton(
-                  label: 'Pay ₦${formatNaira(total)}',
+                  label: 'Pay ₦${formatWithThousandsSeparator(total)}',
                   backgroundColor: theme.accent,
                   textColor: theme.onAccent,
                   onPressed: () {
                     Navigator.of(sheetContext).pop();
                     _placeOrder(selected);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Payment successful! Your order has been placed.')),
-                    );
                   },
                 ),
               ],
@@ -473,13 +492,14 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: marketplaceCategories.length,
+                  itemCount: MarketplaceCategory.values.length + 1,
                   separatorBuilder: (_, _) => const SizedBox(width: 10),
                   itemBuilder: (context, index) {
-                    final category = marketplaceCategories[index];
+                    final category = index == 0 ? null : MarketplaceCategory.values[index - 1];
+                    final label = category?.label ?? 'All';
                     final selected = category == _category;
                     return ChoiceChip(
-                      label: Text(category),
+                      label: Text(label),
                       selected: selected,
                       onSelected: (_) => setState(() => _category = category),
                       backgroundColor: theme.surface,
@@ -497,41 +517,46 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
               ),
               const SizedBox(height: 8),
               Expanded(
-                child: _filtered.isEmpty
+                child: _products == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : _filtered.isEmpty
                     ? Center(
                         child: Text(
                           'No products match your search',
                           style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6)),
                         ),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: gridColumnsForWidth(MediaQuery.of(context).size.width) + 1,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.58,
-                        ),
-                        itemCount: _filtered.length,
-                        itemBuilder: (context, index) {
-                          final product = _filtered[index];
-                          return MarketplaceProductCard(
-                            product: product,
-                            theme: theme,
-                            cartQuantity: _cart[product.id] ?? 0,
-                            onAddToCart: (quantity) => _addToCart(product, quantity),
-                            onOpen: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MarketplaceProductDetailScreen(
-                                  product: product,
-                                  theme: theme,
-                                  cartQuantity: _cart[product.id] ?? 0,
-                                  onAddToCart: _addToCart,
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: gridColumnsForWidth(MediaQuery.of(context).size.width) + 1,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                            childAspectRatio: 0.58,
+                          ),
+                          itemCount: _filtered.length,
+                          itemBuilder: (context, index) {
+                            final product = _filtered[index];
+                            return MarketplaceProductCard(
+                              product: product,
+                              theme: theme,
+                              cartQuantity: _cart[product.id] ?? 0,
+                              onAddToCart: (quantity) => _addToCart(product, quantity),
+                              onOpen: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => MarketplaceProductDetailScreen(
+                                    product: product,
+                                    theme: theme,
+                                    cartQuantity: _cart[product.id] ?? 0,
+                                    onAddToCart: _addToCart,
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        },
+                            );
+                          },
+                        ),
                       ),
               ),
             ],

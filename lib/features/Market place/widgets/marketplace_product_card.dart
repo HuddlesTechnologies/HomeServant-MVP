@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../api/models/marketplace_api.dart';
+import '../../../api/models/vendor.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/dashboard_theme.dart';
-import '../models/marketplace_product.dart';
+import '../../../widgets/upload_picker.dart';
 
 class MarketplaceProductCard extends StatefulWidget {
   const MarketplaceProductCard({
@@ -13,7 +15,7 @@ class MarketplaceProductCard extends StatefulWidget {
     required this.onOpen,
   });
 
-  final MarketplaceProduct product;
+  final MarketplaceProductApi product;
   final DashboardTheme theme;
 
   /// How many of this product are currently in the cart — 0 if none. Drives
@@ -61,7 +63,7 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final product = widget.product;
-    final images = product.displayImages;
+    final images = product.imageUrls;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onOpen,
@@ -76,10 +78,10 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: images.isNotEmpty
-                    ? Image(image: images.first, fit: BoxFit.cover)
+                    ? Image(image: imageProviderForPath(images.first), fit: BoxFit.cover)
                     : DecoratedBox(
                         decoration: BoxDecoration(color: theme.onSurface.withValues(alpha: 0.06)),
-                        child: Icon(product.icon, color: theme.onSurface.withValues(alpha: 0.55), size: 36),
+                        child: Icon(product.category.icon, color: theme.onSurface.withValues(alpha: 0.55), size: 36),
                       ),
               ),
             ),
@@ -92,7 +94,7 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
             ),
             const SizedBox(height: 2),
             Text(
-              product.vendorName,
+              product.vendor?.businessName ?? 'Vendor',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12, weight: FontWeight.w600),
@@ -100,10 +102,6 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
             const SizedBox(height: 6),
             Row(
               children: [
-                Icon(Icons.star_rounded, color: Colors.amber.shade600, size: 15),
-                const SizedBox(width: 2),
-                Text(product.rating.toString(), style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.7), size: 12)),
-                const Spacer(),
                 Text(
                   product.priceLabel,
                   overflow: TextOverflow.ellipsis,

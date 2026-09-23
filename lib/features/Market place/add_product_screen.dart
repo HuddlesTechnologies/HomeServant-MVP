@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
-import 'models/marketplace_product.dart';
 import 'models/order_options.dart';
-import 'models/vendor.dart';
 
 const _minImages = 2;
 const _maxImages = 5;
@@ -34,6 +35,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final List<PickedUpload> _images = [];
   PickedUpload? _video;
   final Set<FulfillmentMethod> _fulfillmentOptions = {};
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -61,57 +63,63 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _video = picked);
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final name = _name.text.trim();
     final description = _description.text.trim();
     final price = int.tryParse(_price.text.replaceAll(',', '').trim());
     final stock = int.tryParse(_stock.text.replaceAll(',', '').trim());
+    final messenger = ScaffoldMessenger.of(context);
 
     if (name.isEmpty || description.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a product name and description')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('Enter a product name and description')));
       return;
     }
     if (_images.length < _minImages) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Add at least $_minImages photos')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('Add at least $_minImages photos')));
       return;
     }
     if (price == null || price <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid price')));
+      messenger.showSnackBar(const SnackBar(content: Text('Enter a valid price')));
       return;
     }
     if (stock == null || stock < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter how many are in stock')));
+      messenger.showSnackBar(const SnackBar(content: Text('Enter how many are in stock')));
       return;
     }
     if (_fulfillmentOptions.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(content: Text('Select whether this item is available for delivery, pickup, or both')),
       );
       return;
     }
 
-    final vendor = mockLoggedInVendor;
-    marketplaceCatalog.add(
-      MarketplaceProduct(
-        id: 'vp_${DateTime.now().microsecondsSinceEpoch}',
+    setState(() => _submitting = true);
+    final appState = context.read<AppState>();
+    try {
+      final vendor = await appState.vendors.me();
+      final imageUrls = <String>[];
+      for (final image in _images) {
+        imageUrls.add(await appState.uploads.upload(file: image, folder: 'marketplace-products'));
+      }
+      final videoUrl = _video != null ? await appState.uploads.upload(file: _video!, folder: 'marketplace-products') : null;
+
+      await appState.marketplaceProducts.create(
         name: name,
-        vendorName: vendor.businessName,
-        category: vendor.category,
-        price: price,
-        rating: 0,
-        icon: Icons.inventory_2_rounded,
         description: description,
+        price: price,
         stock: stock,
-        images: List.of(_images),
-        video: _video,
-        fulfillmentOptions: Set.of(_fulfillmentOptions),
-      ),
-    );
-    Navigator.of(context).pop(true);
+        category: vendor.category,
+        imageUrls: imageUrls,
+        fulfillmentOptions: _fulfillmentOptions,
+        videoUrl: videoUrl,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -134,12 +142,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
               children: [
                 _Label(theme: theme, text: 'Product Name'),
                 const SizedBox(height: 8),
-                PillTextField(hint: '', controller: _name, fillColor: theme.surface, textColor: theme.onSurface),
+                PillTextField(hint: 'e.g. 3-Seater Leather Sofa', controller: _name, fillColor: theme.surface, textColor: theme.onSurface),
                 const SizedBox(height: 18),
                 _Label(theme: theme, text: 'Description'),
                 const SizedBox(height: 8),
                 PillTextField(
-                  hint: '',
+                  hint: "Describe the product's condition, materials, dimensions...",
                   controller: _description,
                   minLines: 3,
                   maxLines: 5,
@@ -234,7 +242,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 _Label(theme: theme, text: 'Price'),
                 const SizedBox(height: 8),
                 PillTextField(
-                  hint: '',
+                  hint: '0',
                   controller: _price,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly, ThousandsSeparatorInputFormatter()],
@@ -249,7 +257,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 _Label(theme: theme, text: 'Quantity in Stock'),
                 const SizedBox(height: 8),
                 PillTextField(
-                  hint: '',
+                  hint: '0',
                   controller: _stock,
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -300,10 +308,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 ),
                 const SizedBox(height: 28),
                 PillButton(
-                  label: 'List Product',
+                  label: _submitting ? 'Listing…' : 'List Product',
                   backgroundColor: theme.accent,
                   textColor: theme.onAccent,
-                  onPressed: _submit,
+                  loading: _submitting,
+                  onPressed: _submitting ? null : _submit,
                 ),
               ],
             ),

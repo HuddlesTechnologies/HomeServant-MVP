@@ -140,8 +140,8 @@ class AppState extends ChangeNotifier {
 
   // --- Auth ------------------------------------------------------------
 
-  Future<void> signup({required String email, required String password}) async {
-    await _authRepo.signup(email: email, password: password, role: role);
+  Future<void> signup({required String email, required String password, String? fullName}) async {
+    await _authRepo.signup(email: email, password: password, role: role, fullName: fullName);
     this.email = email;
     notifyListeners();
   }

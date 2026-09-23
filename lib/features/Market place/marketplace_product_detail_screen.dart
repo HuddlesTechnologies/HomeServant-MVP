@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../api/models/marketplace_api.dart';
+import '../../api/models/vendor.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../widgets/pill_button.dart';
-import 'models/marketplace_product.dart';
+import '../../widgets/upload_picker.dart';
 import 'widgets/marketplace_product_gallery_screen.dart';
 
 class MarketplaceProductDetailScreen extends StatefulWidget {
@@ -15,7 +17,7 @@ class MarketplaceProductDetailScreen extends StatefulWidget {
     required this.onAddToCart,
   });
 
-  final MarketplaceProduct product;
+  final MarketplaceProductApi product;
   final DashboardTheme theme;
 
   /// How many of this product are currently in the cart — 0 if none.
@@ -23,7 +25,7 @@ class MarketplaceProductDetailScreen extends StatefulWidget {
 
   /// Called with the quantity selected on this screen's stepper when the
   /// shopper taps the add-to-cart button.
-  final void Function(MarketplaceProduct product, int quantity) onAddToCart;
+  final void Function(MarketplaceProductApi product, int quantity) onAddToCart;
 
   @override
   State<MarketplaceProductDetailScreen> createState() => _MarketplaceProductDetailScreenState();
@@ -45,7 +47,7 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
   bool get _alreadyInCart => widget.cartQuantity > 0 && _quantity == widget.cartQuantity;
 
   void _openGallery(int index) {
-    final images = widget.product.displayImages;
+    final images = widget.product.imageUrls.map(imageProviderForPath).toList();
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MarketplaceProductGalleryScreen(images: images, initialIndex: index, title: widget.product.name),
@@ -57,7 +59,7 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
   Widget build(BuildContext context) {
     final product = widget.product;
     final theme = widget.theme;
-    final images = product.displayImages;
+    final images = product.imageUrls.map(imageProviderForPath).toList();
     final inStock = product.stock > 0;
 
     return Scaffold(
@@ -86,7 +88,7 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                             ? Image(image: images.first, fit: BoxFit.cover)
                             : DecoratedBox(
                                 decoration: BoxDecoration(color: theme.surface),
-                                child: Icon(product.icon, color: theme.onSurface.withValues(alpha: 0.5), size: 64),
+                                child: Icon(product.category.icon, color: theme.onSurface.withValues(alpha: 0.5), size: 64),
                               ),
                       ),
                     ),
@@ -113,16 +115,12 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                   Text(product.name, style: AppTextStyles.heading(color: theme.foreground, size: 20)),
                   const SizedBox(height: 4),
                   Text(
-                    product.vendorName,
+                    product.vendor?.businessName ?? 'Vendor',
                     style: AppTextStyles.body(color: theme.accent, size: 13.5, weight: FontWeight.w600),
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Icon(Icons.star_rounded, color: Colors.amber.shade600, size: 18),
-                      const SizedBox(width: 4),
-                      Text(product.rating.toString(), style: AppTextStyles.body(color: theme.foreground, size: 13.5)),
-                      const SizedBox(width: 14),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(

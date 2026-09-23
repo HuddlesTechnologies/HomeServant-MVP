@@ -1,22 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/models/vendor.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../models/user_role.dart';
+import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
 import '../dashboard/models/property.dart';
-import 'vendor_signup_success_screen.dart';
-
-const _businessCategories = [
-  'Furniture',
-  'Home Appliances',
-  'Electronics',
-  'Fittings & Fixtures',
-  'Décor',
-  'Tools & Equipment',
-  'Other',
-];
+import 'vendor_verify_otp_screen.dart';
 
 class VendorSignupScreen extends StatefulWidget {
   const VendorSignupScreen({super.key, required this.theme});
@@ -37,12 +32,13 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
 
-  String? _category;
+  MarketplaceCategory? _category;
   String? _state;
   PickedUpload? _logo;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _agreedToTerms = false;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -63,20 +59,12 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
   }
 
   Future<void> _pickCategory() async {
-    final result = await _showPicker(
-      title: 'Business Category',
-      options: _businessCategories,
-      current: _category,
-    );
-    if (result != null) setState(() => _category = result);
+    final result = await _showPicker(title: 'Business Category', options: marketplaceCategoryLabels, current: _category?.label);
+    if (result != null) setState(() => _category = MarketplaceCategoryApi.fromLabel(result));
   }
 
   Future<void> _pickState() async {
-    final result = await _showPicker(
-      title: 'State',
-      options: nigerianStates,
-      current: _state,
-    );
+    final result = await _showPicker(title: 'State', options: nigerianStates, current: _state);
     if (result != null) setState(() => _state = result);
   }
 
@@ -150,20 +138,20 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
   bool get _formIsValid =>
       _businessName.text.trim().isNotEmpty &&
       _ownerName.text.trim().isNotEmpty &&
-      _email.text.trim().isNotEmpty &&
+      _email.text.trim().contains('@') &&
       _phone.text.trim().isNotEmpty &&
       _category != null &&
       _address.text.trim().isNotEmpty &&
       _state != null &&
-      _password.text.isNotEmpty &&
+      _password.text.length >= 8 &&
       _agreedToTerms;
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formIsValid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please fill in all required fields and accept the vendor terms',
+            'Please fill in all required fields (password at least 8 characters) and accept the vendor terms',
           ),
         ),
       );
@@ -175,15 +163,34 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
       ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder:
-            (_) => VendorSignupSuccessScreen(
-              theme: widget.theme,
-              businessName: _businessName.text.trim(),
-            ),
-      ),
-    );
+
+    setState(() => _submitting = true);
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      appState.selectRole(UserRole.vendor);
+      final email = _email.text.trim();
+      await appState.signup(email: email, password: _password.text, fullName: _ownerName.text.trim());
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VendorVerifyOtpScreen(
+            theme: widget.theme,
+            email: email,
+            businessName: _businessName.text.trim(),
+            category: _category!,
+            state: _state!,
+            rcNumber: _rcNumber.text.trim(),
+            phone: _phone.text.trim(),
+            logo: _logo,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -260,12 +267,14 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   label: 'Business Name',
                   theme: theme,
                   controller: _businessName,
+                  hint: 'e.g. Comfort Home Furniture',
                 ),
                 const SizedBox(height: 16),
                 _Field(
                   label: "Owner's Full Name",
                   theme: theme,
                   controller: _ownerName,
+                  hint: 'Full name',
                 ),
                 const SizedBox(height: 16),
                 _Field(
@@ -273,6 +282,7 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   theme: theme,
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
+                  hint: 'email@domain.com',
                 ),
                 const SizedBox(height: 16),
                 _Field(
@@ -280,12 +290,13 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   theme: theme,
                   controller: _phone,
                   keyboardType: TextInputType.phone,
+                  hint: 'e.g. 0801 234 5678',
                 ),
                 const SizedBox(height: 16),
                 _Dropdown(
                   label: 'Business Category',
                   theme: theme,
-                  value: _category ?? 'Select a category',
+                  value: _category?.label ?? 'Select a category',
                   onTap: _pickCategory,
                 ),
                 const SizedBox(height: 16),
@@ -295,6 +306,7 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   controller: _address,
                   minLines: 2,
                   maxLines: 3,
+                  hint: 'Street, area, city',
                 ),
                 const SizedBox(height: 16),
                 _Dropdown(
@@ -309,6 +321,7 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   theme: theme,
                   controller: _rcNumber,
                   keyboardType: TextInputType.text,
+                  hint: 'e.g. RC1234567',
                 ),
                 const SizedBox(height: 16),
                 _Field(
@@ -316,6 +329,7 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   theme: theme,
                   controller: _password,
                   obscureText: _obscurePassword,
+                  hint: 'At least 8 characters',
                   trailing: IconButton(
                     icon: Icon(
                       _obscurePassword
@@ -336,6 +350,7 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   theme: theme,
                   controller: _confirmPassword,
                   obscureText: _obscureConfirm,
+                  hint: 'Re-enter your password',
                   trailing: IconButton(
                     icon: Icon(
                       _obscureConfirm
@@ -379,10 +394,11 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                 ),
                 const SizedBox(height: 24),
                 PillButton(
-                  label: 'Sign Up as a Vendor',
+                  label: _submitting ? 'Signing up…' : 'Sign Up as a Vendor',
                   backgroundColor: theme.accent,
                   textColor: theme.onAccent,
-                  onPressed: _submit,
+                  loading: _submitting,
+                  onPressed: _submitting ? null : _submit,
                 ),
               ],
             ),
@@ -403,6 +419,7 @@ class _Field extends StatelessWidget {
     this.trailing,
     this.minLines,
     this.maxLines = 1,
+    this.hint = '',
   });
 
   final String label;
@@ -413,6 +430,7 @@ class _Field extends StatelessWidget {
   final Widget? trailing;
   final int? minLines;
   final int? maxLines;
+  final String hint;
 
   @override
   Widget build(BuildContext context) {
@@ -429,7 +447,7 @@ class _Field extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         PillTextField(
-          hint: '',
+          hint: hint,
           controller: controller,
           keyboardType: keyboardType,
           obscureText: obscureText,

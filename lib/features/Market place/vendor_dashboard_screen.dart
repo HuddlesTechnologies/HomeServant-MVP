@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/models/marketplace_api.dart';
+import '../../api/models/vendor.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../../widgets/upload_picker.dart';
-import '../dashboard/models/property.dart';
-import 'models/marketplace_order.dart';
-import 'models/marketplace_product.dart';
 import 'models/order_options.dart';
-import 'models/vendor.dart';
 import 'vendor_messages_screen.dart';
 import 'vendor_notifications_screen.dart';
 import 'vendor_order_detail_screen.dart';
@@ -28,6 +29,38 @@ class VendorDashboardScreen extends StatefulWidget {
 }
 
 class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
+  VendorProfile? _vendor;
+  List<MarketplaceProductApi>? _products;
+  List<MarketplaceOrderItemApi>? _items;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final appState = context.read<AppState>();
+    try {
+      final results = await Future.wait([
+        appState.vendors.me(),
+        appState.marketplaceProducts.mine(),
+        appState.marketplaceOrders.forVendor(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _vendor = results[0] as VendorProfile;
+        _products = results[1] as List<MarketplaceProductApi>;
+        _items = results[2] as List<MarketplaceOrderItemApi>;
+        _error = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = "Couldn't load your shop — pull to try again.");
+    }
+  }
+
   void _onNavTap(int index) {
     if (index == 0) return;
     final screen = index == 1 ? VendorProductsScreen(theme: widget.theme) : VendorProfileScreen(theme: widget.theme);
@@ -38,139 +71,161 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => VendorNotificationsScreen(theme: widget.theme)),
     );
-    setState(() {});
+    _load();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final vendor = mockLoggedInVendor;
-    final myProducts = marketplaceCatalog.where((p) => p.vendorName == vendor.businessName).toList();
-    final orderEntries = vendorOrderEntries(vendor.businessName);
-    final revenue = orderEntries
-        .where((e) => e.item.status != OrderItemStatus.cancelled)
-        .fold<int>(0, (sum, e) => sum + e.item.subtotal);
-    final unreadCount = orderEntries.where((e) => !e.item.notificationRead).length;
+    final vendor = _vendor;
+    final products = _products;
+    final items = _items;
+
+    if (vendor == null || products == null || items == null) {
+      return VendorTabScaffold(
+        theme: theme,
+        currentIndex: 0,
+        onNavTap: _onNavTap,
+        body: Center(
+          child: _error != null
+              ? Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(_error!, textAlign: TextAlign.center, style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6))),
+                )
+              : const CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    final revenue = items.where((i) => i.status != OrderItemStatus.cancelled).fold<int>(0, (sum, i) => sum + i.subtotal);
+    final unreadCount = items.where((i) => !i.notificationRead).length;
+    final recent = List.of(items)..sort((a, b) => (b.order?.createdAt ?? DateTime(0)).compareTo(a.order?.createdAt ?? DateTime(0)));
 
     return VendorTabScaffold(
       theme: theme,
       currentIndex: 0,
       onNavTap: _onNavTap,
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Welcome back,', style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 13)),
+                          Text(
+                            vendor.businessName,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.heading(color: theme.foreground, size: 20),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
                       children: [
-                        Text('Welcome back,', style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 13)),
-                        Text(
-                          vendor.businessName,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.heading(color: theme.foreground, size: 20),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            IconButton(
+                              onPressed: _openNotifications,
+                              icon: Icon(Icons.notifications_none_rounded, color: theme.foreground),
+                            ),
+                            if (unreadCount > 0)
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
+                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                  child: Text(
+                                    '$unreadCount',
+                                    textAlign: TextAlign.center,
+                                    style: AppTextStyles.body(color: theme.onAccent, size: 9, weight: FontWeight.w800),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => VendorMessagesScreen(theme: theme)),
+                          ),
+                          icon: Icon(Icons.chat_bubble_outline_rounded, color: theme.foreground),
+                        ),
+                        const SizedBox(width: 4),
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: theme.accent.withValues(alpha: 0.15),
+                          backgroundImage: vendor.logoUrl != null ? imageProviderForPath(vendor.logoUrl!) : null,
+                          child: vendor.logoUrl == null
+                              ? Icon(Icons.storefront_rounded, color: theme.accent, size: 22)
+                              : null,
                         ),
                       ],
                     ),
-                  ),
-                  Row(
-                    children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          IconButton(
-                            onPressed: _openNotifications,
-                            icon: Icon(Icons.notifications_none_rounded, color: theme.foreground),
-                          ),
-                          if (unreadCount > 0)
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
-                                constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                                child: Text(
-                                  '$unreadCount',
-                                  textAlign: TextAlign.center,
-                                  style: AppTextStyles.body(color: theme.onAccent, size: 9, weight: FontWeight.w800),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => VendorMessagesScreen(theme: theme)),
-                        ),
-                        icon: Icon(Icons.chat_bubble_outline_rounded, color: theme.foreground),
-                      ),
-                      const SizedBox(width: 4),
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: theme.accent.withValues(alpha: 0.15),
-                        backgroundImage: vendor.logoPath != null ? imageProviderForPath(vendor.logoPath!) : null,
-                        child: vendor.logoPath == null
-                            ? Icon(Icons.storefront_rounded, color: theme.accent, size: 22)
-                            : null,
-                      ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-              child: Row(
-                children: [
-                  _StatCard(theme: theme, label: 'Products', value: '${myProducts.length}'),
-                  const SizedBox(width: 12),
-                  _StatCard(theme: theme, label: 'Orders', value: '${orderEntries.length}'),
-                  const SizedBox(width: 12),
-                  _StatCard(theme: theme, label: 'Revenue', value: '₦${formatNaira(revenue)}', small: true),
-                ],
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                child: Row(
+                  children: [
+                    _StatCard(theme: theme, label: 'Products', value: '${products.length}'),
+                    const SizedBox(width: 12),
+                    _StatCard(theme: theme, label: 'Orders', value: '${items.length}'),
+                    const SizedBox(width: 12),
+                    _StatCard(theme: theme, label: 'Revenue', value: '₦${formatWithThousandsSeparator(revenue)}', small: true),
+                  ],
+                ),
               ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 28, 20, 8),
-              child: Text('Recent Orders', style: AppTextStyles.heading(color: theme.foreground, size: 17)),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 8),
+                child: Text('Recent Orders', style: AppTextStyles.heading(color: theme.foreground, size: 17)),
+              ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 130),
-            sliver: orderEntries.isEmpty
-                ? SliverToBoxAdapter(
-                    child: Text(
-                      'Orders for your shop will show up here.',
-                      style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.55), size: 13),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 130),
+              sliver: recent.isEmpty
+                  ? SliverToBoxAdapter(
+                      child: Text(
+                        'Orders for your shop will show up here.',
+                        style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.55), size: 13),
+                      ),
+                    )
+                  : SliverList.builder(
+                      itemCount: recent.length,
+                      itemBuilder: (context, index) {
+                        final item = recent[index];
+                        return GestureDetector(
+                          onTap: () async {
+                            if (!item.notificationRead) {
+                              await context.read<AppState>().marketplaceOrders.markItemRead(item.id);
+                            }
+                            if (!mounted) return;
+                            await Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => VendorOrderDetailScreen(theme: theme, item: item)),
+                            );
+                            _load();
+                          },
+                          child: _OrderTile(theme: theme, item: item),
+                        );
+                      },
                     ),
-                  )
-                : SliverList.builder(
-                    itemCount: orderEntries.length,
-                    itemBuilder: (context, index) {
-                      final entry = orderEntries[index];
-                      return GestureDetector(
-                        onTap: () async {
-                          entry.item.notificationRead = true;
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => VendorOrderDetailScreen(theme: theme, entry: entry)),
-                          );
-                          setState(() {});
-                        },
-                        child: _OrderTile(theme: theme, entry: entry),
-                      );
-                    },
-                  ),
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -209,15 +264,14 @@ class _StatCard extends StatelessWidget {
 }
 
 class _OrderTile extends StatelessWidget {
-  const _OrderTile({required this.theme, required this.entry});
+  const _OrderTile({required this.theme, required this.item});
 
   final DashboardTheme theme;
-  final VendorOrderEntry entry;
+  final MarketplaceOrderItemApi item;
 
   @override
   Widget build(BuildContext context) {
-    final item = entry.item;
-    final order = entry.order;
+    final order = item.order;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -231,7 +285,7 @@ class _OrderTile extends StatelessWidget {
                 Text(item.productName, style: AppTextStyles.body(color: theme.onSurface, size: 14, weight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text(
-                  '${order.customerName} · ${_formatDate(order.date)}',
+                  '${order?.customerName ?? 'Customer'} · ${order != null ? _formatDate(order.createdAt) : ''}',
                   style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12),
                 ),
               ],
@@ -241,7 +295,7 @@ class _OrderTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '₦${formatNaira(item.subtotal)}',
+                '₦${formatWithThousandsSeparator(item.subtotal)}',
                 style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w700),
               ),
               const SizedBox(height: 4),

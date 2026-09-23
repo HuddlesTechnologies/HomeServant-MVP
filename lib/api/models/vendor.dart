@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 enum MarketplaceCategory {
   furniture,
   homeAppliances,
@@ -43,6 +45,16 @@ extension MarketplaceCategoryApi on MarketplaceCategory {
 
   static MarketplaceCategory fromLabel(String label) =>
       MarketplaceCategory.values.firstWhere((c) => c.label == label, orElse: () => MarketplaceCategory.other);
+
+  IconData get icon => switch (this) {
+    MarketplaceCategory.furniture => Icons.weekend_rounded,
+    MarketplaceCategory.homeAppliances => Icons.ac_unit_rounded,
+    MarketplaceCategory.electronics => Icons.tv_rounded,
+    MarketplaceCategory.fittingsFixtures => Icons.plumbing_rounded,
+    MarketplaceCategory.decor => Icons.image_rounded,
+    MarketplaceCategory.toolsEquipment => Icons.handyman_rounded,
+    MarketplaceCategory.other => Icons.inventory_2_rounded,
+  };
 }
 
 const marketplaceCategoryLabels = [

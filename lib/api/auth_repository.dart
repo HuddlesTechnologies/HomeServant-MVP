@@ -21,11 +21,11 @@ class AuthRepository {
   final ApiClient _client;
   final TokenStorage _tokens;
 
-  Future<void> signup({required String email, required String password, required UserRole role}) {
+  Future<void> signup({required String email, required String password, required UserRole role, String? fullName}) {
     return _client.call(() async {
       await _client.dio.post(
         '/auth/signup',
-        data: {'email': email, 'password': password, 'role': role.apiValue},
+        data: {'email': email, 'password': password, 'role': role.apiValue, if (fullName != null && fullName.isNotEmpty) 'fullName': fullName},
         options: Options(extra: {'skipAuth': true}),
       );
     });

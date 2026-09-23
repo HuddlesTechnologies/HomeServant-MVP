@@ -6,7 +6,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { RespondOrderItemDto } from './dto/respond-order-item.dto';
 
 const orderInclude = {
-  items: { include: { product: { select: { id: true, name: true, imageUrls: true } }, vendor: { select: { id: true, businessName: true } } } },
+  items: { include: { product: { select: { id: true, name: true, imageUrls: true } }, vendor: { select: { id: true, userId: true, businessName: true } } } },
 } as const;
 
 @Injectable()

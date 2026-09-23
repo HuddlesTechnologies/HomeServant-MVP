@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/models/marketplace_api.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../dashboard/chat_thread_screen.dart';
-import '../dashboard/models/property.dart';
-import 'models/marketplace_order.dart';
 import 'models/order_options.dart';
 import 'widgets/order_item_thumbnail.dart';
 
@@ -14,50 +17,57 @@ import 'widgets/order_item_thumbnail.dart';
 /// pickup instead messages the customer, reusing the chat thread already
 /// built for the customer-side pickup flow).
 class VendorOrderDetailScreen extends StatefulWidget {
-  const VendorOrderDetailScreen({super.key, required this.theme, required this.entry});
+  const VendorOrderDetailScreen({super.key, required this.theme, required this.item});
 
   final DashboardTheme theme;
-  final VendorOrderEntry entry;
+  final MarketplaceOrderItemApi item;
 
   @override
   State<VendorOrderDetailScreen> createState() => _VendorOrderDetailScreenState();
 }
 
 class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
-  late OrderItemStatus _status = widget.entry.item.status;
+  late OrderItemStatus _status = widget.item.status;
+  bool _updating = false;
 
-  void _setStatus(OrderItemStatus status) {
-    setState(() {
-      widget.entry.item.status = status;
-      _status = status;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Marked as ${status.label}')));
+  Future<void> _setStatus(OrderItemStatus status) async {
+    setState(() => _updating = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().marketplaceOrders.respondToItem(widget.item.id, status: status);
+      if (!mounted) return;
+      setState(() => _status = status);
+      messenger.showSnackBar(SnackBar(content: Text('Marked as ${status.label}')));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
   }
 
-  void _messageCustomer() {
-    final order = widget.entry.order;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          theme: widget.theme,
-          contactName: order.customerName,
-          initialMessages: [
-            ChatMessage(
-              text: 'Hi, when would be a good time for me to pick up the ${widget.entry.item.productName}?',
-              fromMe: false,
-            ),
-          ],
+  Future<void> _messageCustomer() async {
+    final order = widget.item.order;
+    if (order == null) return;
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final thread = await appState.chat.openThread(recipientId: order.buyerId, orderId: widget.item.orderId);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(theme: widget.theme, contactName: order.customerName, threadId: thread.id),
         ),
-      ),
-    );
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final entry = widget.entry;
-    final order = entry.order;
-    final item = entry.item;
+    final item = widget.item;
+    final order = item.order;
     final isDelivery = item.fulfillment == FulfillmentMethod.delivery;
 
     return Scaffold(
@@ -95,7 +105,7 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Qty ${item.quantity} · ₦${formatNaira(item.price)} each',
+                          'Qty ${item.quantity} · ₦${formatWithThousandsSeparator(item.unitPrice)} each',
                           style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 12.5),
                         ),
                       ],
@@ -119,35 +129,37 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
             _DetailCard(
               theme: theme,
               rows: [
-                _DetailRow(theme: theme, label: 'Order ID', value: order.id),
-                _DetailRow(theme: theme, label: 'Order Date', value: _formatDate(order.date)),
-                _DetailRow(theme: theme, label: 'Payment Method', value: order.paymentMethod.label),
+                _DetailRow(theme: theme, label: 'Order ID', value: item.orderId),
+                if (order != null) _DetailRow(theme: theme, label: 'Order Date', value: _formatDate(order.createdAt)),
+                if (order != null) _DetailRow(theme: theme, label: 'Payment Method', value: order.paymentMethod.label),
                 _DetailRow(theme: theme, label: 'Fulfillment', value: item.fulfillment.label),
-                _DetailRow(theme: theme, label: 'Item Total', value: '₦${formatNaira(item.subtotal)}', showDivider: false),
+                _DetailRow(theme: theme, label: 'Item Total', value: '₦${formatWithThousandsSeparator(item.subtotal)}', showDivider: false),
               ],
             ),
-            const SizedBox(height: 16),
-            _DetailCard(
-              theme: theme,
-              title: 'Customer',
-              rows: [
-                _DetailRow(theme: theme, label: 'Name', value: order.customerName),
-                if (isDelivery) ...[
-                  _DetailRow(
-                    theme: theme,
-                    label: 'Phone',
-                    value: order.customerPhone.isEmpty ? 'Not provided' : order.customerPhone,
-                  ),
-                  _DetailRow(
-                    theme: theme,
-                    label: 'Delivery Address',
-                    value: order.customerAddress.isEmpty ? 'Not provided' : order.customerAddress,
-                    showDivider: false,
-                  ),
-                ] else
-                  _DetailRow(theme: theme, label: 'Fulfillment', value: 'Customer will pick up', showDivider: false),
-              ],
-            ),
+            if (order != null) ...[
+              const SizedBox(height: 16),
+              _DetailCard(
+                theme: theme,
+                title: 'Customer',
+                rows: [
+                  _DetailRow(theme: theme, label: 'Name', value: order.customerName),
+                  if (isDelivery) ...[
+                    _DetailRow(
+                      theme: theme,
+                      label: 'Phone',
+                      value: order.customerPhone.isEmpty ? 'Not provided' : order.customerPhone,
+                    ),
+                    _DetailRow(
+                      theme: theme,
+                      label: 'Delivery Address',
+                      value: order.customerAddress.isEmpty ? 'Not provided' : order.customerAddress,
+                      showDivider: false,
+                    ),
+                  ] else
+                    _DetailRow(theme: theme, label: 'Fulfillment', value: 'Customer will pick up', showDivider: false),
+                ],
+              ),
+            ],
             if (!isDelivery) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
@@ -171,7 +183,7 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => _setStatus(OrderItemStatus.cancelled),
+                      onPressed: _updating ? null : () => _setStatus(OrderItemStatus.cancelled),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.redAccent, width: 1.2),
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -186,7 +198,7 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () => _setStatus(OrderItemStatus.completed),
+                      onPressed: _updating ? null : () => _setStatus(OrderItemStatus.completed),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: theme.accent,
                         padding: const EdgeInsets.symmetric(vertical: 14),

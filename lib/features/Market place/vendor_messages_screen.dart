@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/models/marketplace_api.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../dashboard/chat_thread_screen.dart';
-import 'models/marketplace_order.dart';
 import 'models/order_options.dart';
-import 'models/vendor.dart';
 
 /// The vendor's conversations with customers — one per pickup order, since
 /// that's the only case a vendor needs to coordinate with a customer in
@@ -20,41 +22,61 @@ class VendorMessagesScreen extends StatefulWidget {
 
 class _VendorMessagesScreenState extends State<VendorMessagesScreen> {
   DashboardTheme get theme => widget.theme;
+  List<MarketplaceOrderItemApi>? _items;
 
-  List<VendorOrderEntry> get _pickupOrders => vendorOrderEntries(
-    mockLoggedInVendor.businessName,
-  ).where((e) => e.item.fulfillment == FulfillmentMethod.pickup).toList();
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
-  List<VendorOrderEntry> get _activeOrders =>
-      _pickupOrders.where((e) => e.item.status == OrderItemStatus.pending).toList();
+  Future<void> _load() async {
+    try {
+      final items = await context.read<AppState>().marketplaceOrders.forVendor();
+      if (!mounted) return;
+      setState(() => _items = items.where((i) => i.fulfillment == FulfillmentMethod.pickup).toList());
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _items = []);
+    }
+  }
+
+  List<MarketplaceOrderItemApi> get _activeOrders =>
+      (_items ?? []).where((i) => i.status == OrderItemStatus.pending).toList();
 
   /// Completed and cancelled orders, grouped into their own section below the
   /// active ones and sorted so completed orders lead ahead of cancelled ones.
-  List<VendorOrderEntry> get _pastOrders =>
-      _pickupOrders.where((e) => e.item.status != OrderItemStatus.pending).toList()
-        ..sort((a, b) => a.item.status.index.compareTo(b.item.status.index));
+  List<MarketplaceOrderItemApi> get _pastOrders =>
+      (_items ?? []).where((i) => i.status != OrderItemStatus.pending).toList()
+        ..sort((a, b) => a.status.index.compareTo(b.status.index));
 
-  Future<void> _openChat(VendorOrderEntry entry) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          theme: theme,
-          contactName: entry.order.customerName,
-          orderEntry: entry,
-          initialMessages: [
-            ChatMessage(
-              text: 'Hi, when would be a good time for me to pick up the ${entry.item.productName}?',
-              fromMe: false,
-            ),
-          ],
+  Future<void> _openChat(MarketplaceOrderItemApi item) async {
+    final order = item.order;
+    if (order == null) return;
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final thread = await appState.chat.openThread(recipientId: order.buyerId, orderId: item.orderId);
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            theme: theme,
+            contactName: order.customerName,
+            threadId: thread.id,
+            orderItem: item,
+          ),
         ),
-      ),
-    );
-    if (mounted) setState(() {});
+      );
+      if (mounted) _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final items = _items;
     final activeOrders = _activeOrders;
     final pastOrders = _pastOrders;
     return Scaffold(
@@ -66,7 +88,9 @@ class _VendorMessagesScreenState extends State<VendorMessagesScreen> {
         title: Text('Messages', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
       ),
       body: SafeArea(
-        child: activeOrders.isEmpty && pastOrders.isEmpty
+        child: items == null
+            ? const Center(child: CircularProgressIndicator())
+            : activeOrders.isEmpty && pastOrders.isEmpty
             ? Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -77,28 +101,31 @@ class _VendorMessagesScreenState extends State<VendorMessagesScreen> {
                   ),
                 ),
               )
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                children: [
-                  ...activeOrders.map(
-                    (entry) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: _MessageRow(theme: theme, entry: entry, onTap: () => _openChat(entry)),
-                    ),
-                  ),
-                  if (pastOrders.isNotEmpty) ...[
-                    Padding(
-                      padding: EdgeInsets.only(top: activeOrders.isEmpty ? 0 : 16, bottom: 8),
-                      child: Text('Completed & Cancelled', style: AppTextStyles.heading(color: theme.foreground, size: 15)),
-                    ),
-                    ...pastOrders.map(
-                      (entry) => Padding(
+            : RefreshIndicator(
+                onRefresh: _load,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                  children: [
+                    ...activeOrders.map(
+                      (item) => Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: _MessageRow(theme: theme, entry: entry, onTap: () => _openChat(entry), showStatus: true),
+                        child: _MessageRow(theme: theme, item: item, onTap: () => _openChat(item)),
                       ),
                     ),
+                    if (pastOrders.isNotEmpty) ...[
+                      Padding(
+                        padding: EdgeInsets.only(top: activeOrders.isEmpty ? 0 : 16, bottom: 8),
+                        child: Text('Completed & Cancelled', style: AppTextStyles.heading(color: theme.foreground, size: 15)),
+                      ),
+                      ...pastOrders.map(
+                        (item) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _MessageRow(theme: theme, item: item, onTap: () => _openChat(item), showStatus: true),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
       ),
     );
@@ -106,10 +133,10 @@ class _VendorMessagesScreenState extends State<VendorMessagesScreen> {
 }
 
 class _MessageRow extends StatelessWidget {
-  const _MessageRow({required this.theme, required this.entry, required this.onTap, this.showStatus = false});
+  const _MessageRow({required this.theme, required this.item, required this.onTap, this.showStatus = false});
 
   final DashboardTheme theme;
-  final VendorOrderEntry entry;
+  final MarketplaceOrderItemApi item;
   final VoidCallback onTap;
   final bool showStatus;
 
@@ -133,13 +160,13 @@ class _MessageRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    entry.order.customerName,
+                    item.order?.customerName ?? 'Customer',
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.body(color: theme.onSurface, size: 14, weight: FontWeight.w700),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    entry.item.productName,
+                    item.productName,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 12.5),
                   ),
@@ -150,12 +177,12 @@ class _MessageRow extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: entry.item.status.color.withValues(alpha: 0.15),
+                  color: item.status.color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  entry.item.status.label,
-                  style: AppTextStyles.body(color: entry.item.status.color, size: 10.5, weight: FontWeight.w700),
+                  item.status.label,
+                  style: AppTextStyles.body(color: item.status.color, size: 10.5, weight: FontWeight.w700),
                 ),
               ),
               const SizedBox(width: 8),

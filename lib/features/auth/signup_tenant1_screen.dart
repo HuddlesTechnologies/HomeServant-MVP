@@ -73,6 +73,7 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
             label: 'Enter your Name',
             color: _role.foreground,
             controller: _name,
+            hint: 'Full name',
           ),
           const SizedBox(height: 18),
           _Field(
@@ -80,12 +81,14 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
             color: _role.foreground,
             controller: _phone,
             keyboardType: TextInputType.phone,
+            hint: 'e.g. 0801 234 5678',
           ),
           const SizedBox(height: 18),
           _Field(
             label: 'Referral code (optional)',
             color: _role.foreground,
             controller: _referral,
+            hint: 'HS-XXXXXX',
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -112,12 +115,14 @@ class _Field extends StatelessWidget {
     required this.color,
     required this.controller,
     this.keyboardType,
+    this.hint = '',
   });
 
   final String label;
   final Color color;
   final TextEditingController controller;
   final TextInputType? keyboardType;
+  final String hint;
 
   @override
   Widget build(BuildContext context) {
@@ -130,7 +135,7 @@ class _Field extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         PillTextField(
-          hint: '',
+          hint: hint,
           controller: controller,
           keyboardType: keyboardType,
         ),
