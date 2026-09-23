@@ -29,6 +29,24 @@ With `OTP_PROVIDER=console` (the default), signup/login verification codes
 print to the server's terminal instead of being emailed/texted — check
 there while testing locally.
 
+## Real OTP email via Resend
+
+1. Create a free account at [resend.com](https://resend.com).
+2. **Domains > Add Domain**, enter the domain you own, and add the DNS
+   records it gives you (SPF/DKIM, usually a couple of `TXT` records and
+   sometimes an `MX`) at your domain registrar. Verification is automatic
+   once they propagate — can take a few minutes to a few hours.
+3. **API Keys > Create API Key** — copy it, this is `RESEND_API_KEY`.
+4. Set `RESEND_FROM_EMAIL` to an address at your now-verified domain, e.g.
+   `"HomeServant <otp@yourdomain.com>"` — the display name is optional but
+   the address must be on the verified domain (Resend rejects sends from
+   an unverified one).
+5. Set `OTP_PROVIDER="resend"` alongside those two.
+
+Without a verified domain, Resend's free tier only lets you send to the
+email address you signed up with — fine for solo testing, not for real
+signups.
+
 ## Deploying to Render
 
 The database and storage live on Supabase; Render only runs the API
@@ -161,10 +179,10 @@ half-built everything:
   persists the generated document server-side yet.
 - **Payments** — no Paystack/Flutterwave integration for rent or
   marketplace checkout. Needs a real merchant account and API keys.
-- **Real OTP delivery** — `OTP_PROVIDER=console` only. Implement
-  `OtpProvider` (see `src/otp/otp-provider.interface.ts`) for Termii (SMS)
-  and an email provider before this touches real users. Needs a real
-  provider account and API key.
+- **SMS OTP delivery** — email (`OTP_PROVIDER=resend`, see below) is
+  wired up; SMS via Termii (for Nigerian phone numbers) isn't. Implement
+  `OtpProvider` (see `src/otp/otp-provider.interface.ts`) for it if a
+  phone-based flow is ever needed.
 - **Live chat delivery** — see the Chat section above; messages persist
   and the client polls, but there's no Realtime/WebSocket push yet.
 - **KYC / identity verification** — the signup flow's "means of

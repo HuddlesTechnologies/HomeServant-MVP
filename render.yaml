@@ -35,8 +35,12 @@ services:
       - key: JWT_REFRESH_TTL
         value: 30d
       - key: OTP_PROVIDER
-        value: console
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
       - key: CORS_ORIGINS
-        value: http://localhost:8765
+        value: https://homeservant.vercel.app
       - key: PORT
         value: 3000
