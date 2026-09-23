@@ -53,6 +53,8 @@ class ChatThread {
     required this.updatedAt,
     this.propertyId,
     this.propertyTitle,
+    this.orderId,
+    this.orderProductName,
     this.lastMessage,
   });
 
@@ -60,6 +62,11 @@ class ChatThread {
   final List<ThreadParticipant> otherParticipants;
   final String? propertyId;
   final String? propertyTitle;
+
+  /// Set instead of propertyId for a marketplace pickup-coordination
+  /// thread — see backend/README.md's Chat section.
+  final String? orderId;
+  final String? orderProductName;
   final ChatMessage? lastMessage;
   final int unreadCount;
   final DateTime updatedAt;
@@ -69,6 +76,7 @@ class ChatThread {
 
   factory ChatThread.fromApi(Map<String, dynamic> json) {
     final property = json['property'] as Map<String, dynamic>?;
+    final order = json['order'] as Map<String, dynamic>?;
     final lastMessage = json['lastMessage'] as Map<String, dynamic>?;
     return ChatThread(
       id: json['id'] as String,
@@ -78,6 +86,8 @@ class ChatThread {
           .toList(),
       propertyId: property?['id'] as String?,
       propertyTitle: property?['title'] as String?,
+      orderId: order?['id'] as String?,
+      orderProductName: order?['productName'] as String?,
       lastMessage: lastMessage != null ? ChatMessage.fromApi(lastMessage) : null,
       unreadCount: json['unreadCount'] as int? ?? 0,
       updatedAt: DateTime.parse(json['updatedAt'] as String),

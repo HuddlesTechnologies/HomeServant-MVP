@@ -3,12 +3,20 @@ import '../core/theme/app_colors.dart';
 
 /// The Figma prototype mirrors the same screens for both audiences: a warm
 /// navy theme for tenants ("Looking for a Home?") and a dark brown theme
-/// for landlords ("Register as a Landlord").
+/// for landlords ("Register as a Landlord"). [vendor] is a third account
+/// kind (a marketplace shop) that shares this app's auth/session system
+/// but never renders through this theming — the Marketplace has its own
+/// separate styling and never routes through the tenant/landlord
+/// dashboard, so [background]/[accent]/etc. below are never actually
+/// read for a vendor; they're only defined so this enum stays safe to use
+/// anywhere a `UserRole` is expected.
 enum UserRole {
   tenant,
-  landlord;
+  landlord,
+  vendor;
 
   bool get isLandlord => this == UserRole.landlord;
+  bool get isVendor => this == UserRole.vendor;
 
   /// Background colour of every themed screen for this role. Landlord
   /// screens use the light sand brand colour; tenant screens stay navy.

@@ -8,6 +8,8 @@ import '../api/auth_repository.dart';
 import '../api/bookings_repository.dart';
 import '../api/chat_repository.dart';
 import '../api/favorites_repository.dart';
+import '../api/marketplace_orders_repository.dart';
+import '../api/marketplace_products_repository.dart';
 import '../api/models/auth_user.dart';
 import '../api/models/booking.dart';
 import '../api/properties_repository.dart';
@@ -15,6 +17,7 @@ import '../api/reviews_repository.dart';
 import '../api/token_storage.dart';
 import '../api/uploads_repository.dart';
 import '../api/users_repository.dart';
+import '../api/vendors_repository.dart';
 import '../features/dashboard/models/property.dart';
 import '../features/dashboard/models/rental_record.dart';
 import '../models/dashboard_theme.dart';
@@ -39,6 +42,9 @@ class AppState extends ChangeNotifier {
     _reviewsRepo = ReviewsRepository(_apiClient);
     _chatRepo = ChatRepository(_apiClient);
     _uploadsRepo = UploadsRepository(_apiClient);
+    _vendorsRepo = VendorsRepository(_apiClient);
+    _marketplaceProductsRepo = MarketplaceProductsRepository(_apiClient);
+    _marketplaceOrdersRepo = MarketplaceOrdersRepository(_apiClient);
   }
 
   static const _prefsKey = 'app_state_v2';
@@ -53,12 +59,18 @@ class AppState extends ChangeNotifier {
   late final ReviewsRepository _reviewsRepo;
   late final ChatRepository _chatRepo;
   late final UploadsRepository _uploadsRepo;
+  late final VendorsRepository _vendorsRepo;
+  late final MarketplaceProductsRepository _marketplaceProductsRepo;
+  late final MarketplaceOrdersRepository _marketplaceOrdersRepo;
 
-  /// Per-thread chat and file uploads are screen-local concerns (a chat
-  /// screen manages its own paginated messages) — exposed directly rather
-  /// than mirrored into AppState's own fields.
+  /// Per-thread chat, file uploads, and the whole marketplace surface are
+  /// screen-local concerns (each screen manages its own fetch/paginate) —
+  /// exposed directly rather than mirrored into AppState's own fields.
   ChatRepository get chat => _chatRepo;
   UploadsRepository get uploads => _uploadsRepo;
+  VendorsRepository get vendors => _vendorsRepo;
+  MarketplaceProductsRepository get marketplaceProducts => _marketplaceProductsRepo;
+  MarketplaceOrdersRepository get marketplaceOrders => _marketplaceOrdersRepo;
 
   /// True once [load] has finished restoring (or found nothing to restore).
   /// AppLockGate waits for this before deciding whether a cold start should

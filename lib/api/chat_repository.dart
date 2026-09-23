@@ -16,11 +16,15 @@ class ChatRepository {
     });
   }
 
-  Future<ChatThread> openThread({required String recipientId, String? propertyId}) {
+  Future<ChatThread> openThread({required String recipientId, String? propertyId, String? orderId}) {
     return _client.call(() async {
       final response = await _client.dio.post(
         '/threads',
-        data: {'recipientId': recipientId, if (propertyId != null) 'propertyId': propertyId},
+        data: {
+          'recipientId': recipientId,
+          if (propertyId != null) 'propertyId': propertyId,
+          if (orderId != null) 'orderId': orderId,
+        },
       );
       // The create/find endpoint returns the raw Thread row (participants
       // as ThreadParticipant join rows, not yet shaped like a list-item

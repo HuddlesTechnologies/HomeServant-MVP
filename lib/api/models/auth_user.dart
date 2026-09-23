@@ -25,7 +25,7 @@ class AuthUser {
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: json['id'] as String,
     email: json['email'] as String,
-    role: (json['role'] as String) == 'LANDLORD' ? UserRole.landlord : UserRole.tenant,
+    role: _roleFromApi(json['role'] as String),
     fullName: json['fullName'] as String?,
     phoneNumber: json['phoneNumber'] as String?,
     profilePhotoUrl: json['profilePhotoUrl'] as String?,
@@ -33,6 +33,16 @@ class AuthUser {
   );
 }
 
+UserRole _roleFromApi(String value) => switch (value) {
+  'LANDLORD' => UserRole.landlord,
+  'VENDOR' => UserRole.vendor,
+  _ => UserRole.tenant,
+};
+
 extension UserRoleApi on UserRole {
-  String get apiValue => this == UserRole.landlord ? 'LANDLORD' : 'TENANT';
+  String get apiValue => switch (this) {
+    UserRole.landlord => 'LANDLORD',
+    UserRole.vendor => 'VENDOR',
+    UserRole.tenant => 'TENANT',
+  };
 }
