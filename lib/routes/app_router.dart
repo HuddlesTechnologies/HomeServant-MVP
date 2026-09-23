@@ -41,6 +41,28 @@ void _proceedPastTwoFactor(BuildContext context) {
   }
 }
 
+/// Google sign-in skips the OTP step and, for a first-time account, hands
+/// back a profile with no phone number (Google doesn't provide one) — sends
+/// those users through the same profile-completion step normal signup
+/// already forces, instead of silently leaving it empty. A returning
+/// Google user (phone already set from a previous completion) skips
+/// straight through, same as a normal login. Role comes from the account
+/// Google matched to, not necessarily the screen the button was tapped
+/// from — an existing landlord tapping "Sign in with Google" on the tenant
+/// screen still lands in the landlord flow.
+void _proceedAfterGoogleSignIn(BuildContext context) {
+  final appState = context.read<AppState>();
+  if (appState.phoneNumber.trim().isEmpty) {
+    if (appState.role == UserRole.landlord) {
+      context.push('/signup-landlord-1');
+    } else {
+      context.push('/signup-tenant-1');
+    }
+  } else {
+    _proceedPastTwoFactor(context);
+  }
+}
+
 GoRouter buildAppRouter() {
   return GoRouter(
     initialLocation: '/',
@@ -90,6 +112,7 @@ GoRouter buildAppRouter() {
         path: '/login-landlord',
         builder: (context, state) => LoginLandlordScreen(
           onLoginSuccess: () => _proceedPastTwoFactor(context),
+          onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
           onRequiresTwoFactor: () => context.push('/login-2fa'),
           onSignUp: () => context.push('/signup-landlord'),
         ),
@@ -98,6 +121,7 @@ GoRouter buildAppRouter() {
         path: '/login-tenant',
         builder: (context, state) => LoginTenantScreen(
           onLoginSuccess: () => _proceedPastTwoFactor(context),
+          onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
           onRequiresTwoFactor: () => context.push('/login-2fa'),
           onSignUp: () => context.push('/signup'),
         ),
@@ -122,7 +146,7 @@ GoRouter buildAppRouter() {
             context.read<AppState>().setEmail(email);
             context.push('/verify-otp');
           },
-          onGoogleSignedIn: () => _proceedPastTwoFactor(context),
+          onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
         ),
       ),
       GoRoute(
@@ -132,7 +156,7 @@ GoRouter buildAppRouter() {
             context.read<AppState>().setEmail(email);
             context.push('/verify-otp');
           },
-          onGoogleSignedIn: () => _proceedPastTwoFactor(context),
+          onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
         ),
       ),
       GoRoute(

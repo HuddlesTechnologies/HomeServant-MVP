@@ -14,11 +14,17 @@ class LoginLandlordScreen extends StatefulWidget {
   const LoginLandlordScreen({
     super.key,
     required this.onLoginSuccess,
+    required this.onGoogleSignedIn,
     required this.onRequiresTwoFactor,
     required this.onSignUp,
   });
 
   final VoidCallback onLoginSuccess;
+
+  /// Distinct from [onLoginSuccess] — a first-time Google sign-in may need
+  /// to collect a phone number Google never provided, so the router routes
+  /// this case differently.
+  final VoidCallback onGoogleSignedIn;
   final VoidCallback onRequiresTwoFactor;
   final VoidCallback onSignUp;
 
@@ -70,7 +76,7 @@ class _LoginLandlordScreenState extends State<LoginLandlordScreen> {
       final signedIn = await context.read<AppState>().loginWithGoogle();
       if (!mounted) return;
       if (signedIn) {
-        widget.onLoginSuccess();
+        widget.onGoogleSignedIn();
       }
     } on ApiException catch (e) {
       setState(() => _error = e.message);
