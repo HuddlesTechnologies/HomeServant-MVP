@@ -96,6 +96,12 @@ model User {
   profilePhotoUrl  String?
   emailVerifiedAt  DateTime?
   twoFactorEnabled Boolean   @default(false)
+  /// Set by `PATCH /auth/deactivate` (Settings > Danger Zone). Hides this
+  /// landlord's properties from the public feed and every session gets
+  /// signed out; cleared automatically the next time this account logs
+  /// in successfully (see AuthService.login/googleAuth), matching the
+  /// "reactivate any time by logging back in" promise on that screen.
+  deactivatedAt    DateTime?
   /// Landlord payout account — the account a tenant's payment is credited
   /// to. [accountName] is never taken from client input; it's only ever
   /// set from Paystack's own account-resolution response, so it can't be

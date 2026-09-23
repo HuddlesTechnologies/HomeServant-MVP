@@ -239,7 +239,34 @@ export class AuthService {
     });
   }
 
+  /// Settings > Danger Zone > "Deactivate Account". Hides this account's
+  /// listings (see PropertiesService.findMany's landlord filter) and
+  /// signs out every session; reactivates itself automatically the next
+  /// time this account logs in (see [issueTokens]).
+  async deactivate(userId: string): Promise<void> {
+    await this.prisma.user.update({ where: { id: userId }, data: { deactivatedAt: new Date() } });
+    await this.prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+  }
+
+  /// Settings > Danger Zone > "Delete Account". A real, permanent delete —
+  /// every relation FK'd to this user (bookings, properties, reviews,
+  /// messages, vendor profile/products/orders, etc.) is modelled with
+  /// `onDelete: Cascade` in the schema, so this one call is enough; there's
+  /// no soft-delete flag to half-honor the "permanently removed" promise
+  /// on the confirmation dialog.
+  async deleteAccount(userId: string): Promise<void> {
+    await this.prisma.user.delete({ where: { id: userId } });
+  }
+
   private async issueTokens(user: User): Promise<TokenPair> {
+    // A session is only actually granted here (signup/login/2FA/Google all
+    // funnel through this one place) — matches the Settings screen's
+    // "reactivate any time by logging back in" promise for an account
+    // that deactivated itself.
+    if (user.deactivatedAt) {
+      await this.prisma.user.update({ where: { id: user.id }, data: { deactivatedAt: null } });
+    }
+
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, role: user.role },
       { secret: this.config.getOrThrow('JWT_ACCESS_SECRET'), expiresIn: this.config.get('JWT_ACCESS_TTL', '15m') },

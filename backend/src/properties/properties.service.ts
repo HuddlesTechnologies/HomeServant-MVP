@@ -23,6 +23,10 @@ export class PropertiesService {
         gte: query.minPrice,
         lte: query.maxPrice,
       },
+      // A deactivated landlord's listings are hidden rather than deleted —
+      // see AuthService.deactivate and the "reactivate any time by
+      // logging back in" promise on the Settings screen.
+      landlord: { deactivatedAt: null },
     };
 
     const page = query.page ?? 1;

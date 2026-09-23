@@ -110,6 +110,21 @@ class AuthRepository {
     });
   }
 
+  Future<void> deactivate() {
+    return _client.call(() async {
+      await _client.dio.patch('/auth/deactivate');
+    });
+  }
+
+  /// Permanently deletes the account server-side (cascades to everything
+  /// FK'd to it — see AuthService.deleteAccount) before clearing local
+  /// tokens, unlike [logout], which only ever clears local state.
+  Future<void> deleteAccount() {
+    return _client.call(() async {
+      await _client.dio.delete('/auth/me');
+    });
+  }
+
   Future<void> logout() async {
     final refreshToken = await _tokens.readRefreshToken();
     if (refreshToken != null) {

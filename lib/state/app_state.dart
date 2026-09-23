@@ -271,12 +271,23 @@ class AppState extends ChangeNotifier {
     _clearSession();
   }
 
-  /// Deactivating/deleting both just end the local session today — there's
-  /// no backend endpoint yet to flag the account inactive or erase it. Kept
-  /// as their own methods, distinct from [logout], so wiring a real
-  /// endpoint later has a clear place to do it.
-  Future<void> deactivateAccount() => logout();
-  Future<void> deleteAccount() => logout();
+  /// Hides this landlord's listings and signs out every session
+  /// server-side; the account reactivates itself automatically the next
+  /// time it logs in successfully (see AuthService.issueTokens).
+  Future<void> deactivateAccount() async {
+    await _authRepo.deactivate();
+    await _tokens.clear();
+    _clearSession();
+  }
+
+  /// Permanently deletes the account and everything tied to it
+  /// server-side — unlike [logout]/[deactivateAccount], there is no
+  /// undo.
+  Future<void> deleteAccount() async {
+    await _authRepo.deleteAccount();
+    await _tokens.clear();
+    _clearSession();
+  }
 
   void _applyUser(AuthUser user) {
     userId = user.id;

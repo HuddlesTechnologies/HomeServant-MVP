@@ -211,8 +211,8 @@ class SettingsScreen extends StatelessWidget {
                               "Your profile will be hidden and you'll be signed out. You can reactivate "
                               'any time by logging back in.',
                           actionLabel: 'Deactivate',
-                          onConfirmed: () {
-                            appState.deactivateAccount();
+                          onConfirmed: () async {
+                            await appState.deactivateAccount();
                             onAccountClosed();
                           },
                         ),
@@ -230,8 +230,8 @@ class SettingsScreen extends StatelessWidget {
                               "This can't be undone. Your profile, wishlist, and saved settings will "
                               'all be removed.',
                           actionLabel: 'Delete',
-                          onConfirmed: () {
-                            appState.deleteAccount();
+                          onConfirmed: () async {
+                            await appState.deleteAccount();
                             onAccountClosed();
                           },
                         ),
@@ -298,10 +298,16 @@ class SettingsScreen extends StatelessWidget {
     required String title,
     required String body,
     required String actionLabel,
-    required VoidCallback onConfirmed,
+    required Future<void> Function() onConfirmed,
   }) async {
     final confirmed = await _confirmSheet(context, title: title, body: body, actionLabel: actionLabel, destructive: true);
-    if (confirmed) onConfirmed();
+    if (!confirmed) return;
+    try {
+      await onConfirmed();
+    } on ApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<bool> _confirmSheet(
