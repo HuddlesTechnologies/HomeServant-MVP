@@ -609,21 +609,35 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   }
 }
 
-class _PasswordField extends StatelessWidget {
+class _PasswordField extends StatefulWidget {
   const _PasswordField({required this.controller, required this.label});
 
   final TextEditingController controller;
   final String label;
 
   @override
+  State<_PasswordField> createState() => _PasswordFieldState();
+}
+
+class _PasswordFieldState extends State<_PasswordField> {
+  bool _obscured = true;
+
+  @override
   Widget build(BuildContext context) {
     return TextField(
-      controller: controller,
-      obscureText: true,
+      controller: widget.controller,
+      obscureText: _obscured,
       style: AppTextStyles.body(color: AppColors.navy, size: 14),
       decoration: InputDecoration(
-        labelText: label,
+        labelText: widget.label,
         labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
+        suffixIcon: IconButton(
+          onPressed: () => setState(() => _obscured = !_obscured),
+          icon: Icon(
+            _obscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+            color: AppColors.hintGrey,
+          ),
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: AppColors.navy.withValues(alpha: 0.15)),

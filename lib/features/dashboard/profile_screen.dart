@@ -33,8 +33,12 @@ class ProfileScreen extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: theme.foreground, width: 1.4),
+            // Biased toward the top rather than dead-center — a plain
+            // center-crop on an uncropped photo (there's no crop step at
+            // pick time) tends to zoom in on the nose/mouth instead of
+            // showing the whole face.
             image: photoPath != null
-                ? DecorationImage(image: imageProviderForPath(photoPath), fit: BoxFit.cover)
+                ? DecorationImage(image: imageProviderForPath(photoPath), fit: BoxFit.cover, alignment: const Alignment(0, -0.3))
                 : null,
           ),
           child: photoPath == null ? Icon(Icons.person_outline, color: theme.foreground, size: 40) : null,

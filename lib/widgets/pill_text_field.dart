@@ -4,8 +4,11 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
 
 /// White, fully-rounded input used throughout every auth / onboarding
-/// screen in the prototype.
-class PillTextField extends StatelessWidget {
+/// screen in the prototype. When [obscureText] is true and the caller
+/// hasn't supplied its own [trailing] widget, shows a built-in
+/// show/hide-password toggle instead of leaving the field permanently
+/// masked with no way to check what was typed.
+class PillTextField extends StatefulWidget {
   const PillTextField({
     super.key,
     required this.hint,
@@ -40,39 +43,55 @@ class PillTextField extends StatelessWidget {
   final double borderRadius;
 
   @override
+  State<PillTextField> createState() => _PillTextFieldState();
+}
+
+class _PillTextFieldState extends State<PillTextField> {
+  late bool _obscured = widget.obscureText;
+
+  @override
   Widget build(BuildContext context) {
+    final showPasswordToggle = widget.obscureText && widget.trailing == null;
     return TextFormField(
-      controller: controller,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      onTap: onTap,
-      readOnly: readOnly,
-      validator: validator,
-      inputFormatters: inputFormatters,
-      minLines: minLines,
-      maxLines: maxLines,
-      style: AppTextStyles.body(color: textColor, size: 16),
+      controller: widget.controller,
+      obscureText: _obscured,
+      keyboardType: widget.keyboardType,
+      onTap: widget.onTap,
+      readOnly: widget.readOnly,
+      validator: widget.validator,
+      inputFormatters: widget.inputFormatters,
+      minLines: widget.minLines,
+      maxLines: widget.maxLines,
+      style: AppTextStyles.body(color: widget.textColor, size: 16),
       decoration: InputDecoration(
-        hintText: hint,
+        hintText: widget.hint,
         hintStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 16),
         filled: true,
-        fillColor: fillColor,
-        suffixIcon: trailing,
+        fillColor: widget.fillColor,
+        suffixIcon: showPasswordToggle
+            ? IconButton(
+                onPressed: () => setState(() => _obscured = !_obscured),
+                icon: Icon(
+                  _obscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  color: widget.textColor.withValues(alpha: 0.6),
+                ),
+              )
+            : widget.trailing,
         contentPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
           borderSide: const BorderSide(color: AppColors.gold, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(borderRadius),
+          borderRadius: BorderRadius.circular(widget.borderRadius),
           borderSide: const BorderSide(color: Colors.redAccent, width: 1.2),
         ),
       ),
