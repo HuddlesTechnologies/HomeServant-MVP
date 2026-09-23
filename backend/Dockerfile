@@ -1,10 +1,14 @@
 # Multi-stage build: compile with dev deps, run with only prod deps.
 #
-# node:20-slim is Debian without OpenSSL installed — Prisma's native query
-#/schema engine binaries need it (libssl) to run at all, so both stages
+# node:22-slim, not 20 — @supabase/supabase-js's Realtime client (pulled in
+# transitively even though StorageService only uses Storage) requires the
+# native WebSocket global, which only landed in Node 22.
+#
+# node:*-slim is Debian without OpenSSL installed — Prisma's native query/
+# schema engine binaries need it (libssl) to run at all, so both stages
 # install it before anything that touches Prisma (postinstall's `prisma
 # generate`, and later `prisma migrate deploy`) runs.
-FROM node:20-slim AS build
+FROM node:22-slim AS build
 WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
@@ -13,7 +17,7 @@ RUN npm install
 COPY . .
 RUN npm run build
 
-FROM node:20-slim AS runtime
+FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
