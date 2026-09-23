@@ -20,17 +20,12 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  static const _dummyName = 'Jane Doe';
-  static const _dummyAddress = '15 Seyi Coker Street, Agege, Lagos';
-  static const _dummyPhone = '0801 234 5678';
-  static final _dummyDob = DateTime(1996, 4, 12);
-
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _fullName;
   late final TextEditingController _dob;
   late final TextEditingController _address;
   late final TextEditingController _phone;
-  late DateTime _dateOfBirth;
+  DateTime? _dateOfBirth;
   String? _photoPath;
   bool _saving = false;
 
@@ -43,13 +38,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     final appState = context.read<AppState>();
-    _fullName = TextEditingController(text: appState.fullName.isNotEmpty ? appState.fullName : _dummyName);
-    _dateOfBirth = appState.dateOfBirth ?? _dummyDob;
-    _dob = TextEditingController(text: formatShortDate(_dateOfBirth));
-    _address = TextEditingController(
-      text: appState.houseAddress.isNotEmpty ? appState.houseAddress : _dummyAddress,
-    );
-    _phone = TextEditingController(text: appState.phoneNumber.isNotEmpty ? appState.phoneNumber : _dummyPhone);
+    // Real values only — an empty field here means the account genuinely
+    // has nothing saved yet, not a placeholder pretending it does.
+    _fullName = TextEditingController(text: appState.fullName);
+    _dateOfBirth = appState.dateOfBirth;
+    _dob = TextEditingController(text: _dateOfBirth != null ? formatShortDate(_dateOfBirth!) : '');
+    _address = TextEditingController(text: appState.houseAddress);
+    _phone = TextEditingController(text: appState.phoneNumber);
     _photoPath = appState.profilePhotoPath;
   }
 
@@ -73,7 +68,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
-      initialDate: _dateOfBirth,
+      // Just where the calendar opens if nothing's saved yet — never
+      // shown as a value, so it's fine for this to be a guess.
+      initialDate: _dateOfBirth ?? DateTime(now.year - 25),
       firstDate: DateTime(now.year - 100),
       lastDate: now,
     );
@@ -147,21 +144,27 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     onTap: _pickPhoto,
                     child: Stack(
                       children: [
-                        CircleAvatar(
-                          radius: 48,
-                          backgroundColor: theme.accent.withValues(alpha: 0.25),
-                          backgroundImage:
-                              _photoPath != null
-                                  ? imageProviderForPath(_photoPath!)
-                                  : null,
-                          child:
-                              _photoPath == null
-                                  ? Icon(
-                                    Icons.person,
-                                    size: 48,
-                                    color: theme.foreground,
+                        Container(
+                          width: 96,
+                          height: 96,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: theme.accent.withValues(alpha: 0.25),
+                            // Biased toward the top rather than dead-center
+                            // — there's no crop step at pick time, and a
+                            // plain center-crop tends to zoom into the
+                            // nose/mouth instead of showing the whole face.
+                            image: _photoPath != null
+                                ? DecorationImage(
+                                    image: imageProviderForPath(_photoPath!),
+                                    fit: BoxFit.cover,
+                                    alignment: const Alignment(0, -0.3),
                                   )
-                                  : null,
+                                : null,
+                          ),
+                          child: _photoPath == null
+                              ? Icon(Icons.person, size: 48, color: theme.foreground)
+                              : null,
                         ),
                         Positioned(
                           right: 0,
@@ -207,6 +210,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   theme: theme,
                   controller: _fullName,
                   editable: _fullNameEditable,
+                  hint: 'Enter your full name',
                   onToggleEdit: () => setState(() => _fullNameEditable = !_fullNameEditable),
                 ),
                 const SizedBox(height: 18),
@@ -215,6 +219,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   theme: theme,
                   controller: _dob,
                   editable: _dobEditable,
+                  hint: 'Tap to select a date',
                   forceReadOnly: true,
                   onFieldTap: _dobEditable ? _pickDate : null,
                   extraTrailing: Icon(
@@ -231,6 +236,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   theme: theme,
                   controller: _address,
                   editable: _addressEditable,
+                  hint: 'Enter your house address',
                   onToggleEdit:
                       () =>
                           setState(() => _addressEditable = !_addressEditable),
@@ -241,6 +247,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   theme: theme,
                   controller: _phone,
                   editable: _phoneEditable,
+                  hint: 'Enter your phone number',
                   keyboardType: TextInputType.phone,
                   onToggleEdit:
                       () => setState(() => _phoneEditable = !_phoneEditable),
@@ -271,6 +278,7 @@ class _EditableField extends StatelessWidget {
     required this.controller,
     required this.editable,
     required this.onToggleEdit,
+    this.hint = '',
     this.keyboardType,
     this.obscureText = false,
     this.validator,
@@ -284,6 +292,7 @@ class _EditableField extends StatelessWidget {
   final TextEditingController controller;
   final bool editable;
   final VoidCallback onToggleEdit;
+  final String hint;
   final TextInputType? keyboardType;
   final bool obscureText;
   final String? Function(String?)? validator;
@@ -309,7 +318,7 @@ class _EditableField extends StatelessWidget {
           children: [
             Expanded(
               child: PillTextField(
-                hint: '',
+                hint: hint,
                 controller: controller,
                 readOnly: forceReadOnly || !editable,
                 onTap: onFieldTap,

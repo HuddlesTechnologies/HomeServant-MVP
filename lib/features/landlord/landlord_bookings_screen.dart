@@ -110,7 +110,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                     shape: BoxShape.circle,
                     color: AppColors.hintGrey.withValues(alpha: 0.2),
                     image: photoPath != null
-                        ? DecorationImage(image: imageProviderForPath(photoPath), fit: BoxFit.cover)
+                        ? DecorationImage(image: imageProviderForPath(photoPath), fit: BoxFit.cover, alignment: const Alignment(0, -0.3))
                         : null,
                   ),
                   child: photoPath == null
