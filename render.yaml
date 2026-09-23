@@ -45,6 +45,6 @@ services:
       - key: PAYSTACK_SECRET_KEY
         sync: false
       - key: CORS_ORIGINS
-        value: https://homeservant.vercel.app
+        value: https://homeservant.online,https://homeservant.vercel.app
       - key: PORT
         value: 3000
