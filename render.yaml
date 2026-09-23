@@ -1,8 +1,11 @@
 # Render "Blueprint" — commit this and use "New > Blueprint" on Render to
-# provision the API service. The database lives on Supabase instead of
-# Render (see backend/README.md), so the `sync: false` env vars below are
-# filled in by hand on the Render dashboard after the service is created,
-# from values on the Supabase dashboard.
+# provision the API service. Render's Blueprint feature only looks for
+# this file at the repo root (this is a Flutter app with the NestJS API
+# in backend/, hence `rootDir` below rather than the file living there).
+# The database lives on Supabase instead of Render (see backend/README.md),
+# so the `sync: false` env vars below are filled in by hand on the Render
+# dashboard after the service is created, from values on the Supabase
+# dashboard.
 services:
   - type: web
     name: homeservant-api

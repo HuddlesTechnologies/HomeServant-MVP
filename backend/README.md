@@ -36,7 +36,10 @@ container.
 
 1. Push this repo to GitHub/GitLab (Render deploys from a git remote).
 2. In the Render dashboard: **New > Blueprint**, point it at this repo.
-   `render.yaml` provisions the web service.
+   `/render.yaml` (repo root — Render's Blueprint discovery doesn't look in
+   subdirectories, hence it isn't inside `backend/` alongside everything
+   else) provisions the web service, with `rootDir: backend` telling Render
+   where the actual Dockerfile/build context lives.
 3. `render.yaml` leaves `DATABASE_URL`, `DIRECT_URL`, `SUPABASE_URL`, and
    `SUPABASE_SERVICE_ROLE_KEY` unset (`sync: false`) — fill these in by
    hand on the service's **Environment** tab in Render, using the values
