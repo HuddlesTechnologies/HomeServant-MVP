@@ -96,6 +96,14 @@ model User {
   profilePhotoUrl  String?
   emailVerifiedAt  DateTime?
   twoFactorEnabled Boolean   @default(false)
+  /// Landlord payout account — the account a tenant's payment is credited
+  /// to. [accountName] is never taken from client input; it's only ever
+  /// set from Paystack's own account-resolution response, so it can't be
+  /// spoofed to redirect payouts to an unverified account.
+  bankCode         String?
+  bankName         String?
+  accountNumber    String?
+  accountName      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

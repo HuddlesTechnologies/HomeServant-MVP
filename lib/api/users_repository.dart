@@ -40,4 +40,17 @@ class UsersRepository {
       return AuthUser.fromJson(response.data as Map<String, dynamic>);
     });
   }
+
+  /// [accountNumber] and [bankCode] are re-verified against Paystack
+  /// server-side, so the [AuthUser] this resolves to carries back whatever
+  /// account name Paystack actually resolved — not a client-supplied one.
+  Future<AuthUser> updateBankDetails({required String bankCode, required String accountNumber}) {
+    return _client.call(() async {
+      final response = await _client.dio.patch(
+        '/users/me/bank-details',
+        data: {'bankCode': bankCode, 'accountNumber': accountNumber},
+      );
+      return AuthUser.fromJson(response.data as Map<String, dynamic>);
+    });
+  }
 }

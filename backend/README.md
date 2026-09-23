@@ -248,9 +248,13 @@ half-built everything:
   marketplace checkout; a marketplace order is recorded with whatever
   `paymentMethod` label the client sends, nothing actually charges
   anyone. Needs a real merchant account and API keys.
-- **Marketplace vendor payouts** — `VendorProfile.bankName/accountNumber/
-  accountName` are stored but nothing automates paying a vendor out;
-  that's tied to the payments gap above.
+- **Landlord/vendor payouts** — `User.bankCode/bankName/accountNumber/
+  accountName` (landlords, via `PATCH /users/me/bank-details`) and
+  `VendorProfile.bankName/accountNumber/accountName` (vendors) are
+  captured and verified against Paystack's account-resolution API (see
+  `src/paystack/`), so what's stored is a real, confirmed account — but
+  nothing automates actually paying either of them out yet. That's tied
+  to the payments gap above.
 - **Vendor application review** — every vendor is active immediately on
   signup; there's no pending/approved/rejected moderation workflow (the
   old mocked signup's "we'll review your application" message implied

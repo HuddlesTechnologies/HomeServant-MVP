@@ -12,6 +12,10 @@ class AuthUser {
     this.phoneNumber,
     this.profilePhotoUrl,
     this.twoFactorEnabled = false,
+    this.bankCode,
+    this.bankName,
+    this.accountNumber,
+    this.accountName,
   });
 
   final String id;
@@ -22,6 +26,14 @@ class AuthUser {
   final String? profilePhotoUrl;
   final bool twoFactorEnabled;
 
+  /// The landlord's payout account — the account a tenant's payment is
+  /// credited to. Always set as a group, verified against Paystack; see
+  /// UsersRepository.updateBankDetails.
+  final String? bankCode;
+  final String? bankName;
+  final String? accountNumber;
+  final String? accountName;
+
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: json['id'] as String,
     email: json['email'] as String,
@@ -30,6 +42,10 @@ class AuthUser {
     phoneNumber: json['phoneNumber'] as String?,
     profilePhotoUrl: json['profilePhotoUrl'] as String?,
     twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
+    bankCode: json['bankCode'] as String?,
+    bankName: json['bankName'] as String?,
+    accountNumber: json['accountNumber'] as String?,
+    accountName: json['accountName'] as String?,
   );
 }
 

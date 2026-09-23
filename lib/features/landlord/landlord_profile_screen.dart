@@ -11,6 +11,7 @@ import '../../widgets/upload_picker.dart';
 import '../dashboard/edit_profile_screen.dart';
 import '../dashboard/notifications_screen.dart';
 import 'landlord_add_property_screen.dart';
+import 'landlord_bank_details_screen.dart';
 
 /// Profile Settings tab of the redesigned landlord dashboard — a fixed
 /// dark-navy screen (independent of the switchable [DashboardTheme], which
@@ -84,6 +85,17 @@ class LandlordProfileScreen extends StatelessWidget {
             dividerColor: Colors.white.withValues(alpha: 0.15),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const LandlordAddPropertyScreen()),
+            ),
+          ),
+          ProfileMenuTile(
+            icon: Icons.account_balance_rounded,
+            label: 'Bank Details',
+            iconColor: AppColors.gold,
+            badgeColor: Colors.white.withValues(alpha: 0.08),
+            labelColor: Colors.white,
+            dividerColor: Colors.white.withValues(alpha: 0.15),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LandlordBankDetailsScreen()),
             ),
           ),
           ProfileMenuTile(

@@ -12,6 +12,7 @@ import '../api/marketplace_orders_repository.dart';
 import '../api/marketplace_products_repository.dart';
 import '../api/models/auth_user.dart';
 import '../api/models/booking.dart';
+import '../api/paystack_repository.dart';
 import '../api/properties_repository.dart';
 import '../api/reviews_repository.dart';
 import '../api/token_storage.dart';
@@ -45,6 +46,7 @@ class AppState extends ChangeNotifier {
     _vendorsRepo = VendorsRepository(_apiClient);
     _marketplaceProductsRepo = MarketplaceProductsRepository(_apiClient);
     _marketplaceOrdersRepo = MarketplaceOrdersRepository(_apiClient);
+    _paystackRepo = PaystackRepository(_apiClient);
   }
 
   static const _prefsKey = 'app_state_v2';
@@ -62,6 +64,7 @@ class AppState extends ChangeNotifier {
   late final VendorsRepository _vendorsRepo;
   late final MarketplaceProductsRepository _marketplaceProductsRepo;
   late final MarketplaceOrdersRepository _marketplaceOrdersRepo;
+  late final PaystackRepository _paystackRepo;
 
   /// Per-thread chat, file uploads, and the whole marketplace surface are
   /// screen-local concerns (each screen manages its own fetch/paginate) —
@@ -71,6 +74,7 @@ class AppState extends ChangeNotifier {
   VendorsRepository get vendors => _vendorsRepo;
   MarketplaceProductsRepository get marketplaceProducts => _marketplaceProductsRepo;
   MarketplaceOrdersRepository get marketplaceOrders => _marketplaceOrdersRepo;
+  PaystackRepository get paystack => _paystackRepo;
 
   /// True once [load] has finished restoring (or found nothing to restore).
   /// AppLockGate waits for this before deciding whether a cold start should
@@ -99,6 +103,15 @@ class AppState extends ChangeNotifier {
   String? profilePhotoPath;
   bool twoFactorEnabled = false;
   DashboardTheme dashboardTheme = DashboardTheme.classic;
+
+  /// The landlord's payout account — the account a tenant's payment is
+  /// credited to. Populated from the server (see [_applyUser]); never set
+  /// directly from user input, since [accountName] is only ever trusted
+  /// once Paystack has resolved it (see [updateBankDetails]).
+  String? bankCode;
+  String? bankName;
+  String? accountNumber;
+  String? accountName;
 
   void selectRole(UserRole newRole) {
     role = newRole;
@@ -214,6 +227,11 @@ class AppState extends ChangeNotifier {
     _applyUser(user);
   }
 
+  Future<void> updateBankDetails({required String bankCode, required String accountNumber}) async {
+    final user = await _usersRepo.updateBankDetails(bankCode: bankCode, accountNumber: accountNumber);
+    _applyUser(user);
+  }
+
   Future<void> logout() async {
     await _authRepo.logout();
     _clearSession();
@@ -234,6 +252,10 @@ class AppState extends ChangeNotifier {
     if (user.phoneNumber != null) phoneNumber = user.phoneNumber!;
     if (user.profilePhotoUrl != null) profilePhotoPath = user.profilePhotoUrl;
     twoFactorEnabled = user.twoFactorEnabled;
+    bankCode = user.bankCode;
+    bankName = user.bankName;
+    accountNumber = user.accountNumber;
+    accountName = user.accountName;
     notifyListeners();
   }
 
@@ -248,6 +270,10 @@ class AppState extends ChangeNotifier {
     dateOfBirth = null;
     profilePhotoPath = null;
     twoFactorEnabled = false;
+    bankCode = null;
+    bankName = null;
+    accountNumber = null;
+    accountName = null;
     _favorites = [];
     _landlordProperties = [];
     myBookings = [];
