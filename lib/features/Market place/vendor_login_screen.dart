@@ -8,6 +8,7 @@ import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import 'vendor_dashboard_screen.dart';
+import 'vendor_forgot_password_screen.dart';
 
 /// Lets an already-registered vendor sign back in to their shop.
 class VendorLoginScreen extends StatefulWidget {
@@ -120,6 +121,19 @@ class _VendorLoginScreenState extends State<VendorLoginScreen> {
                           size: 20,
                         ),
                         onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: GestureDetector(
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => VendorForgotPasswordScreen(theme: theme)),
+                        ),
+                        child: Text(
+                          'Forgot Password?',
+                          style: AppTextStyles.body(color: theme.accent, weight: FontWeight.w600, size: 13),
+                        ),
                       ),
                     ),
                     if (_error != null) ...[

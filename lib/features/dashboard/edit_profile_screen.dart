@@ -150,15 +150,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: theme.accent.withValues(alpha: 0.25),
-                            // Biased toward the top rather than dead-center
-                            // — there's no crop step at pick time, and a
-                            // plain center-crop tends to zoom into the
-                            // nose/mouth instead of showing the whole face.
+                            // BoxFit.contain rather than cover — there's no
+                            // crop step at pick time, so covering the circle
+                            // would zoom into whatever was centered in the
+                            // original photo instead of showing all of it.
                             image: _photoPath != null
                                 ? DecorationImage(
                                     image: imageProviderForPath(_photoPath!),
-                                    fit: BoxFit.cover,
-                                    alignment: const Alignment(0, -0.3),
+                                    fit: BoxFit.contain,
                                   )
                                 : null,
                           ),
