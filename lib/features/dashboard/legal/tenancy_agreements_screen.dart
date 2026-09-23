@@ -4,6 +4,7 @@ import '../../../core/responsive.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/dashboard_theme.dart';
 import '../../../state/app_state.dart';
+import '../../../widgets/empty_state.dart';
 import '../models/property.dart';
 import '../models/rental_record.dart';
 import 'tenancy_agreement_view_screen.dart';
@@ -34,7 +35,13 @@ class TenancyAgreementsScreen extends StatelessWidget {
         child: ResponsiveCenter(
           maxWidth: 640,
           child: entries.isEmpty
-              ? _EmptyState(theme: theme)
+              ? EmptyState(
+                  theme: theme,
+                  icon: Icons.description_outlined,
+                  title: 'No tenancy agreements yet',
+                  message:
+                      'Once you successfully rent a property, its tenancy agreement will appear here for you to view and download.',
+                )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                   children: [
@@ -42,35 +49,6 @@ class TenancyAgreementsScreen extends StatelessWidget {
                       _AgreementTile(theme: theme, property: property, record: history[property.id]!),
                   ],
                 ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.theme});
-
-  final DashboardTheme theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.description_outlined, color: theme.foreground.withValues(alpha: 0.35), size: 56),
-            const SizedBox(height: 16),
-            Text('No tenancy agreements yet', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-            const SizedBox(height: 8),
-            Text(
-              'Once you successfully rent a property, its tenancy agreement will appear here for you to view and download.',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 14),
-            ),
-          ],
         ),
       ),
     );

@@ -1,3 +1,5 @@
+import '../../../core/thousands_separator.dart';
+
 class Property {
   const Property({
     required this.id,
@@ -14,6 +16,7 @@ class Property {
     required this.description,
     required this.landlordName,
     this.galleryImages = const [],
+    this.videoPath,
   });
 
   /// Stable key used to track this listing in the wishlist — titles alone
@@ -54,19 +57,18 @@ class Property {
   /// Extra interior shots shown in the detail screen's preview strip.
   final List<String> galleryImages;
 
+  /// A landlord-uploaded walkthrough clip, shown in the detail screen's
+  /// "Property Tour" section when set. A local file path on mobile/desktop,
+  /// a blob URL on web — same convention as every other upload in the app
+  /// (see `imageProviderForPath`). None of the seed listings have one; it's
+  /// only ever set by [LandlordAddPropertyScreen].
+  final String? videoPath;
+
   String get priceLabel => '₦${formatNaira(price)}/$priceUnit';
 }
 
 /// Formats a whole naira amount with thousands separators, e.g. `2,500,000`.
-String formatNaira(int amount) {
-  final digits = amount.toString();
-  final buffer = StringBuffer();
-  for (var i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 == 0) buffer.write(',');
-    buffer.write(digits[i]);
-  }
-  return buffer.toString();
-}
+String formatNaira(int amount) => formatWithThousandsSeparator(amount);
 
 /// The 36 Nigerian states plus the FCT, for the dashboard's state filter.
 /// All of today's mock listings are in Lagos — picking any other state is

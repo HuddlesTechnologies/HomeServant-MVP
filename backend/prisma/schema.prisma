@@ -1,0 +1,160 @@
+// HomeServant API data model — v1. Covers auth, profiles, properties,
+// bookings, and favorites: the pieces the redesigned landlord/tenant
+// screens actually call today. Chat, tenancy agreements, and the
+// marketplace (vendors/products/orders) are intentionally not modelled
+// yet — see backend/README.md for that roadmap.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  TENANT
+  LANDLORD
+}
+
+enum PropertyCategory {
+  HOUSE
+  SHORTLET
+  SELF_CON
+  APARTMENT
+}
+
+enum PriceUnit {
+  YEAR
+  NIGHT
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum OtpPurpose {
+  SIGNUP
+  LOGIN_2FA
+  PASSWORD_RESET
+}
+
+model User {
+  id               String    @id @default(uuid())
+  email            String    @unique
+  phoneNumber      String?
+  passwordHash     String
+  role             UserRole
+  firstName        String?
+  lastName         String?
+  fullName         String?
+  houseAddress     String?
+  dateOfBirth      DateTime?
+  profilePhotoUrl  String?
+  emailVerifiedAt  DateTime?
+  twoFactorEnabled Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  properties       Property[]     @relation("LandlordProperties")
+  bookings         Booking[]      @relation("TenantBookings")
+  favorites        Favorite[]
+  refreshTokens    RefreshToken[]
+  otpCodes         OtpCode[]
+
+  @@index([role])
+}
+
+/// Hashed refresh tokens, one row per issued token — lets a single token
+/// be revoked (logout, password change) without invalidating every
+/// session, and supports rotation (each refresh issues a new row and
+/// revokes the old one).
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// One-time codes for signup verification, login 2FA, and password reset.
+/// [destination] is the email/phone the code was actually sent to, kept
+/// separate from the user's current contact info in case that changes
+/// before the code is used or expires.
+model OtpCode {
+  id          String     @id @default(uuid())
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  destination String
+  codeHash    String
+  purpose     OtpPurpose
+  /// Failed verify attempts against this specific code — capped in
+  /// OtpService so a 4-digit code (10,000 possibilities) can't just be
+  /// brute-forced within its expiry window.
+  attempts    Int        @default(0)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  @@index([destination, purpose])
+}
+
+model Property {
+  id          String           @id @default(uuid())
+  landlordId  String
+  landlord    User             @relation("LandlordProperties", fields: [landlordId], references: [id], onDelete: Cascade)
+  title       String
+  location    String
+  state       String
+  category    PropertyCategory
+  price       Int
+  priceUnit   PriceUnit
+  bedrooms    Int
+  bathrooms   Int
+  description String
+  imageUrl    String?
+  galleryUrls String[]         @default([])
+  isOccupied  Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  bookings    Booking[]
+  favorites   Favorite[]
+
+  @@index([landlordId])
+  @@index([state, category])
+}
+
+model Booking {
+  id            String        @id @default(uuid())
+  propertyId    String
+  property      Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenantId      String
+  tenant        User          @relation("TenantBookings", fields: [tenantId], references: [id], onDelete: Cascade)
+  status        BookingStatus @default(PENDING)
+  requestedDate DateTime?
+  message       String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@index([propertyId])
+  @@index([tenantId])
+}
+
+model Favorite {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, propertyId])
+}

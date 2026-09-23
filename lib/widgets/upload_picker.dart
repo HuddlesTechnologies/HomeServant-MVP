@@ -133,4 +133,20 @@ Future<List<PickedUpload>> pickMultipleImageUploads(BuildContext context, {requi
   }
 }
 
+/// Lets the user pick a single video from their camera roll — used by the
+/// landlord's Add Property form for an optional walkthrough clip.
+///
+/// Deliberately camera-roll-only, unlike [pickUpload]: `video_player` (what
+/// plays the result back) can only load a file, a network URL, or a blob
+/// URL — never raw bytes. `image_picker`'s gallery source reliably returns
+/// a real path on mobile/desktop and a playable blob URL on web, but
+/// `file_picker`'s "Choose from Files" is documented (see [PickedUpload])
+/// to return *only* bytes on web with no path at all, which would leave a
+/// web-picked file with nothing `video_player` could actually play.
+Future<PickedUpload?> pickVideoUpload() async {
+  final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
+  if (picked == null) return null;
+  return PickedUpload(path: picked.path, fileName: picked.name, isImage: false);
+}
+
 enum _UploadSource { gallery, files }

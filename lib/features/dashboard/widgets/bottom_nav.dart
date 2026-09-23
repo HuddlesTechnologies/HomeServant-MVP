@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../models/dashboard_theme.dart';
+import '../../../widgets/floating_pill_nav.dart';
 
 class DashboardBottomNav extends StatelessWidget {
   const DashboardBottomNav({
@@ -22,33 +23,15 @@ class DashboardBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.navigatorColor,
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 16, offset: const Offset(0, 8)),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: List.generate(_icons.length, (index) {
-          final selected = index == currentIndex;
-          return GestureDetector(
-            onTap: () => onTap(index),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: selected ? theme.background : Colors.transparent,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(_icons[index], color: selected ? theme.accent : theme.navigatorForeground, size: 22),
-            ),
-          );
-        }),
-      ),
+    return FloatingPillNav(
+      currentIndex: currentIndex,
+      onTap: onTap,
+      itemCount: _icons.length,
+      backgroundColor: theme.navigatorColor,
+      selectedBackgroundColor: theme.background,
+      selectedColor: theme.accent,
+      unselectedColor: theme.navigatorForeground,
+      iconBuilder: (index, color) => Icon(_icons[index], color: color, size: 22),
     );
   }
 }

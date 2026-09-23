@@ -4,6 +4,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../dashboard/chat_thread_screen.dart';
 import '../dashboard/models/property.dart';
 import '../../models/dashboard_theme.dart';
+import '../../widgets/empty_state.dart';
 import 'models/marketplace_order.dart';
 import 'widgets/order_item_thumbnail.dart';
 
@@ -32,40 +33,16 @@ class OrderHistoryScreen extends StatelessWidget {
         child: ResponsiveCenter(
           maxWidth: 640,
           child: orders.isEmpty
-              ? _EmptyOrders(theme: theme)
+              ? EmptyState(
+                  theme: theme,
+                  icon: Icons.receipt_long_outlined,
+                  title: 'No orders yet',
+                  message: 'Things you buy on the Marketplace will show up here.',
+                )
               : ListView(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                   children: [for (final order in orders) _OrderCard(order: order, theme: theme)],
                 ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyOrders extends StatelessWidget {
-  const _EmptyOrders({required this.theme});
-
-  final DashboardTheme theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.receipt_long_outlined, color: theme.foreground.withValues(alpha: 0.35), size: 56),
-            const SizedBox(height: 16),
-            Text('No orders yet', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-            const SizedBox(height: 8),
-            Text(
-              'Things you buy on the Marketplace will show up here.',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 14),
-            ),
-          ],
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../features/dashboard/models/property.dart';
 import '../features/dashboard/models/rental_record.dart';
 import '../models/dashboard_theme.dart';
 import '../models/user_role.dart';
@@ -75,6 +76,20 @@ class AppState extends ChangeNotifier {
     final existing = _rentalHistory[propertyId];
     if (existing == null) return;
     _rentalHistory[propertyId] = existing.copyWith(rating: rating);
+    notifyListeners();
+  }
+
+  // --- Landlord: properties added through "Add Property" -----------------
+  /// In-memory only (unlike the rest of this state, not persisted across a
+  /// full app restart) — there's no backend to own listing data, and a
+  /// [Property] itself isn't JSON-serialisable yet, so this stays
+  /// session-scoped rather than half-persisting.
+  final List<Property> _landlordProperties = [];
+
+  List<Property> get landlordProperties => List.unmodifiable(_landlordProperties);
+
+  void addLandlordProperty(Property property) {
+    _landlordProperties.add(property);
     notifyListeners();
   }
 
@@ -234,6 +249,7 @@ class AppState extends ChangeNotifier {
     profilePhotoPath = null;
     favoritePropertyIds.clear();
     _rentalHistory.clear();
+    _landlordProperties.clear();
     pushNotificationsEnabled = true;
     newMessageNotifications = true;
     propertyUpdateNotifications = true;

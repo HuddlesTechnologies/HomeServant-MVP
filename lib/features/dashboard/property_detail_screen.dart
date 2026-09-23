@@ -7,6 +7,7 @@ import 'chat_thread_screen.dart';
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
+import 'widgets/property_video_player.dart';
 
 class PropertyDetailScreen extends StatefulWidget {
   const PropertyDetailScreen({super.key, required this.property, required this.theme});
@@ -183,6 +184,19 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                   ),
                               ],
                             ),
+                          ],
+                          if (property.videoPath != null) ...[
+                            const SizedBox(height: 24),
+                            Text(
+                              'Property Tour',
+                              style: AppTextStyles.body(
+                                color: theme.foreground.withValues(alpha: 0.55),
+                                size: 13,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            PropertyVideoPlayer(path: property.videoPath!),
                           ],
                           const SizedBox(height: 24),
                           SizedBox(

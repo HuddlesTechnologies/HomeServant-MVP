@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../widgets/profile_edit_button.dart';
 import '../../widgets/support_sheet.dart';
 import '../../widgets/upload_picker.dart';
 import 'models/vendor.dart';
@@ -74,7 +75,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Shop Profile', style: AppTextStyles.heading(color: theme.foreground, size: 20)),
-              _EditProfileButton(theme: theme, onTap: () => _editProfile(context)),
+              ProfileEditButton(color: theme.accent, compact: true, onTap: () => _editProfile(context)),
             ],
           ),
           const SizedBox(height: 24),
@@ -203,36 +204,6 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _EditProfileButton extends StatelessWidget {
-  const _EditProfileButton({required this.theme, required this.onTap});
-
-  final DashboardTheme theme;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: theme.accent, width: 1.2),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.edit_outlined, color: theme.accent, size: 14),
-            const SizedBox(width: 6),
-            Text('Edit Profile', style: AppTextStyles.body(color: theme.accent, weight: FontWeight.w700, size: 12.5)),
-          ],
-        ),
       ),
     );
   }

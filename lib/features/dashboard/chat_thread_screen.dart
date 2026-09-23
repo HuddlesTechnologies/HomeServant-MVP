@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
@@ -293,13 +294,9 @@ class _OrderStatusBanner extends StatelessWidget {
   }
 }
 
-const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
 String _formatDateTime(DateTime date) {
   final hour12 = date.hour % 12 == 0 ? 12 : date.hour % 12;
   final minute = date.minute.toString().padLeft(2, '0');
   final period = date.hour >= 12 ? 'PM' : 'AM';
-  return '${date.day} ${_months[date.month - 1]} at $hour12:$minute $period';
+  return '${date.day} ${monthAbbreviations[date.month - 1]} at $hour12:$minute $period';
 }

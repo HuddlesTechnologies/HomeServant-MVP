@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/empty_state.dart';
 import 'models/property.dart';
 import 'models/rental_record.dart';
 import 'property_detail_screen.dart';
@@ -33,7 +35,12 @@ class HistoryScreen extends StatelessWidget {
           maxWidth: 640,
           child:
               entries.isEmpty
-                  ? _EmptyHistory(theme: theme)
+                  ? EmptyState(
+                    theme: theme,
+                    icon: Icons.history_rounded,
+                    title: 'No history yet',
+                    message: 'Properties you rent or book will show up here.',
+                  )
                   : ListView(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                     children: [
@@ -41,35 +48,6 @@ class HistoryScreen extends StatelessWidget {
                         _HistoryTile(property: property, record: history[property.id]!, theme: theme),
                     ],
                   ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EmptyHistory extends StatelessWidget {
-  const _EmptyHistory({required this.theme});
-
-  final DashboardTheme theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.history_rounded, color: theme.foreground.withValues(alpha: 0.35), size: 56),
-            const SizedBox(height: 16),
-            Text('No history yet', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-            const SizedBox(height: 8),
-            Text(
-              'Properties you rent or book will show up here.',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 14),
-            ),
-          ],
         ),
       ),
     );
@@ -119,7 +97,7 @@ class _HistoryTile extends StatelessWidget {
                       Text(property.location, style: AppTextStyles.body(color: theme.accent, size: 13, weight: FontWeight.w600)),
                       const SizedBox(height: 6),
                       Text(
-                        '${_isShortlet ? 'Booked' : 'Rented'} ${_formatDate(record.startDate)} – ${_formatDate(record.endDate)}',
+                        '${_isShortlet ? 'Booked' : 'Rented'} ${formatShortDate(record.startDate)} – ${formatShortDate(record.endDate)}',
                         style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 12),
                       ),
                     ],
@@ -215,19 +193,3 @@ class _RatingStars extends StatelessWidget {
   }
 }
 
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-String _formatDate(DateTime date) => '${date.day} ${_months[date.month - 1]} ${date.year}';

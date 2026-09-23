@@ -8,6 +8,8 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/dashboard_tab_scaffold.dart';
+import '../../widgets/notification_bell.dart';
 import 'legal/tenancy_agreements_screen.dart';
 import 'messages_screen.dart';
 import 'models/property.dart';
@@ -339,33 +341,10 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
   Widget build(BuildContext context) {
     final theme = context.watch<AppState>().dashboardTheme;
     final onProfileTab = _navIndex == 3;
-    return Scaffold(
-      backgroundColor: theme.background,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            if (onProfileTab)
-              ProfileScreen(onLogOut: () => context.go('/get-started'))
-            else
-              _buildHomeFeed(theme),
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 12,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: DashboardBottomNav(
-                    currentIndex: _navIndex,
-                    onTap: (i) => _onNavTap(i, theme),
-                    theme: theme,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return DashboardTabScaffold(
+      background: theme.background,
+      navBar: DashboardBottomNav(currentIndex: _navIndex, onTap: (i) => _onNavTap(i, theme), theme: theme),
+      body: onProfileTab ? ProfileScreen(onLogOut: () => context.go('/get-started')) : _buildHomeFeed(theme),
     );
   }
 
@@ -417,7 +396,9 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                               ),
                             ),
                             const SizedBox(width: 16),
-                            GestureDetector(
+                            NotificationBell(
+                              color: theme.foreground,
+                              showDot: _hasUnreadNotifications,
                               onTap: () {
                                 setState(() => _hasUnreadNotifications = false);
                                 Navigator.of(context).push(
@@ -428,28 +409,6 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                   ),
                                 );
                               },
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Icon(
-                                    Icons.notifications_none_rounded,
-                                    color: theme.foreground,
-                                  ),
-                                  if (_hasUnreadNotifications)
-                                    Positioned(
-                                      top: -2,
-                                      right: -2,
-                                      child: Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: const BoxDecoration(
-                                          color: Colors.red,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
                             ),
                           ],
                         ),

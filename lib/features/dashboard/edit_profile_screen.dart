@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -9,24 +10,6 @@ import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
-
-const _months = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-String _formatDate(DateTime date) =>
-    '${date.day} ${_months[date.month - 1]} ${date.year}';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -76,7 +59,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       text: appState.lastName.isNotEmpty ? appState.lastName : _dummyLastName,
     );
     _dateOfBirth = appState.dateOfBirth ?? _dummyDob;
-    _dob = TextEditingController(text: _formatDate(_dateOfBirth));
+    _dob = TextEditingController(text: formatShortDate(_dateOfBirth));
     _address = TextEditingController(
       text:
           appState.houseAddress.isNotEmpty
@@ -129,7 +112,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (picked != null) {
       setState(() {
         _dateOfBirth = picked;
-        _dob.text = _formatDate(picked);
+        _dob.text = formatShortDate(picked);
       });
     }
   }
