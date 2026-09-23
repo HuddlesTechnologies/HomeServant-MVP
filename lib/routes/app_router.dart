@@ -256,7 +256,6 @@ GoRouter buildAppRouter(AppState appState) {
             context.read<AppState>().setProfileBasics(
                   name: fields['name'] ?? '',
                   phone: fields['phone'] ?? '',
-                  referralCode: fields['referral'],
                 );
             context.push('/signup-tenant-2');
           },

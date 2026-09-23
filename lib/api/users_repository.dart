@@ -22,6 +22,7 @@ class UsersRepository {
     DateTime? dateOfBirth,
     String? profilePhotoUrl,
     bool? twoFactorEnabled,
+    String? referralCode,
   }) {
     return _client.call(() async {
       final response = await _client.dio.patch(
@@ -35,6 +36,7 @@ class UsersRepository {
           if (dateOfBirth != null) 'dateOfBirth': dateOfBirth.toIso8601String(),
           if (profilePhotoUrl != null) 'profilePhotoUrl': profilePhotoUrl,
           if (twoFactorEnabled != null) 'twoFactorEnabled': twoFactorEnabled,
+          if (referralCode != null && referralCode.isNotEmpty) 'referralCode': referralCode,
         },
       );
       return AuthUser.fromJson(response.data as Map<String, dynamic>);

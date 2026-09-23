@@ -40,9 +40,11 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
       _error = null;
     });
     try {
+      final referral = _referral.text.trim();
       await context.read<AppState>().completeProfile(
         fullName: _name.text.trim(),
         phoneNumber: _phone.text.trim(),
+        referralCode: referral.isEmpty ? null : referral,
       );
       if (!mounted) return;
       widget.onContinue({'name': _name.text.trim(), 'phone': _phone.text.trim(), 'referral': _referral.text.trim()});

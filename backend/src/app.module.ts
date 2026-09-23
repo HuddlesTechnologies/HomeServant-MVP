@@ -7,6 +7,7 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { HealthController } from './health/health.controller';
 import { MarketplaceOrdersModule } from './marketplace-orders/marketplace-orders.module';
 import { MarketplaceProductsModule } from './marketplace-products/marketplace-products.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PaystackModule } from './paystack/paystack.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PropertiesModule } from './properties/properties.module';
@@ -31,6 +32,7 @@ import { VendorsModule } from './vendors/vendors.module';
     MarketplaceProductsModule,
     MarketplaceOrdersModule,
     PaystackModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
 })

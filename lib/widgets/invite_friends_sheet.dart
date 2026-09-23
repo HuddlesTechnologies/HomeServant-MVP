@@ -10,8 +10,16 @@ import '../state/app_state.dart';
 /// friends. There's no share-sheet package in this project yet, so
 /// "sharing" copies a ready-made invite message to the clipboard instead —
 /// the user can paste it into WhatsApp, SMS, etc.
-Future<void> showInviteFriendsSheet(BuildContext context, {required DashboardTheme theme}) {
-  final code = context.read<AppState>().ensureReferralCode();
+Future<void> showInviteFriendsSheet(BuildContext context, {required DashboardTheme theme}) async {
+  final appState = context.read<AppState>();
+  // Normally already populated (the server assigns a code the moment it's
+  // first needed, and every profile fetch/update carries it back) — this
+  // is just a fallback for the rare case a session hasn't fetched it yet.
+  if (appState.myReferralCode.isEmpty) {
+    await appState.refreshProfile();
+  }
+  final code = appState.myReferralCode;
+  if (!context.mounted) return;
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: AppColors.white,

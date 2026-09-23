@@ -16,6 +16,7 @@ class AuthUser {
     this.bankName,
     this.accountNumber,
     this.accountName,
+    this.referralCode,
   });
 
   final String id;
@@ -34,6 +35,11 @@ class AuthUser {
   final String? accountNumber;
   final String? accountName;
 
+  /// This user's own invite code — only present on `GET /users/me` and
+  /// `PATCH /users/me` responses, not on login/signup (see backend's
+  /// narrower `PublicUser` shape).
+  final String? referralCode;
+
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: json['id'] as String,
     email: json['email'] as String,
@@ -46,6 +52,7 @@ class AuthUser {
     bankName: json['bankName'] as String?,
     accountNumber: json['accountNumber'] as String?,
     accountName: json['accountName'] as String?,
+    referralCode: json['referralCode'] as String?,
   );
 }
 

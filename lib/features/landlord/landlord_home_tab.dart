@@ -125,6 +125,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                 ),
                 NotificationBell(
                   color: theme.foreground,
+                  showDot: context.watch<AppState>().unreadNotificationCount > 0,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => NotificationsScreen(theme: theme)),
                   ),

@@ -32,4 +32,10 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsBoolean()
   twoFactorEnabled?: boolean;
+
+  /// The inviter's code, not this user's own — see
+  /// UsersService.updateProfile for how it's resolved and linked.
+  @IsOptional()
+  @IsString()
+  referralCode?: string;
 }

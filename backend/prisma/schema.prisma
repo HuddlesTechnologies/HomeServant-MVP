@@ -104,6 +104,23 @@ model User {
   bankName         String?
   accountNumber    String?
   accountName      String?
+  /// This user's own invite code, shown on "Invite Friends" — nullable
+  /// only because it's backfilled lazily on first access for accounts
+  /// that existed before this field did (see UsersService.findById)
+  /// rather than requiring a data migration for every existing row.
+  referralCode     String?   @unique
+  /// Set the first time this user signs up with someone else's referral
+  /// code (via `PATCH /users/me`, see UsersService.updateProfile) — never
+  /// overwritten afterward, so a code entered later can't retroactively
+  /// steal credit for an account that already has an inviter.
+  referredById     String?
+  referredBy       User?     @relation("Referrals", fields: [referredById], references: [id])
+  referrals        User[]    @relation("Referrals")
+  /// Set once the referrer's "so-and-so signed up with your code"
+  /// notification has actually been sent, guarding against sending it
+  /// twice if [fullName] is updated more than once after the referral
+  /// link is made.
+  referralNotifiedAt DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -117,8 +134,30 @@ model User {
   messages           Message[]
   vendorProfile      VendorProfile?
   marketplaceOrders  MarketplaceOrder[]
+  notifications      Notification[]
 
   @@index([role])
+}
+
+enum NotificationType {
+  REFERRAL_SIGNUP
+}
+
+/// A user-facing notification — currently only created for a referral
+/// signup (see UsersService.updateProfile), but modelled generically so
+/// other real events (booking updates, new messages, etc.) have a real
+/// home instead of the client's previous hardcoded mock list.
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// Hashed refresh tokens, one row per issued token — lets a single token

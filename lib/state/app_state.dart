@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
@@ -10,8 +9,10 @@ import '../api/chat_repository.dart';
 import '../api/favorites_repository.dart';
 import '../api/marketplace_orders_repository.dart';
 import '../api/marketplace_products_repository.dart';
+import '../api/models/app_notification.dart';
 import '../api/models/auth_user.dart';
 import '../api/models/booking.dart';
+import '../api/notifications_repository.dart';
 import '../api/paystack_repository.dart';
 import '../api/properties_repository.dart';
 import '../api/reviews_repository.dart';
@@ -47,6 +48,7 @@ class AppState extends ChangeNotifier {
     _marketplaceProductsRepo = MarketplaceProductsRepository(_apiClient);
     _marketplaceOrdersRepo = MarketplaceOrdersRepository(_apiClient);
     _paystackRepo = PaystackRepository(_apiClient);
+    _notificationsRepo = NotificationsRepository(_apiClient);
   }
 
   static const _prefsKey = 'app_state_v2';
@@ -65,6 +67,7 @@ class AppState extends ChangeNotifier {
   late final MarketplaceProductsRepository _marketplaceProductsRepo;
   late final MarketplaceOrdersRepository _marketplaceOrdersRepo;
   late final PaystackRepository _paystackRepo;
+  late final NotificationsRepository _notificationsRepo;
 
   /// Per-thread chat, file uploads, and the whole marketplace surface are
   /// screen-local concerns (each screen manages its own fetch/paginate) —
@@ -113,8 +116,12 @@ class AppState extends ChangeNotifier {
   String fullName = '';
   String phoneNumber = '';
   String houseAddress = '';
-  String referralCode = '';
   DateTime? dateOfBirth;
+
+  /// This user's own invite code, shown on "Invite Friends" — always
+  /// real, from the server (see [_applyUser]); the backend assigns one
+  /// lazily on first `GET /users/me` if an account predates this field.
+  String myReferralCode = '';
 
   /// A local file path/blob URL while a freshly-picked photo hasn't been
   /// uploaded yet, or the persisted `https://` URL once it has — see
@@ -143,31 +150,18 @@ class AppState extends ChangeNotifier {
   }
 
   /// Stages fields collected before an account exists yet (mid-signup) —
-  /// [referralCode] has no server home so it only ever lives here;
   /// name/phone/houseAddress are re-sent to the server via
   /// [completeProfile] once the account does exist.
-  void setProfileBasics({required String name, required String phone, String? houseAddress, String? referralCode}) {
+  void setProfileBasics({required String name, required String phone, String? houseAddress}) {
     fullName = name;
     phoneNumber = phone;
     if (houseAddress != null) this.houseAddress = houseAddress;
-    if (referralCode != null) this.referralCode = referralCode;
     notifyListeners();
   }
 
   void setProfilePhoto(String? path) {
     profilePhotoPath = path;
     notifyListeners();
-  }
-
-  /// Generates a shareable referral code the first time it's needed (e.g.
-  /// opening "Invite Friends") if signup never set one.
-  String ensureReferralCode() {
-    if (referralCode.isNotEmpty) return referralCode;
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    final rand = Random();
-    referralCode = 'HS-${List.generate(6, (_) => chars[rand.nextInt(chars.length)]).join()}';
-    notifyListeners();
-    return referralCode;
   }
 
   // --- Auth ------------------------------------------------------------
@@ -239,6 +233,7 @@ class AppState extends ChangeNotifier {
     String? houseAddress,
     DateTime? dateOfBirth,
     String? profilePhotoUrl,
+    String? referralCode,
   }) async {
     final user = await _usersRepo.updateProfile(
       fullName: fullName,
@@ -246,10 +241,19 @@ class AppState extends ChangeNotifier {
       houseAddress: houseAddress,
       dateOfBirth: dateOfBirth,
       profilePhotoUrl: profilePhotoUrl,
+      referralCode: referralCode,
     );
     _applyUser(user);
     if (houseAddress != null) this.houseAddress = houseAddress;
     notifyListeners();
+  }
+
+  /// Re-fetches this user's own profile from the server — used where a
+  /// field populated by [_applyUser] (e.g. [myReferralCode]) might not be
+  /// loaded yet and there's no more specific update call to make instead.
+  Future<void> refreshProfile() async {
+    final user = await _usersRepo.me();
+    _applyUser(user);
   }
 
   Future<void> setTwoFactorEnabled(bool value) async {
@@ -286,6 +290,7 @@ class AppState extends ChangeNotifier {
     bankName = user.bankName;
     accountNumber = user.accountNumber;
     accountName = user.accountName;
+    if (user.referralCode != null) myReferralCode = user.referralCode!;
     notifyListeners();
   }
 
@@ -296,7 +301,7 @@ class AppState extends ChangeNotifier {
     fullName = '';
     phoneNumber = '';
     houseAddress = '';
-    referralCode = '';
+    myReferralCode = '';
     dateOfBirth = null;
     profilePhotoPath = null;
     twoFactorEnabled = false;
@@ -310,6 +315,8 @@ class AppState extends ChangeNotifier {
     landlordBookings = [];
     _myReviews = [];
     _rentalHistory = {};
+    notifications = [];
+    unreadNotificationCount = 0;
     pushNotificationsEnabled = true;
     newMessageNotifications = true;
     propertyUpdateNotifications = true;
@@ -327,9 +334,55 @@ class AppState extends ChangeNotifier {
     await Future.wait([
       loadFavorites(),
       loadMyReviews(),
+      loadNotifications(),
       if (role == UserRole.tenant) loadMyBookings(),
       if (role == UserRole.landlord) ...[loadLandlordProperties(), loadLandlordBookings()],
     ]);
+  }
+
+  // --- Notifications -----------------------------------------------------
+
+  List<AppNotification> notifications = [];
+  int unreadNotificationCount = 0;
+
+  Future<void> loadNotifications() async {
+    try {
+      final results = await Future.wait([_notificationsRepo.findMine(), _notificationsRepo.unreadCount()]);
+      notifications = results[0] as List<AppNotification>;
+      unreadNotificationCount = results[1] as int;
+      notifyListeners();
+    } catch (_) {
+      // Leaves whatever was last loaded (or the empty default) in place —
+      // the bell/list just won't reflect anything newer until the next
+      // successful load.
+    }
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    final index = notifications.indexWhere((n) => n.id == id);
+    if (index == -1 || notifications[index].isRead) return;
+    await _notificationsRepo.markRead(id);
+    notifications[index] = AppNotification(
+      id: notifications[index].id,
+      type: notifications[index].type,
+      title: notifications[index].title,
+      body: notifications[index].body,
+      createdAt: notifications[index].createdAt,
+      readAt: DateTime.now(),
+    );
+    unreadNotificationCount = (unreadNotificationCount - 1).clamp(0, 1 << 30);
+    notifyListeners();
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    if (unreadNotificationCount == 0) return;
+    await _notificationsRepo.markAllRead();
+    notifications = [
+      for (final n in notifications)
+        AppNotification(id: n.id, type: n.type, title: n.title, body: n.body, createdAt: n.createdAt, readAt: n.readAt ?? DateTime.now()),
+    ];
+    unreadNotificationCount = 0;
+    notifyListeners();
   }
 
   // --- Properties (public browse feed) --------------------------------

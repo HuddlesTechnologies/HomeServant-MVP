@@ -41,8 +41,6 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
   String? _selectedState;
   String _locationQuery = '';
 
-  bool _hasUnreadNotifications = true;
-
   @override
   void initState() {
     super.initState();
@@ -546,11 +544,9 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                               const SizedBox(width: 16),
                               NotificationBell(
                                 color: theme.foreground,
-                                showDot: _hasUnreadNotifications,
+                                showDot: context.watch<AppState>().unreadNotificationCount > 0,
                                 onTap: () {
-                                  setState(
-                                    () => _hasUnreadNotifications = false,
-                                  );
+                                  context.read<AppState>().markAllNotificationsRead();
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder:
