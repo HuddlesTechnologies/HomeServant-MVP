@@ -47,6 +47,22 @@ Without a verified domain, Resend's free tier only lets you send to the
 email address you signed up with — fine for solo testing, not for real
 signups.
 
+## Google Sign-In
+
+1. Create a project at [Google Cloud Console](https://console.cloud.google.com).
+2. **APIs & Services > OAuth consent screen** — External user type, app
+   name/support email, add the `email`/`profile`/`openid` scopes. Testing
+   mode is fine until you're ready to publish.
+3. **APIs & Services > Credentials > Create Credentials > OAuth client
+   ID** — Application type **Web application**. Add every origin that'll
+   trigger sign-in (deployed web app URL(s), `http://localhost:<port>`
+   for local dev) under **Authorized JavaScript origins**.
+4. Set `GOOGLE_CLIENT_ID` to the client ID it gives you (not secret — the
+   client secret Google also generates isn't used here at all, since this
+   verifies ID tokens rather than doing a server-side code exchange).
+5. Separate client IDs are needed for iOS/Android if the mobile app also
+   gets Google Sign-In later — not set up yet, web-only for now.
+
 ## Deploying to Render
 
 The database and storage live on Supabase; Render only runs the API
@@ -93,6 +109,13 @@ Every route is prefixed `/api`. Auth:
   `{ requiresTwoFactor: true, email }` if the account has 2FA on.
 - `POST /api/auth/verify-2fa` — completes a 2FA login the same way
   verify-signup completes signup.
+- `POST /api/auth/google` with `{ idToken, role? }` — verifies the ID
+  token the client's Google Sign-In SDK returned, then finds-or-creates
+  the matching user (matched by Google's `sub` claim first, falling back
+  to email — so an existing email/password account gets linked rather
+  than erroring on first Google sign-in). `role` is required only when no
+  matching user exists yet. Skips OTP entirely — Google already verified
+  the email. See **Google Sign-In** below for the Cloud Console setup.
 - `POST /api/auth/refresh` — rotates a refresh token for a new pair; the
   old one is revoked the moment this succeeds, so a leaked-and-replayed
   refresh token stops working as soon as the real client refreshes.

@@ -20,6 +20,7 @@ import '../features/dashboard/models/rental_record.dart';
 import '../models/dashboard_theme.dart';
 import '../models/user_role.dart';
 import '../services/app_icon_service.dart';
+import '../services/google_auth_service.dart';
 
 /// Owns the app's session (real, backed by the HomeServant API) plus a
 /// handful of device-local preferences (theme, notification toggles, app
@@ -150,6 +151,19 @@ class AppState extends ChangeNotifier {
       return false;
     }
     _applyUser(result.user!);
+    await _loadInitialData();
+    return true;
+  }
+
+  /// Returns `true` once fully signed in, `false` if the user closed the
+  /// Google picker/popup without choosing an account. [role] only matters
+  /// the first time this Google account is used — see
+  /// [AuthRepository.googleAuth].
+  Future<bool> loginWithGoogle() async {
+    final idToken = await GoogleAuthService.signInAndGetIdToken();
+    if (idToken == null) return false;
+    final user = await _authRepo.googleAuth(idToken: idToken, role: role);
+    _applyUser(user);
     await _loadInitialData();
     return true;
   }

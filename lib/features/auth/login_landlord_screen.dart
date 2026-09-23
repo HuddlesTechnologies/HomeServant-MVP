@@ -31,6 +31,7 @@ class _LoginLandlordScreenState extends State<LoginLandlordScreen> {
   final _password = TextEditingController();
   static const _role = UserRole.landlord;
   bool _submitting = false;
+  bool _googleSubmitting = false;
   String? _error;
 
   @override
@@ -60,6 +61,24 @@ class _LoginLandlordScreenState extends State<LoginLandlordScreen> {
     }
   }
 
+  Future<void> _loginWithGoogle() async {
+    setState(() {
+      _googleSubmitting = true;
+      _error = null;
+    });
+    try {
+      final signedIn = await context.read<AppState>().loginWithGoogle();
+      if (!mounted) return;
+      if (signedIn) {
+        widget.onLoginSuccess();
+      }
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _googleSubmitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ThemedScaffold(
@@ -85,6 +104,19 @@ class _LoginLandlordScreenState extends State<LoginLandlordScreen> {
             loading: _submitting,
             onPressed: _submitting ? null : _login,
           ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(child: Divider(color: _role.foreground.withValues(alpha: 0.4))),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text('or', style: AppTextStyles.body(color: _role.foreground.withValues(alpha: 0.7), size: 13)),
+              ),
+              Expanded(child: Divider(color: _role.foreground.withValues(alpha: 0.4))),
+            ],
+          ),
+          const SizedBox(height: 20),
+          GoogleSignInButton(onPressed: _googleSubmitting ? null : _loginWithGoogle),
           const SizedBox(height: 18),
           Center(
             child: GestureDetector(

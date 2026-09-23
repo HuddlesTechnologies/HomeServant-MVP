@@ -58,6 +58,21 @@ class AuthRepository {
     });
   }
 
+  /// [role] is only required when the Google account doesn't match an
+  /// existing user yet — the backend creates one with it; an existing
+  /// user just logs in regardless of which role screen this was tapped
+  /// from.
+  Future<AuthUser> googleAuth({required String idToken, required UserRole role}) {
+    return _client.call(() async {
+      final response = await _client.dio.post(
+        '/auth/google',
+        data: {'idToken': idToken, 'role': role.apiValue},
+        options: Options(extra: {'skipAuth': true}),
+      );
+      return _saveTokensAndUser(response.data);
+    });
+  }
+
   Future<AuthUser> verifyLoginTwoFactor({required String email, required String code}) {
     return _client.call(() async {
       final response = await _client.dio.post(

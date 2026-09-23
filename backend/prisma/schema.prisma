@@ -51,7 +51,15 @@ model User {
   id               String    @id @default(uuid())
   email            String    @unique
   phoneNumber      String?
-  passwordHash     String
+  /// Null for a Google-only account — nothing to compare a login password
+  /// against, so AuthService.login rejects the password grant entirely
+  /// for these users instead of hashing/comparing against nothing.
+  passwordHash     String?
+  /// Google's `sub` claim — stable even if the user's email changes on
+  /// their Google account. Null until they've signed in with Google at
+  /// least once (including an account originally created by
+  /// email/password, if they later link Google to the same email).
+  googleId         String?   @unique
   role             UserRole
   firstName        String?
   lastName         String?

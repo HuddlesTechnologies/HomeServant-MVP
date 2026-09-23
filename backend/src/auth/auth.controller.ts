@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { AuthenticatedUser } from './strategies/jwt.strategy';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -28,6 +29,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  googleAuth(@Body() dto: GoogleAuthDto) {
+    return this.auth.googleAuth(dto);
   }
 
   @Post('verify-2fa')

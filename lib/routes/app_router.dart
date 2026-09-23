@@ -122,6 +122,7 @@ GoRouter buildAppRouter() {
             context.read<AppState>().setEmail(email);
             context.push('/verify-otp');
           },
+          onGoogleSignedIn: () => _proceedPastTwoFactor(context),
         ),
       ),
       GoRoute(
@@ -131,6 +132,7 @@ GoRouter buildAppRouter() {
             context.read<AppState>().setEmail(email);
             context.push('/verify-otp');
           },
+          onGoogleSignedIn: () => _proceedPastTwoFactor(context),
         ),
       ),
       GoRoute(

@@ -1,12 +1,14 @@
 import { randomUUID } from 'crypto';
-import { ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { OtpPurpose, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../prisma/prisma.service';
 import { OtpService } from '../otp/otp.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -30,6 +32,8 @@ export interface TokenPair {
 
 @Injectable()
 export class AuthService {
+  private readonly googleClient = new OAuth2Client();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -70,7 +74,13 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<(TokenPair & { user: PublicUser; requiresTwoFactor: false }) | { requiresTwoFactor: true; email: string }> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    if (!user?.passwordHash) {
+      // Same message whether the account doesn't exist or is Google-only
+      // — telling an attacker "that email uses Google sign-in" would leak
+      // which emails have accounts.
+      throw new UnauthorizedException('Incorrect email or password');
+    }
+    if (!(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Incorrect email or password');
     }
     if (!user.emailVerifiedAt) {
@@ -133,8 +143,61 @@ export class AuthService {
     }
   }
 
+  /// Verifies the Google ID token the client got back from its sign-in
+  /// SDK, then finds-or-creates the matching user. Matches by googleId
+  /// first, falling back to email — so an existing email/password account
+  /// signing in with Google for the first time gets linked instead of
+  /// erroring on a duplicate email.
+  async googleAuth(dto: GoogleAuthDto): Promise<TokenPair & { user: PublicUser }> {
+    let payload: { email?: string; email_verified?: boolean; sub: string; name?: string; picture?: string };
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken: dto.idToken,
+        audience: this.config.getOrThrow('GOOGLE_CLIENT_ID'),
+      });
+      const verified = ticket.getPayload();
+      if (!verified) throw new Error('empty payload');
+      payload = verified;
+    } catch {
+      throw new UnauthorizedException('Invalid Google sign-in token');
+    }
+    if (!payload.email || !payload.email_verified) {
+      throw new UnauthorizedException("Google account's email isn't verified");
+    }
+
+    let user = await this.prisma.user.findFirst({
+      where: { OR: [{ googleId: payload.sub }, { email: payload.email }] },
+    });
+
+    if (user) {
+      if (!user.googleId) {
+        user = await this.prisma.user.update({ where: { id: user.id }, data: { googleId: payload.sub } });
+      }
+    } else {
+      if (!dto.role) {
+        throw new BadRequestException('role is required for a new account');
+      }
+      user = await this.prisma.user.create({
+        data: {
+          email: payload.email,
+          googleId: payload.sub,
+          role: dto.role,
+          fullName: payload.name,
+          profilePhotoUrl: payload.picture,
+          emailVerifiedAt: new Date(),
+        },
+      });
+    }
+
+    const tokens = await this.issueTokens(user);
+    return { ...tokens, user: this.toPublicUser(user) };
+  }
+
   async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.passwordHash) {
+      throw new BadRequestException('This account signed up with Google and has no password to change');
+    }
     if (!(await bcrypt.compare(dto.currentPassword, user.passwordHash))) {
       throw new UnauthorizedException('Current password is incorrect');
     }

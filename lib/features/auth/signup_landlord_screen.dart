@@ -11,9 +11,14 @@ import '../../widgets/terms_footer.dart';
 import '../../widgets/themed_scaffold.dart';
 
 class SignupLandlordScreen extends StatefulWidget {
-  const SignupLandlordScreen({super.key, required this.onContinue});
+  const SignupLandlordScreen({super.key, required this.onContinue, required this.onGoogleSignedIn});
 
   final ValueChanged<String> onContinue;
+
+  /// Google sign-in skips email/OTP entirely — a distinct callback from
+  /// [onContinue] since there's no email to hand back, just "go straight
+  /// to the dashboard" (respecting App Lock, same as a normal login).
+  final VoidCallback onGoogleSignedIn;
 
   @override
   State<SignupLandlordScreen> createState() => _SignupLandlordScreenState();
@@ -26,6 +31,7 @@ class _SignupLandlordScreenState extends State<SignupLandlordScreen> {
   final _confirmPassword = TextEditingController();
   static const _role = UserRole.landlord;
   bool _submitting = false;
+  bool _googleSubmitting = false;
   String? _error;
 
   @override
@@ -51,6 +57,24 @@ class _SignupLandlordScreenState extends State<SignupLandlordScreen> {
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _continueWithGoogle() async {
+    setState(() {
+      _googleSubmitting = true;
+      _error = null;
+    });
+    try {
+      final signedIn = await context.read<AppState>().loginWithGoogle();
+      if (!mounted) return;
+      if (signedIn) {
+        widget.onGoogleSignedIn();
+      }
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _googleSubmitting = false);
     }
   }
 
@@ -130,11 +154,7 @@ class _SignupLandlordScreenState extends State<SignupLandlordScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            GoogleSignInButton(
-              onPressed: () => ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text("Google sign-in isn't available yet"))),
-            ),
+            GoogleSignInButton(onPressed: _googleSubmitting ? null : _continueWithGoogle),
             const SizedBox(height: 140),
             TermsFooter(
               mutedColor: _role.foreground.withValues(alpha: 0.55),
