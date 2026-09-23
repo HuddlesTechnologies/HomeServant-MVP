@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -18,8 +19,14 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final history = context.watch<AppState>().rentalHistory;
-    final entries = mockProperties.where((p) => history.containsKey(p.id)).toList()
+    final appState = context.watch<AppState>();
+    final history = appState.rentalHistory;
+    // rentalHistory is keyed by property id, derived from the tenant's own
+    // ACCEPTED bookings — [myBookings] carries the matching [Property]
+    // objects directly, so no separate lookup list is needed.
+    final entries = {for (final b in appState.myBookings) b.property.id: b.property}.values
+        .where((p) => history.containsKey(p.id))
+        .toList()
       ..sort((a, b) => history[b.id]!.startDate.compareTo(history[a.id]!.startDate));
 
     return Scaffold(
@@ -132,11 +139,16 @@ class _HistoryTile extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
-                onPressed: () {
-                  context.read<AppState>().recordRentalOrBooking(property.id, isShortlet: _isShortlet);
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text('${_isShortlet ? 'Rebooked' : 'Renewed'} ${property.title}')));
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await context.read<AppState>().recordRentalOrBooking(property.id, isShortlet: _isShortlet);
+                    messenger.showSnackBar(
+                      SnackBar(content: Text('${_isShortlet ? 'Rebooking' : 'Renewal'} request sent for ${property.title}')),
+                    );
+                  } on ApiException catch (e) {
+                    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+                  }
                 },
                 child: Text(
                   _isShortlet ? 'Rebook' : 'Renew',

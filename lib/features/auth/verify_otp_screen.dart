@@ -1,18 +1,30 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
+import '../../state/app_state.dart';
 import '../../widgets/otp_input_row.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/terms_footer.dart';
 import '../../widgets/themed_scaffold.dart';
 
+enum OtpPurpose { signup, login2fa }
+
 class VerifyOtpScreen extends StatefulWidget {
-  const VerifyOtpScreen({super.key, required this.role, required this.email, required this.onVerified});
+  const VerifyOtpScreen({
+    super.key,
+    required this.role,
+    required this.email,
+    required this.onVerified,
+    this.purpose = OtpPurpose.signup,
+  });
 
   final UserRole role;
   final String email;
+  final OtpPurpose purpose;
   final VoidCallback onVerified;
 
   @override
@@ -24,6 +36,8 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   int _secondsLeft = _startSeconds;
   Timer? _timer;
   String _code = '';
+  bool _submitting = false;
+  String? _error;
 
   @override
   void initState() {
@@ -47,6 +61,28 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _submit() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final appState = context.read<AppState>();
+      switch (widget.purpose) {
+        case OtpPurpose.signup:
+          await appState.verifySignupOtp(_code);
+        case OtpPurpose.login2fa:
+          await appState.verifyLoginTwoFactor(_code);
+      }
+      if (!mounted) return;
+      widget.onVerified();
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -83,12 +119,17 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
             textColor: role.isLandlord ? AppColors.navy : AppColors.white,
             onChanged: (value) => setState(() => _code = value),
           ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
+          ],
           const SizedBox(height: 24),
           PillButton(
-            label: 'Continue',
+            label: _submitting ? 'Verifying…' : 'Continue',
             backgroundColor: role.accent,
             textColor: Colors.white,
-            onPressed: _code.length == 4 ? widget.onVerified : null,
+            loading: _submitting,
+            onPressed: _code.length == 4 && !_submitting ? _submit : null,
           ),
           const SizedBox(height: 16),
           Center(

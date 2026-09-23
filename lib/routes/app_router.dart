@@ -24,20 +24,6 @@ import '../models/user_role.dart';
 import '../state/app_state.dart';
 import '../widgets/app_lock_screen.dart';
 
-/// Entry point once login details have been submitted. If the account has
-/// Two-Factor Authentication on, the OTP step comes first — this is where a
-/// real backend would issue the code and later reject a wrong one; for now
-/// entering any 4-digit code passes, matching the rest of this mocked auth
-/// flow. Otherwise skips straight to the post-2FA checks.
-void _proceedAfterLogin(BuildContext context) {
-  final appState = context.read<AppState>();
-  if (appState.twoFactorEnabled) {
-    context.go('/login-2fa');
-  } else {
-    _proceedPastTwoFactor(context);
-  }
-}
-
 /// After identity is confirmed (2FA passed, or not required), goes straight
 /// to the dashboard unless App Lock is on — in which case the PIN gate is
 /// interposed first, so a device-level lock can't be skipped just because
@@ -103,14 +89,16 @@ GoRouter buildAppRouter() {
       GoRoute(
         path: '/login-landlord',
         builder: (context, state) => LoginLandlordScreen(
-          onLogin: () => _proceedAfterLogin(context),
+          onLoginSuccess: () => _proceedPastTwoFactor(context),
+          onRequiresTwoFactor: () => context.push('/login-2fa'),
           onSignUp: () => context.push('/signup-landlord'),
         ),
       ),
       GoRoute(
         path: '/login-tenant',
         builder: (context, state) => LoginTenantScreen(
-          onLogin: () => _proceedAfterLogin(context),
+          onLoginSuccess: () => _proceedPastTwoFactor(context),
+          onRequiresTwoFactor: () => context.push('/login-2fa'),
           onSignUp: () => context.push('/signup'),
         ),
       ),
@@ -207,6 +195,7 @@ GoRouter buildAppRouter() {
           return VerifyOtpScreen(
             role: appState.role,
             email: appState.email.isEmpty ? 'your email' : appState.email,
+            purpose: OtpPurpose.login2fa,
             onVerified: () => _proceedPastTwoFactor(context),
           );
         },

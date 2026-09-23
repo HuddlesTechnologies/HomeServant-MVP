@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -9,7 +10,6 @@ import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/app_lock_pin_sheet.dart';
 import '../../widgets/support_sheet.dart';
-import '../auth/verify_otp_screen.dart';
 import 'legal/tenancy_agreements_screen.dart';
 import 'privacy&terms_screen.dart';
 
@@ -247,29 +247,20 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _onToggleTwoFactor(BuildContext context, AppState appState, bool value) async {
-    if (value) {
-      final navigator = Navigator.of(context);
-      await navigator.push(
-        MaterialPageRoute(
-          builder:
-              (_) => VerifyOtpScreen(
-                role: appState.role,
-                email: appState.email.isEmpty ? 'your email' : appState.email,
-                onVerified: () {
-                  appState.setTwoFactorEnabled(true);
-                  navigator.pop();
-                },
-              ),
-        ),
-      );
-    } else {
-      final confirmed = await _confirmSheet(
-        context,
-        title: 'Turn off Two-Factor Authentication?',
-        body: 'Your account will only be protected by your password.',
-        actionLabel: 'Turn Off',
-      );
-      if (confirmed) appState.setTwoFactorEnabled(false);
+    final confirmed = await _confirmSheet(
+      context,
+      title: value ? 'Turn on Two-Factor Authentication?' : 'Turn off Two-Factor Authentication?',
+      body: value
+          ? "You'll need to enter a one-time code sent to your email every time you log in."
+          : 'Your account will only be protected by your password.',
+      actionLabel: value ? 'Turn On' : 'Turn Off',
+    );
+    if (!confirmed) return;
+    try {
+      await appState.setTwoFactorEnabled(value);
+    } on ApiException catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -537,6 +528,7 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
   final _newController = TextEditingController();
   final _confirmController = TextEditingController();
   String? _error;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -546,34 +538,34 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
     super.dispose();
   }
 
-  void _submit(AppState appState) {
+  Future<void> _submit(AppState appState) async {
     final current = _currentController.text;
     final next = _newController.text;
     final confirm = _confirmController.text;
-    if (appState.password.isNotEmpty && current != appState.password) {
-      setState(() => _error = 'Current password is incorrect');
-      return;
-    }
-    if (next.length < 6) {
-      setState(() => _error = 'New password must be at least 6 characters');
+    if (next.length < 8) {
+      setState(() => _error = 'New password must be at least 8 characters');
       return;
     }
     if (next != confirm) {
       setState(() => _error = "New passwords don't match");
       return;
     }
-    appState.updateProfileDetails(
-      houseAddress: appState.houseAddress,
-      phoneNumber: appState.phoneNumber,
-      email: appState.email,
-      password: next,
-      firstName: appState.firstName,
-      lastName: appState.lastName,
-      dateOfBirth: appState.dateOfBirth,
-    );
+    setState(() {
+      _error = null;
+      _submitting = true;
+    });
     final messenger = ScaffoldMessenger.of(context);
-    Navigator.of(context).pop();
-    messenger.showSnackBar(const SnackBar(content: Text('Password updated')));
+    final navigator = Navigator.of(context);
+    try {
+      await appState.changePassword(currentPassword: current, newPassword: next);
+      navigator.pop();
+      messenger.showSnackBar(const SnackBar(content: Text('Password updated')));
+    } on ApiException catch (e) {
+      setState(() {
+        _error = e.message;
+        _submitting = false;
+      });
+    }
   }
 
   @override
@@ -601,13 +593,13 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () => _submit(appState),
+                onPressed: _submitting ? null : () => _submit(appState),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.navy,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                 ),
-                child: Text('Update Password', style: AppTextStyles.button(color: Colors.white)),
+                child: Text(_submitting ? 'Updating…' : 'Update Password', style: AppTextStyles.button(color: Colors.white)),
               ),
             ),
           ],

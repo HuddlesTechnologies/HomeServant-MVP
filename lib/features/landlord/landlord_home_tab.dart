@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/models/booking.dart';
+import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
@@ -7,27 +9,12 @@ import '../../state/app_state.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/upload_picker.dart';
 import '../dashboard/chat_thread_screen.dart';
-import '../dashboard/models/property.dart';
 import '../dashboard/notifications_screen.dart';
 import '../dashboard/property_detail_screen.dart';
 import '../dashboard/widgets/property_image.dart';
 import 'landlord_properties_screen.dart';
 import 'landlord_property_status.dart';
 import 'widgets/landlord_widgets.dart';
-
-class _IncomingBooking {
-  const _IncomingBooking({required this.name, required this.roomType, required this.date});
-
-  final String name;
-  final String roomType;
-  final String date;
-}
-
-const _seedIncomingBookings = [
-  _IncomingBooking(name: 'Emeka', roomType: '2 Room Self', date: 'Oct 24, 10:00 AM'),
-  _IncomingBooking(name: 'Nosa Yussuf', roomType: 'Self-Contain', date: 'Oct 20, 12:30 PM'),
-  _IncomingBooking(name: 'Efosa Adebayo', roomType: '2 Room Self-Contain', date: 'Oct 20, 10:00 AM'),
-];
 
 /// Home tab of the redesigned landlord dashboard: greeting header, the four
 /// portfolio stat tiles, a recent-activity card of incoming bookings, a
@@ -51,8 +38,6 @@ class LandlordHomeTab extends StatefulWidget {
 }
 
 class _LandlordHomeTabState extends State<LandlordHomeTab> {
-  late final List<_IncomingBooking> _incomingBookings = List.of(_seedIncomingBookings);
-
   DashboardTheme get theme => widget.theme;
 
   void _openProperties(BuildContext context, PropertyStatusFilter filter) {
@@ -61,37 +46,27 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
     );
   }
 
-  void _messageAboutBooking(BuildContext context, _IncomingBooking booking) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          theme: theme,
-          contactName: booking.name,
-          initialMessages: [
-            ChatMessage(
-              text: 'Hi, I sent a booking request for the ${booking.roomType} on ${booking.date}.',
-              fromMe: false,
-            ),
-          ],
+  Future<void> _messageAboutBooking(BuildContext context, Booking booking) async {
+    final appState = context.read<AppState>();
+    final tenantId = booking.tenantId;
+    if (tenantId == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final thread = await appState.chat.openThread(recipientId: tenantId, propertyId: booking.property.id);
+      if (!context.mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            theme: theme,
+            contactName: booking.tenantName ?? 'Tenant',
+            threadId: thread.id,
+            property: booking.property,
+          ),
         ),
-      ),
-    );
-  }
-
-  void _clearIncomingBookings() {
-    final cleared = List<_IncomingBooking>.of(_incomingBookings);
-    if (cleared.isEmpty) return;
-    setState(() => _incomingBookings.clear());
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Cleared ${cleared.length} incoming booking${cleared.length == 1 ? '' : 's'}'),
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'Undo',
-          onPressed: () => setState(() => _incomingBookings.insertAll(0, cleared)),
-        ),
-      ),
-    );
+      );
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(content: Text("Couldn't open this conversation — try again.")));
+    }
   }
 
   @override
@@ -99,9 +74,10 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
     final appState = context.watch<AppState>();
     final photoPath = appState.profilePhotoPath;
     final firstName = appState.fullName.trim().isEmpty ? 'Landlord' : appState.fullName.trim();
-    final allProperties = [...mockProperties, ...appState.landlordProperties];
+    final allProperties = appState.landlordProperties;
     final occupied = allProperties.where(isOccupied).length;
     final available = allProperties.length - occupied;
+    final pendingBookings = appState.landlordBookings.where((b) => b.status == BookingStatus.pending).toList();
 
     return Center(
       child: ConstrainedBox(
@@ -243,11 +219,11 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                           ),
                         ],
                       ),
-                      if (_incomingBookings.isNotEmpty)
+                      if (pendingBookings.isNotEmpty)
                         InkWell(
-                          onTap: _clearIncomingBookings,
+                          onTap: widget.onOpenBookings,
                           child: Text(
-                            'Clear all',
+                            'See all',
                             style: AppTextStyles.body(
                               color: Colors.white.withValues(alpha: 0.6),
                               size: 12.5,
@@ -258,7 +234,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  if (_incomingBookings.isEmpty)
+                  if (pendingBookings.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(
@@ -267,7 +243,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                       ),
                     )
                   else
-                    for (final booking in _incomingBookings)
+                    for (final booking in pendingBookings.take(5))
                       _IncomingBookingTile(booking: booking, onTap: () => _messageAboutBooking(context, booking)),
                 ],
               ),
@@ -304,9 +280,9 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              '70%',
-                              style: TextStyle(color: Color(0xFF1E8A4A), fontSize: 18, fontWeight: FontWeight.w800),
+                            Text(
+                              allProperties.isEmpty ? '—' : '${(occupied / allProperties.length * 100).round()}%',
+                              style: const TextStyle(color: Color(0xFF1E8A4A), fontSize: 18, fontWeight: FontWeight.w800),
                             ),
                             Text(
                               'Occupancy Rate',
@@ -322,20 +298,12 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '20',
+                                '${appState.landlordBookings.length}',
                                 style: AppTextStyles.heading(color: AppColors.navy, size: 18),
                               ),
                               Text(
-                                'Total Request',
+                                'Total Requests',
                                 style: AppTextStyles.body(color: AppColors.navy, size: 11.5, weight: FontWeight.w600),
-                              ),
-                              Text(
-                                '+12% from last 30 days',
-                                style: AppTextStyles.body(
-                                  color: const Color(0xFF1E8A4A),
-                                  size: 10.5,
-                                  weight: FontWeight.w600,
-                                ),
                               ),
                             ],
                           ),
@@ -379,7 +347,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
 class _IncomingBookingTile extends StatelessWidget {
   const _IncomingBookingTile({required this.booking, required this.onTap});
 
-  final _IncomingBooking booking;
+  final Booking booking;
   final VoidCallback onTap;
 
   @override
@@ -403,12 +371,12 @@ class _IncomingBookingTile extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    booking.name,
+                    booking.tenantName ?? 'Tenant',
                     style: AppTextStyles.body(color: Colors.white, size: 14, weight: FontWeight.w700),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${booking.roomType} • ${booking.date}',
+                    '${booking.property.title} • ${formatShortDate(booking.createdAt)}',
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                   ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
+import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
@@ -19,12 +22,36 @@ class SignupTenantScreen extends StatefulWidget {
 class _SignupTenantScreenState extends State<SignupTenantScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
   static const _role = UserRole.tenant;
+  bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
     _email.dispose();
+    _password.dispose();
+    _confirmPassword.dispose();
     super.dispose();
+  }
+
+  Future<void> _continue() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final email = _email.text.trim();
+      await context.read<AppState>().signup(email: email, password: _password.text);
+      if (!mounted) return;
+      widget.onContinue(email);
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -38,11 +65,11 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
           children: [
             const SizedBox(height: 24),
             Center(child: HomeServantLogo(role: _role, iconSize: 60)),
-            const SizedBox(height: 56),
+            const SizedBox(height: 40),
             Text('Sign Up', textAlign: TextAlign.center, style: AppTextStyles.heading(color: _role.foreground, size: 30)),
             const SizedBox(height: 6),
             Text(
-              'Enter your email to signUp',
+              'Enter your email and a password to sign up',
               textAlign: TextAlign.center,
               style: AppTextStyles.body(color: _role.foreground.withValues(alpha: 0.85)),
             ),
@@ -56,16 +83,37 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
                 return null;
               },
             ),
+            const SizedBox(height: 14),
+            PillTextField(
+              hint: 'Password',
+              controller: _password,
+              obscureText: true,
+              validator: (value) {
+                if (value == null || value.length < 8) return 'At least 8 characters';
+                return null;
+              },
+            ),
+            const SizedBox(height: 14),
+            PillTextField(
+              hint: 'Confirm password',
+              controller: _confirmPassword,
+              obscureText: true,
+              validator: (value) {
+                if (value != _password.text) return "Passwords don't match";
+                return null;
+              },
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
+            ],
             const SizedBox(height: 18),
             PillButton(
-              label: 'Continue',
+              label: _submitting ? 'Signing up…' : 'Continue',
               backgroundColor: _role.accent,
               textColor: Colors.white,
-              onPressed: () {
-                if (_formKey.currentState?.validate() ?? false) {
-                  widget.onContinue(_email.text.trim());
-                }
-              },
+              loading: _submitting,
+              onPressed: _submitting ? null : _continue,
             ),
             const SizedBox(height: 24),
             Row(
@@ -82,7 +130,11 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
               ],
             ),
             const SizedBox(height: 24),
-            GoogleSignInButton(onPressed: () => widget.onContinue(_email.text.trim())),
+            GoogleSignInButton(
+              onPressed: () => ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(const SnackBar(content: Text("Google sign-in isn't available yet"))),
+            ),
             const SizedBox(height: 140),
             TermsFooter(
               mutedColor: _role.foreground.withValues(alpha: 0.55),

@@ -17,7 +17,70 @@ class Property {
     required this.landlordName,
     this.galleryImages = const [],
     this.videoPath,
+    this.landlordId,
+    this.reviewCount = 0,
+    this.isOccupied = false,
   });
+
+  /// Builds a [Property] from a `GET /properties` / `GET /properties/:id`
+  /// response (see backend/src/properties/properties.service.ts) — the
+  /// landlord's name comes from the included `landlord` relation, and
+  /// rating/reviewCount from the aggregated review summary that endpoint
+  /// merges in.
+  factory Property.fromApi(Map<String, dynamic> json) {
+    final category = json['category'] as String;
+    return Property(
+      id: json['id'] as String,
+      title: json['title'] as String,
+      location: json['location'] as String,
+      state: json['state'] as String,
+      rating: (json['avgRating'] as num?)?.toDouble() ?? 0,
+      reviewCount: json['reviewCount'] as int? ?? 0,
+      image: (json['imageUrl'] as String?) ?? 'assets/images/homepage.jpg',
+      category: _categoryFromApi(category),
+      price: json['price'] as int,
+      priceUnit: (json['priceUnit'] as String) == 'NIGHT' ? 'night' : 'year',
+      bedrooms: json['bedrooms'] as int,
+      bathrooms: json['bathrooms'] as int,
+      description: json['description'] as String,
+      landlordName: (json['landlord'] as Map<String, dynamic>?)?['fullName'] as String? ?? 'Landlord',
+      landlordId: (json['landlord'] as Map<String, dynamic>?)?['id'] as String? ?? json['landlordId'] as String?,
+      galleryImages: ((json['galleryUrls'] as List?)?.cast<String>()) ?? const [],
+      isOccupied: json['isOccupied'] as bool? ?? false,
+    );
+  }
+
+  /// Body for `POST /properties` (see CreatePropertyDto) — omits
+  /// server-assigned fields (id, landlordId, rating).
+  Map<String, dynamic> toCreateJson() => {
+    'title': title,
+    'location': location,
+    'state': state,
+    'category': categoryApiValue(category),
+    'price': price,
+    'priceUnit': priceUnit == 'night' ? 'NIGHT' : 'YEAR',
+    'bedrooms': bedrooms,
+    'bathrooms': bathrooms,
+    'description': description,
+    if (!image.startsWith('assets/')) 'imageUrl': image,
+    if (galleryImages.isNotEmpty) 'galleryUrls': galleryImages,
+  };
+
+  static String _categoryFromApi(String value) => switch (value) {
+    'HOUSE' => 'House',
+    'SHORTLET' => 'Shortlet',
+    'SELF_CON' => 'Self-Con',
+    'APARTMENT' => 'Apartment',
+    _ => value,
+  };
+
+  static String categoryApiValue(String value) => switch (value) {
+    'House' => 'HOUSE',
+    'Shortlet' => 'SHORTLET',
+    'Self-Con' => 'SELF_CON',
+    'Apartment' => 'APARTMENT',
+    _ => value.toUpperCase(),
+  };
 
   /// Stable key used to track this listing in the wishlist — titles alone
   /// aren't guaranteed unique once real listings replace the mock data.
@@ -63,6 +126,14 @@ class Property {
   /// (see `imageProviderForPath`). None of the seed listings have one; it's
   /// only ever set by [LandlordAddPropertyScreen].
   final String? videoPath;
+
+  /// The owning landlord's user id — absent on the bundled seed listings,
+  /// present on anything loaded from the API. Used to filter "my
+  /// properties" for the signed-in landlord.
+  final String? landlordId;
+
+  final int reviewCount;
+  final bool isOccupied;
 
   String get priceLabel => '₦${formatNaira(price)}/$priceUnit';
 }
@@ -113,167 +184,3 @@ const nigerianStates = [
   'Zamfara',
 ];
 
-// Shared interior shots used in every property's "Details Preview" strip.
-const _kitchenPhoto = 'assets/images/gallery_kitchen.jpg';
-const _bathroomPhoto = 'assets/images/gallery_bathroom.jpg';
-const _bedroomPhoto = 'assets/images/gallery_bedroom.jpg';
-const _detailPreview = [_kitchenPhoto, _bathroomPhoto, _bedroomPhoto];
-
-const mockProperties = [
-  // House
-  Property(
-    id: 'house-agege-2br',
-    landlordName: 'Bode Alabi',
-    title: '2 Bedroom Flat',
-    location: 'Agege, Lagos',
-    state: 'Lagos',
-    rating: 4.2,
-    image: 'assets/images/2 bedroom.jpg',
-    category: 'House',
-    price: 350000,
-    priceUnit: 'year',
-    bedrooms: 2,
-    bathrooms: 2,
-    description:
-        'A comfortable 2-bedroom flat in a friendly Agege neighborhood, close to major roads and markets. '
-        'Features tiled floors, good natural lighting, and a shared compound with parking space. '
-        'Ideal for small families or young professionals looking for an affordable, well-located home.',
-    galleryImages: _detailPreview,
-  ),
-  Property(
-    id: 'house-magodo-3br',
-    landlordName: 'Chidinma Okafor',
-    title: '3 Bedroom Duplex',
-    location: 'Magodo, Lagos',
-    state: 'Lagos',
-    rating: 4.7,
-    image: 'assets/images/3bedroom.jpg',
-    category: 'House',
-    price: 1200000,
-    priceUnit: 'year',
-    bedrooms: 3,
-    bathrooms: 3,
-    description:
-        'An elegant 3-bedroom duplex in the serene, gated Magodo Estate. Boasts spacious rooms, a '
-        'private balcony, ample parking, and round-the-clock estate security — perfect for families '
-        'seeking comfort and privacy.',
-    galleryImages: _detailPreview,
-  ),
-  // Shortlet
-  Property(
-    id: 'shortlet-lekki-studio',
-    landlordName: 'Ngozi Umeh',
-    title: 'Cozy Shortlet Studio',
-    location: 'Lekki, Lagos',
-    state: 'Lagos',
-    rating: 4.6,
-    image: 'assets/images/shortlet_lekki_studio.jpg',
-    category: 'Shortlet',
-    price: 45000,
-    priceUnit: 'night',
-    bedrooms: 1,
-    bathrooms: 1,
-    description:
-        'A cozy, fully furnished studio in the heart of Lekki, perfect for short stays. Comes with '
-        'fast WiFi, a smart TV, air conditioning, and 24/7 power supply — walking distance to '
-        'restaurants and the beach.',
-    galleryImages: _detailPreview,
-  ),
-  Property(
-    id: 'shortlet-vi-luxury',
-    landlordName: 'Femi Adeyemi',
-    title: 'Luxury Shortlet Apartment',
-    location: 'Victoria Island, Lagos',
-    state: 'Lagos',
-    rating: 4.9,
-    image: 'assets/images/shortlet_vi_luxury.jpg',
-    category: 'Shortlet',
-    price: 120000,
-    priceUnit: 'night',
-    bedrooms: 2,
-    bathrooms: 2,
-    description:
-        'A premium shortlet apartment in Victoria Island offering hotel-style luxury: a fitted '
-        'kitchen, elegant furnishing, gym and pool access, and round-the-clock concierge — ideal for '
-        'business trips or a weekend getaway.',
-    galleryImages: _detailPreview,
-  ),
-  // Self-Con
-  Property(
-    id: 'selfcon-yaba-studio',
-    landlordName: 'Tunde Bakare',
-    title: 'Studio Self-Con',
-    location: 'Yaba, Lagos',
-    state: 'Lagos',
-    rating: 4.8,
-    image: 'assets/images/selfcon_yaba_studio.jpg',
-    category: 'Self-Con',
-    price: 400000,
-    priceUnit: 'year',
-    bedrooms: 1,
-    bathrooms: 1,
-    description:
-        'A neat, self-contained studio close to Yaba\'s tech hub and university campuses. Includes a '
-        'private kitchenette, prepaid meter, and constant water supply — great for students and young '
-        'professionals.',
-    galleryImages: _detailPreview,
-  ),
-  Property(
-    id: 'selfcon-surulere-mini',
-    landlordName: 'Amaka Nwosu',
-    title: 'Mini Self-Con Flat',
-    location: 'Surulere, Lagos',
-    state: 'Lagos',
-    rating: 4.0,
-    image: 'assets/images/selfcon_surulere_mini.jpg',
-    category: 'Self-Con',
-    price: 320000,
-    priceUnit: 'year',
-    bedrooms: 1,
-    bathrooms: 1,
-    description:
-        'An affordable mini self-con tucked away in a quiet Surulere close, minutes from the Stadium '
-        'and major bus stops. Simple, secure, and low-maintenance living for singles.',
-    galleryImages: _detailPreview,
-  ),
-  // Apartment
-  Property(
-    id: 'apartment-opebi-4br',
-    landlordName: 'Kunle Fashola',
-    title: '4 Bedroom Apartment',
-    location: 'Opebi, Ikeja, Lagos',
-    state: 'Lagos',
-    rating: 4.5,
-    image: 'assets/images/apartment_opebi_4br.jpg',
-    category: 'Apartment',
-    price: 500000,
-    priceUnit: 'year',
-    bedrooms: 4,
-    bathrooms: 3,
-    description:
-        'Spacious 4-bedroom apartment available for rent in a quiet, secure neighborhood. The '
-        'property features well-sized rooms, enough yard for recreational activity for the children '
-        'with good natural lighting, a comfortable living area, and a functional kitchen. Both '
-        'bedrooms are neatly finished and suitable for individuals, couples, or small families.',
-    galleryImages: _detailPreview,
-  ),
-  Property(
-    id: 'apartment-ikeja-gra-1br',
-    landlordName: 'Halima Yusuf',
-    title: '1 Bedroom Apartment',
-    location: 'Ikeja GRA, Lagos',
-    state: 'Lagos',
-    rating: 4.3,
-    image: 'assets/images/apartment_ikeja_gra_1br.jpg',
-    category: 'Apartment',
-    price: 600000,
-    priceUnit: 'year',
-    bedrooms: 1,
-    bathrooms: 1,
-    description:
-        'A modern 1-bedroom apartment in the leafy, upscale Ikeja GRA. Features a fitted kitchen, '
-        'walk-in wardrobe, backup power, and access to a shared gym — a smart choice for professionals '
-        'who want comfort close to the airport and business district.',
-    galleryImages: _detailPreview,
-  ),
-];

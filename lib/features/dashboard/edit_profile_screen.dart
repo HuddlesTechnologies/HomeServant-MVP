@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
@@ -19,83 +20,50 @@ class EditProfileScreen extends StatefulWidget {
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  static const _dummyFirstName = 'Jane';
-  static const _dummyLastName = 'Doe';
+  static const _dummyName = 'Jane Doe';
   static const _dummyAddress = '15 Seyi Coker Street, Agege, Lagos';
   static const _dummyPhone = '0801 234 5678';
-  static const _dummyEmail = 'jane.doe@example.com';
-  static const _dummyPassword = 'homeservant123';
   static final _dummyDob = DateTime(1996, 4, 12);
 
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _firstName;
-  late final TextEditingController _lastName;
+  late final TextEditingController _fullName;
   late final TextEditingController _dob;
   late final TextEditingController _address;
   late final TextEditingController _phone;
-  late final TextEditingController _email;
-  late final TextEditingController _password;
   late DateTime _dateOfBirth;
   String? _photoPath;
-  bool _obscurePassword = true;
+  bool _saving = false;
 
-  bool _firstNameEditable = false;
-  bool _lastNameEditable = false;
+  bool _fullNameEditable = false;
   bool _dobEditable = false;
   bool _addressEditable = false;
   bool _phoneEditable = false;
-  bool _emailEditable = false;
-  bool _passwordEditable = false;
 
   @override
   void initState() {
     super.initState();
     final appState = context.read<AppState>();
-    _firstName = TextEditingController(
-      text:
-          appState.firstName.isNotEmpty ? appState.firstName : _dummyFirstName,
-    );
-    _lastName = TextEditingController(
-      text: appState.lastName.isNotEmpty ? appState.lastName : _dummyLastName,
-    );
+    _fullName = TextEditingController(text: appState.fullName.isNotEmpty ? appState.fullName : _dummyName);
     _dateOfBirth = appState.dateOfBirth ?? _dummyDob;
     _dob = TextEditingController(text: formatShortDate(_dateOfBirth));
     _address = TextEditingController(
-      text:
-          appState.houseAddress.isNotEmpty
-              ? appState.houseAddress
-              : _dummyAddress,
+      text: appState.houseAddress.isNotEmpty ? appState.houseAddress : _dummyAddress,
     );
-    _phone = TextEditingController(
-      text:
-          appState.phoneNumber.isNotEmpty ? appState.phoneNumber : _dummyPhone,
-    );
-    _email = TextEditingController(
-      text: appState.email.isNotEmpty ? appState.email : _dummyEmail,
-    );
-    _password = TextEditingController(
-      text: appState.password.isNotEmpty ? appState.password : _dummyPassword,
-    );
+    _phone = TextEditingController(text: appState.phoneNumber.isNotEmpty ? appState.phoneNumber : _dummyPhone);
     _photoPath = appState.profilePhotoPath;
   }
 
   @override
   void dispose() {
-    _firstName.dispose();
-    _lastName.dispose();
+    _fullName.dispose();
     _dob.dispose();
     _address.dispose();
     _phone.dispose();
-    _email.dispose();
-    _password.dispose();
     super.dispose();
   }
 
   Future<void> _pickPhoto() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked != null) {
       setState(() => _photoPath = picked.path);
     }
@@ -117,23 +85,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _saving = true);
     final appState = context.read<AppState>();
-    appState.setProfilePhoto(_photoPath);
-    appState.updateProfileDetails(
-      houseAddress: _address.text.trim(),
-      phoneNumber: _phone.text.trim(),
-      email: _email.text.trim(),
-      password: _password.text,
-      firstName: _firstName.text.trim(),
-      lastName: _lastName.text.trim(),
-      dateOfBirth: _dateOfBirth,
-    );
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Profile updated')));
-    Navigator.of(context).pop();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      // A freshly-picked local path (not yet an https URL) needs uploading
+      // first; an unchanged photo is already a persisted URL.
+      String? photoUrl = _photoPath;
+      if (photoUrl != null && !photoUrl.startsWith('http')) {
+        final fileName = photoUrl.split('/').last;
+        photoUrl = await appState.uploads.upload(
+          file: PickedUpload(path: photoUrl, fileName: fileName, isImage: true),
+          folder: 'profile-photos',
+        );
+      }
+      await appState.completeProfile(
+        fullName: _fullName.text.trim(),
+        phoneNumber: _phone.text.trim(),
+        houseAddress: _address.text.trim(),
+        dateOfBirth: _dateOfBirth,
+        profilePhotoUrl: photoUrl,
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('Profile updated')));
+      navigator.pop();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -219,25 +203,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 const SizedBox(height: 28),
                 _EditableField(
-                  label: 'First Name',
+                  label: 'Full Name',
                   theme: theme,
-                  controller: _firstName,
-                  editable: _firstNameEditable,
-                  onToggleEdit:
-                      () => setState(
-                        () => _firstNameEditable = !_firstNameEditable,
-                      ),
-                ),
-                const SizedBox(height: 18),
-                _EditableField(
-                  label: 'Last Name',
-                  theme: theme,
-                  controller: _lastName,
-                  editable: _lastNameEditable,
-                  onToggleEdit:
-                      () => setState(
-                        () => _lastNameEditable = !_lastNameEditable,
-                      ),
+                  controller: _fullName,
+                  editable: _fullNameEditable,
+                  onToggleEdit: () => setState(() => _fullNameEditable = !_fullNameEditable),
                 ),
                 const SizedBox(height: 18),
                 _EditableField(
@@ -275,52 +245,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   onToggleEdit:
                       () => setState(() => _phoneEditable = !_phoneEditable),
                 ),
-                const SizedBox(height: 18),
-                _EditableField(
-                  label: 'Email',
-                  theme: theme,
-                  controller: _email,
-                  editable: _emailEditable,
-                  keyboardType: TextInputType.emailAddress,
-                  onToggleEdit:
-                      () => setState(() => _emailEditable = !_emailEditable),
-                  validator: (value) {
-                    if (value == null || !value.contains('@')) {
-                      return 'Enter a valid email';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 18),
-                _EditableField(
-                  label: 'Password',
-                  theme: theme,
-                  controller: _password,
-                  editable: _passwordEditable,
-                  obscureText: _obscurePassword,
-                  onToggleEdit:
-                      () => setState(
-                        () => _passwordEditable = !_passwordEditable,
-                      ),
-                  extraTrailing: IconButton(
-                    onPressed:
-                        () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: AppColors.navy,
-                    ),
-                  ),
-                ),
                 const SizedBox(height: 32),
                 PillButton(
-                  label: 'Save Changes',
+                  label: _saving ? 'Saving…' : 'Save Changes',
                   backgroundColor: theme.accent,
                   textColor: theme.onAccent,
-                  onPressed: _save,
+                  loading: _saving,
+                  onPressed: _saving ? null : _save,
                 ),
               ],
             ),

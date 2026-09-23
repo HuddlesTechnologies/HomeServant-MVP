@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../api/models/booking.dart' as api;
+import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
@@ -11,33 +14,11 @@ import 'widgets/landlord_widgets.dart';
 
 enum _Outcome { pending, accepted, declined }
 
-class _PendingBooking {
-  _PendingBooking({required this.name, required this.propertyType});
-
-  final String name;
-  final String propertyType;
-  _Outcome outcome = _Outcome.pending;
-}
-
-class _RentEntry {
-  _RentEntry({required this.name, required this.propertyType, required this.dateRange});
-
-  final String name;
-  final String propertyType;
-  final String dateRange;
-  _Outcome outcome = _Outcome.pending;
-}
-
-List<_PendingBooking> _seedBookings() => [
-  _PendingBooking(name: 'Jenifer Oreoluwa Edoh', propertyType: '2 Room Bedroom Apartment'),
-  _PendingBooking(name: 'Michael Kennedy', propertyType: 'BQ Apartment'),
-  _PendingBooking(name: 'Efosa Adebayo', propertyType: '2 Room Bedroom Apartment'),
-];
-
-List<_RentEntry> _seedRent() => [
-  _RentEntry(name: 'Stephen Osi', propertyType: '2 Bedroom Apartment', dateRange: 'May 2026 - May 2027'),
-  _RentEntry(name: 'Stephen Osi', propertyType: '4 Bedroom Apartment', dateRange: 'May 2026 - May 2027'),
-];
+_Outcome _outcomeOf(api.BookingStatus status) => switch (status) {
+  api.BookingStatus.pending => _Outcome.pending,
+  api.BookingStatus.accepted => _Outcome.accepted,
+  api.BookingStatus.declined => _Outcome.declined,
+};
 
 /// Bookings tab of the redesigned landlord dashboard: pending booking
 /// requests a landlord can accept/decline, plus a running list of signed
@@ -54,50 +35,50 @@ class LandlordBookingsScreen extends StatefulWidget {
 }
 
 class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
-  late final List<_PendingBooking> _bookings = _seedBookings();
-  late final List<_RentEntry> _rent = _seedRent();
-
-  void _respond(_PendingBooking booking, {required bool accepted}) {
-    setState(() => booking.outcome = accepted ? _Outcome.accepted : _Outcome.declined);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(accepted ? 'Booking with ${booking.name} accepted' : 'Booking with ${booking.name} declined'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _respond(api.Booking booking, {required bool accepted}) async {
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await appState.respondToBooking(booking.id, accepted: accepted);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            accepted ? 'Booking with ${booking.tenantName ?? 'tenant'} accepted' : 'Booking with ${booking.tenantName ?? 'tenant'} declined',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
-  void _respondRent(_RentEntry entry, {required bool accepted}) {
-    setState(() => entry.outcome = accepted ? _Outcome.accepted : _Outcome.declined);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(accepted ? 'Rent renewal for ${entry.name} approved' : 'Rent renewal for ${entry.name} declined'),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  void _openBookingHistory() {
+  void _openBookingHistory(List<api.Booking> bookings) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => _HistoryListScreen(
           title: 'All Bookings',
           rows: [
-            for (final b in _bookings) _HistoryRow(name: b.name, subtitle: b.propertyType, outcome: b.outcome),
+            for (final b in bookings)
+              _HistoryRow(name: b.tenantName ?? 'Tenant', subtitle: b.property.title, outcome: _outcomeOf(b.status)),
           ],
         ),
       ),
     );
   }
 
-  void _openRentHistory() {
+  void _openRentHistory(List<api.Booking> accepted) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => _HistoryListScreen(
           title: 'Rent Roll',
           rows: [
-            for (final r in _rent)
-              _HistoryRow(name: r.name, subtitle: '${r.propertyType} • ${r.dateRange}', outcome: r.outcome),
+            for (final b in accepted)
+              _HistoryRow(
+                name: b.tenantName ?? 'Tenant',
+                subtitle: '${b.property.title} • since ${formatShortDate(b.createdAt)}',
+                outcome: _Outcome.accepted,
+              ),
           ],
         ),
       ),
@@ -107,9 +88,11 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final photoPath = context.watch<AppState>().profilePhotoPath;
-    final pendingBookings = _bookings.where((b) => b.outcome == _Outcome.pending).toList();
-    final pendingRent = _rent.where((r) => r.outcome == _Outcome.pending).toList();
+    final appState = context.watch<AppState>();
+    final photoPath = appState.profilePhotoPath;
+    final allBookings = appState.landlordBookings;
+    final pendingBookings = allBookings.where((b) => b.status == api.BookingStatus.pending).toList();
+    final acceptedBookings = allBookings.where((b) => b.status == api.BookingStatus.accepted).toList();
 
     return Center(
       child: ConstrainedBox(
@@ -189,13 +172,13 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    booking.name,
+                                    booking.tenantName ?? 'Tenant',
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.body(color: Colors.white, size: 14, weight: FontWeight.w700),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${booking.propertyType} •',
+                                    '${booking.property.title} •',
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                                   ),
@@ -213,7 +196,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: InkWell(
-                      onTap: _openBookingHistory,
+                      onTap: () => _openBookingHistory(allBookings),
                       child: Text(
                         'See all',
                         style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.7), size: 12.5, weight: FontWeight.w600),
@@ -250,7 +233,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                         ],
                       ),
                       InkWell(
-                        onTap: _openRentHistory,
+                        onTap: () => _openRentHistory(acceptedBookings),
                         child: Row(
                           children: [
                             Text(
@@ -265,7 +248,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  if (pendingRent.isEmpty)
+                  if (acceptedBookings.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
@@ -274,7 +257,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                       ),
                     )
                   else
-                    for (final entry in pendingRent)
+                    for (final entry in acceptedBookings.take(5))
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -291,25 +274,20 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    entry.name,
+                                    entry.tenantName ?? 'Tenant',
                                     style: AppTextStyles.body(color: AppColors.gold, size: 13.5, weight: FontWeight.w700),
                                   ),
                                   Text(
-                                    entry.propertyType,
+                                    entry.property.title,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                                   ),
                                   Text(
-                                    entry.dateRange,
+                                    'Since ${formatShortDate(entry.createdAt)}',
                                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            LandlordAcceptRejectButtons(
-                              onAccept: () => _respondRent(entry, accepted: true),
-                              onReject: () => _respondRent(entry, accepted: false),
                             ),
                           ],
                         ),

@@ -289,7 +289,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
 
   void _placeOrder(PaymentMethod paymentMethod) {
     final appState = context.read<AppState>();
-    final customerName = [appState.firstName, appState.lastName].where((s) => s.isNotEmpty).join(' ');
+    final customerName = appState.fullName;
     final items = marketplaceCatalog.where((p) => _cart.containsKey(p.id)).toList();
     final order = MarketplaceOrder(
       id: 'mo${DateTime.now().microsecondsSinceEpoch}',

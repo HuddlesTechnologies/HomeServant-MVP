@@ -1,13 +1,17 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ReviewsService } from '../reviews/reviews.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { QueryPropertiesDto } from './dto/query-properties.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 
 @Injectable()
 export class PropertiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly reviews: ReviewsService,
+  ) {}
 
   async findMany(query: QueryPropertiesDto) {
     const where: Prisma.PropertyWhereInput = {
@@ -35,7 +39,13 @@ export class PropertiesService {
       this.prisma.property.count({ where }),
     ]);
 
-    return { items, total, page, pageSize };
+    const ratings = await this.reviews.summaryForProperties(items.map((p) => p.id));
+    return {
+      items: items.map((p) => ({ ...p, ...(ratings.get(p.id) ?? { avgRating: 0, reviewCount: 0 }) })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   async findOne(id: string) {
@@ -44,7 +54,8 @@ export class PropertiesService {
       include: { landlord: { select: { id: true, fullName: true } } },
     });
     if (!property) throw new NotFoundException('Property not found');
-    return property;
+    const ratings = await this.reviews.summaryForProperties([id]);
+    return { ...property, ...(ratings.get(id) ?? { avgRating: 0, reviewCount: 0 }) };
   }
 
   create(landlordId: string, dto: CreatePropertyDto) {

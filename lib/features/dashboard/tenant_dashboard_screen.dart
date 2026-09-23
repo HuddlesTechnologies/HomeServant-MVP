@@ -65,8 +65,9 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     final query = _searchQuery.trim().toLowerCase();
     final locationQuery = _locationQuery.trim().toLowerCase();
     final selectedCategory = _categories[_selectedCategory];
+    final allProperties = context.watch<AppState>().properties;
     final filtered =
-        mockProperties.where((property) {
+        allProperties.where((property) {
           final matchesQuery =
               query.isEmpty ||
               property.title.toLowerCase().contains(query) ||
@@ -95,8 +96,12 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
   }
 
   Future<void> _openFilterSheet(DashboardTheme theme) async {
-    final categoryPrices =
-        mockProperties.where((p) => p.category == _categories[_selectedCategory]).map((p) => p.price.toDouble()).toList();
+    final categoryPrices = context
+        .read<AppState>()
+        .properties
+        .where((p) => p.category == _categories[_selectedCategory])
+        .map((p) => p.price.toDouble())
+        .toList();
     final boundsMin = categoryPrices.isEmpty ? 0.0 : categoryPrices.reduce((a, b) => a < b ? a : b);
     final boundsMax = categoryPrices.isEmpty ? 0.0 : categoryPrices.reduce((a, b) => a > b ? a : b);
     final hasRange = boundsMax > boundsMin;
@@ -325,6 +330,11 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     maxPriceController.dispose();
   }
 
+  Future<void> _logOut(BuildContext context) async {
+    await context.read<AppState>().logout();
+    if (context.mounted) context.go('/get-started');
+  }
+
   void _onNavTap(int index, DashboardTheme theme) {
     if (index == 1) {
       context.push('/marketplace');
@@ -344,7 +354,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     return DashboardTabScaffold(
       background: theme.background,
       navBar: DashboardBottomNav(currentIndex: _navIndex, onTap: (i) => _onNavTap(i, theme), theme: theme),
-      body: onProfileTab ? ProfileScreen(onLogOut: () => context.go('/get-started')) : _buildHomeFeed(theme),
+      body: onProfileTab ? ProfileScreen(onLogOut: () => _logOut(context)) : _buildHomeFeed(theme),
     );
   }
 

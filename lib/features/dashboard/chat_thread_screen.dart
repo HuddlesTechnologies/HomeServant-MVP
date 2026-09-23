@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../../widgets/pill_text_field.dart';
 import '../Market place/models/marketplace_order.dart';
 import '../Market place/models/order_options.dart';
@@ -20,14 +24,23 @@ class ChatThreadScreen extends StatefulWidget {
     super.key,
     required this.theme,
     required this.contactName,
-    required this.initialMessages,
+    this.initialMessages = const [],
+    this.threadId,
     this.property,
     this.orderEntry,
   });
 
   final DashboardTheme theme;
   final String contactName;
+
+  /// Used only when [threadId] is null — a caller not yet wired to a real
+  /// backend thread (currently just the Marketplace's vendor-order chat,
+  /// which has no server-side thread to load).
   final List<ChatMessage> initialMessages;
+
+  /// When set, this screen loads and sends real messages via
+  /// `AppState.chat` instead of just holding [initialMessages] in memory.
+  final String? threadId;
 
   /// The property this conversation is about, if any. When set, a tenant
   /// can book an inspection right from the chat instead of coordinating a
@@ -48,12 +61,37 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   OrderItemStatus? _orderStatus;
+  bool _loadingRemote = false;
 
   @override
   void initState() {
     super.initState();
     _messages = List.of(widget.initialMessages);
     _orderStatus = widget.orderEntry?.item.status;
+    final threadId = widget.threadId;
+    if (threadId != null) {
+      _loadingRemote = true;
+      unawaited(_loadRemoteMessages(threadId));
+    }
+  }
+
+  Future<void> _loadRemoteMessages(String threadId) async {
+    final appState = context.read<AppState>();
+    try {
+      final remote = await appState.chat.messages(threadId);
+      unawaited(appState.chat.markRead(threadId));
+      if (!mounted) return;
+      setState(() {
+        _messages
+          ..clear()
+          ..addAll(remote.map((m) => ChatMessage(text: m.body, fromMe: m.senderId == appState.userId)));
+        _loadingRemote = false;
+      });
+      _scrollToBottom();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingRemote = false);
+    }
   }
 
   @override
@@ -74,7 +112,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     });
   }
 
-  void _send([String? text]) {
+  Future<void> _send([String? text]) async {
     final message = (text ?? _inputController.text).trim();
     if (message.isEmpty) return;
     setState(() {
@@ -82,6 +120,15 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       _inputController.clear();
     });
     _scrollToBottom();
+
+    final threadId = widget.threadId;
+    if (threadId == null) return;
+    try {
+      await context.read<AppState>().chat.send(threadId, message);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't send — try again.")));
+    }
   }
 
   Future<void> _bookInspection() async {
@@ -162,6 +209,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
             children: [
               if (orderEntry != null && orderStatus != null)
                 _OrderStatusBanner(theme: theme, entry: orderEntry, status: orderStatus),
+              if (_loadingRemote) const LinearProgressIndicator(minHeight: 2),
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,

@@ -13,8 +13,14 @@ const _imageExtensions = {'jpg', 'jpeg', 'png', 'heic', 'heif', 'webp', 'gif', '
 /// An [ImageProvider] for a locally-picked file path — a real file path on
 /// mobile/desktop, or a blob URL on web (what `image_picker` returns there).
 /// `dart:io.File` can't be constructed on web at all, so it must stay behind
-/// the [kIsWeb] check rather than being called unconditionally.
-ImageProvider imageProviderForPath(String path) => kIsWeb ? NetworkImage(path) : FileImage(File(path));
+/// the [kIsWeb] check rather than being called unconditionally. A `http(s)`
+/// URL (a property/profile photo persisted from the API) is always a
+/// [NetworkImage] regardless of platform — only a freshly-picked local file
+/// needs the web/non-web split.
+ImageProvider imageProviderForPath(String path) {
+  if (path.startsWith('http://') || path.startsWith('https://')) return NetworkImage(path);
+  return kIsWeb ? NetworkImage(path) : FileImage(File(path));
+}
 
 /// Result of a successful upload pick, regardless of source.
 class PickedUpload {

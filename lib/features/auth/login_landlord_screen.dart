@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
+import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
@@ -10,11 +13,13 @@ import '../../widgets/themed_scaffold.dart';
 class LoginLandlordScreen extends StatefulWidget {
   const LoginLandlordScreen({
     super.key,
-    required this.onLogin,
+    required this.onLoginSuccess,
+    required this.onRequiresTwoFactor,
     required this.onSignUp,
   });
 
-  final VoidCallback onLogin;
+  final VoidCallback onLoginSuccess;
+  final VoidCallback onRequiresTwoFactor;
   final VoidCallback onSignUp;
 
   @override
@@ -22,15 +27,37 @@ class LoginLandlordScreen extends StatefulWidget {
 }
 
 class _LoginLandlordScreenState extends State<LoginLandlordScreen> {
-  final _username = TextEditingController();
+  final _email = TextEditingController();
   final _password = TextEditingController();
   static const _role = UserRole.landlord;
+  bool _submitting = false;
+  String? _error;
 
   @override
   void dispose() {
-    _username.dispose();
+    _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _login() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      final loggedIn = await context.read<AppState>().login(email: _email.text.trim(), password: _password.text);
+      if (!mounted) return;
+      if (loggedIn) {
+        widget.onLoginSuccess();
+      } else {
+        widget.onRequiresTwoFactor();
+      }
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -43,15 +70,20 @@ class _LoginLandlordScreenState extends State<LoginLandlordScreen> {
           const SizedBox(height: 24),
           Center(child: HomeServantLogo(role: _role, iconSize: 60)),
           const SizedBox(height: 64),
-          PillTextField(hint: 'Username', controller: _username),
+          PillTextField(hint: 'Email', controller: _email, keyboardType: TextInputType.emailAddress),
           const SizedBox(height: 16),
           PillTextField(hint: 'Password', controller: _password, obscureText: true),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
+          ],
           const SizedBox(height: 24),
           PillButton(
-            label: 'Login',
+            label: _submitting ? 'Logging in…' : 'Login',
             backgroundColor: _role.accent,
             textColor: Colors.white,
-            onPressed: widget.onLogin,
+            loading: _submitting,
+            onPressed: _submitting ? null : _login,
           ),
           const SizedBox(height: 18),
           Center(

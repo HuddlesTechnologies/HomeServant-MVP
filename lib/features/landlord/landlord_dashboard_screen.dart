@@ -23,6 +23,11 @@ class LandlordDashboardScreen extends StatefulWidget {
 class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
   int _navIndex = 0;
 
+  Future<void> _logOut(BuildContext context) async {
+    await context.read<AppState>().logout();
+    if (context.mounted) context.go('/get-started');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<AppState>().dashboardTheme;
@@ -41,7 +46,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
           LandlordMessagesScreen(theme: theme),
           LandlordBookingsScreen(theme: theme),
           LandlordProfileScreen(
-            onLogOut: () => context.go('/get-started'),
+            onLogOut: () => _logOut(context),
             onOverview: () => setState(() => _navIndex = 0),
           ),
         ],

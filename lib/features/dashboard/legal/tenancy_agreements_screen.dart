@@ -19,8 +19,11 @@ class TenancyAgreementsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final history = context.watch<AppState>().rentalHistory;
-    final entries = mockProperties.where((p) => p.category != 'Shortlet' && history.containsKey(p.id)).toList()
+    final appState = context.watch<AppState>();
+    final history = appState.rentalHistory;
+    final entries = {for (final b in appState.myBookings) b.property.id: b.property}.values
+        .where((p) => p.category != 'Shortlet' && history.containsKey(p.id))
+        .toList()
       ..sort((a, b) => history[b.id]!.startDate.compareTo(history[a.id]!.startDate));
 
     return Scaffold(

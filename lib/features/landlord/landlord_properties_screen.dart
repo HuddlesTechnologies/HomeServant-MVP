@@ -28,8 +28,7 @@ class LandlordPropertiesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final landlordAdded = context.watch<AppState>().landlordProperties;
-    final all = [...mockProperties, ...landlordAdded];
+    final all = context.watch<AppState>().landlordProperties;
     final entries = switch (filter) {
       PropertyStatusFilter.all => all,
       PropertyStatusFilter.occupied => all.where(isOccupied).toList(),

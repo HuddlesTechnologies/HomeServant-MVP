@@ -1,16 +1,21 @@
 // HomeServant API data model — v1. Covers auth, profiles, properties,
-// bookings, and favorites: the pieces the redesigned landlord/tenant
-// screens actually call today. Chat, tenancy agreements, and the
-// marketplace (vendors/products/orders) are intentionally not modelled
-// yet — see backend/README.md for that roadmap.
+// bookings, favorites, reviews, and chat: the pieces the redesigned
+// landlord/tenant screens actually call today. Tenancy agreement storage
+// and the marketplace (vendors/products/orders) are intentionally not
+// modelled yet — see backend/README.md for that roadmap.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // Supabase's pooled connection (port 6543, pgbouncer) — used for normal
+  // query traffic. Migrations use directUrl instead since the pooler's
+  // transaction mode doesn't support the prepared statements/advisory
+  // locks `prisma migrate` needs.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -59,11 +64,14 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  properties       Property[]     @relation("LandlordProperties")
-  bookings         Booking[]      @relation("TenantBookings")
-  favorites        Favorite[]
-  refreshTokens    RefreshToken[]
-  otpCodes         OtpCode[]
+  properties        Property[]          @relation("LandlordProperties")
+  bookings          Booking[]           @relation("TenantBookings")
+  favorites         Favorite[]
+  refreshTokens     RefreshToken[]
+  otpCodes          OtpCode[]
+  reviews           Review[]
+  threadMemberships ThreadParticipant[]
+  messages          Message[]
 
   @@index([role])
 }
@@ -127,9 +135,74 @@ model Property {
 
   bookings    Booking[]
   favorites   Favorite[]
+  reviews     Review[]
+  threads     Thread[]
 
   @@index([landlordId])
   @@index([state, category])
+}
+
+/// One review per tenant per property (the unique constraint), rather
+/// than per-booking — simpler for v1, matches the rest of the app not
+/// yet distinguishing "which stay" a rating is about.
+model Review {
+  id         String   @id @default(uuid())
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  rating     Int
+  comment    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([propertyId, authorId])
+  @@index([propertyId])
+}
+
+/// A conversation between two or more users, optionally about a specific
+/// property (e.g. "Message Landlord" from a property detail screen).
+/// Membership lives in [ThreadParticipant] rather than fixed columns so
+/// this isn't locked to exactly two people if group threads are ever
+/// needed.
+model Thread {
+  id         String    @id @default(uuid())
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  participants ThreadParticipant[]
+  messages     Message[]
+
+  @@index([propertyId])
+}
+
+model ThreadParticipant {
+  id       String @id @default(uuid())
+  threadId String
+  thread   Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, userId])
+  @@index([userId])
+}
+
+/// Persisted through this API (so history survives even if a client never
+/// opened a Realtime connection); Supabase Realtime is layered on top for
+/// live delivery — see backend/README.md.
+model Message {
+  id        String    @id @default(uuid())
+  threadId  String
+  thread    Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body      String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([threadId, createdAt])
 }
 
 model Booking {

@@ -45,6 +45,9 @@ dependencies:
   url_launcher: ^6.3.1
   pdf: ^3.11.1
   printing: ^5.14.3
+  dio: ^5.7.0
+  flutter_secure_storage: ^9.2.2
+  mime: ^1.0.6
 
 dev_dependencies:
   flutter_test:

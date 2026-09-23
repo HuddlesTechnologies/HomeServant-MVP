@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsPhoneNumber, IsString, IsUrl } from 'class-validator';
+import { IsBoolean, IsDateString, IsOptional, IsPhoneNumber, IsString, IsUrl } from 'class-validator';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -28,4 +28,8 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsUrl()
   profilePhotoUrl?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  twoFactorEnabled?: boolean;
 }

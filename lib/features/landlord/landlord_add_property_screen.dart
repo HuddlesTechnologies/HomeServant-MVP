@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
@@ -13,9 +14,10 @@ import '../dashboard/models/property.dart';
 const _categories = ['House', 'Shortlet', 'Self-Con', 'Apartment'];
 
 /// The landlord's "Add Property" form — reached from Profile Settings.
-/// Builds a real [Property] and adds it to [AppState.landlordProperties],
-/// so the new listing actually shows up in "My Properties" and the Home
-/// tab's Properties count, rather than just acknowledging the tap.
+/// Uploads the cover photo (if any) to Supabase Storage, then creates the
+/// listing via `POST /properties` and adds it to
+/// [AppState.landlordProperties], so the new listing actually shows up in
+/// "My Properties" and the Home tab's Properties count.
 class LandlordAddPropertyScreen extends StatefulWidget {
   const LandlordAddPropertyScreen({super.key});
 
@@ -34,7 +36,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
 
   String _category = _categories.first;
   String? _state;
-  String? _photoPath;
+  PickedUpload? _photo;
   String? _videoPath;
   String? _videoFileName;
   bool _pickingVideo = false;
@@ -54,7 +56,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   Future<void> _pickPhoto() async {
     final picked = await pickUpload(context);
     if (picked != null && picked.isImage) {
-      setState(() => _photoPath = picked.path);
+      setState(() => _photo = picked);
     }
   }
 
@@ -84,27 +86,37 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     }
     setState(() => _saving = true);
     final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     final landlordName = appState.fullName.trim().isEmpty ? 'You' : appState.fullName.trim();
-    final property = Property(
-      id: 'landlord-${DateTime.now().microsecondsSinceEpoch}',
-      title: _title.text.trim(),
-      location: _location.text.trim(),
-      state: _state!,
-      rating: 0,
-      image: _photoPath ?? 'assets/images/homepage.jpg',
-      category: _category,
-      price: int.tryParse(_price.text.replaceAll(',', '')) ?? 0,
-      priceUnit: _category == 'Shortlet' ? 'night' : 'year',
-      bedrooms: int.tryParse(_bedrooms.text) ?? 0,
-      bathrooms: int.tryParse(_bathrooms.text) ?? 0,
-      description: _description.text.trim(),
-      landlordName: landlordName,
-      videoPath: _videoPath,
-    );
-    appState.addLandlordProperty(property);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${property.title} added to My Properties')));
-    Navigator.of(context).pop();
+    try {
+      final photo = _photo;
+      final imageUrl = photo == null ? null : await appState.uploads.upload(file: photo, folder: 'properties');
+      final property = Property(
+        id: '',
+        title: _title.text.trim(),
+        location: _location.text.trim(),
+        state: _state!,
+        rating: 0,
+        image: imageUrl ?? 'assets/images/homepage.jpg',
+        category: _category,
+        price: int.tryParse(_price.text.replaceAll(',', '')) ?? 0,
+        priceUnit: _category == 'Shortlet' ? 'night' : 'year',
+        bedrooms: int.tryParse(_bedrooms.text) ?? 0,
+        bathrooms: int.tryParse(_bathrooms.text) ?? 0,
+        description: _description.text.trim(),
+        landlordName: landlordName,
+        videoPath: _videoPath,
+      );
+      final created = await appState.addLandlordProperty(property);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('${created.title} added to My Properties')));
+      navigator.pop();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -135,8 +147,8 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: AppColors.navy.withValues(alpha: 0.15)),
                     ),
-                    child: _photoPath != null
-                        ? Image(image: imageProviderForPath(_photoPath!), fit: BoxFit.cover)
+                    child: _photo != null
+                        ? Image(image: _photo!.imageProvider, fit: BoxFit.cover)
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
+import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
@@ -23,6 +26,8 @@ class _SignupLandlord1ScreenState extends State<SignupLandlord1Screen> {
   final _houseAddress = TextEditingController();
   PickedUpload? _certificate;
   static const _role = UserRole.landlord;
+  bool _submitting = false;
+  String? _error;
 
   Future<void> _pickCertificate() async {
     final picked = await pickUpload(context);
@@ -37,6 +42,33 @@ class _SignupLandlord1ScreenState extends State<SignupLandlord1Screen> {
     _phone.dispose();
     _houseAddress.dispose();
     super.dispose();
+  }
+
+  /// The certificate of ownership isn't persisted anywhere yet — the
+  /// backend has no document-verification model, so it's collected here
+  /// for UI completeness but only the profile fields actually save.
+  Future<void> _continue() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    try {
+      await context.read<AppState>().completeProfile(
+        fullName: _name.text.trim(),
+        phoneNumber: _phone.text.trim(),
+        houseAddress: _houseAddress.text.trim(),
+      );
+      if (!mounted) return;
+      widget.onContinue({
+        'name': _name.text.trim(),
+        'phone': _phone.text.trim(),
+        'houseAddress': _houseAddress.text.trim(),
+      });
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -80,18 +112,17 @@ class _SignupLandlord1ScreenState extends State<SignupLandlord1Screen> {
             icon: Icons.upload_file_rounded,
             onPressed: _pickCertificate,
           ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
+          ],
           const SizedBox(height: 28),
           PillButton(
-            label: 'Continue',
+            label: _submitting ? 'Saving…' : 'Continue',
             backgroundColor: _role.accent,
             textColor: Colors.white,
-            onPressed: () {
-              widget.onContinue({
-                'name': _name.text.trim(),
-                'phone': _phone.text.trim(),
-                'houseAddress': _houseAddress.text.trim(),
-              });
-            },
+            loading: _submitting,
+            onPressed: _submitting ? null : _continue,
           ),
           const SizedBox(height: 24),
         ],

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
+import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
@@ -26,6 +29,35 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
   String? _identification;
   PickedUpload? _document;
   PickedUpload? _photo;
+  bool _submitting = false;
+  String? _error;
+
+  /// The verification document/ID number aren't persisted anywhere yet —
+  /// the backend has no KYC model, so they're collected here for UI
+  /// completeness but only the profile photo actually saves.
+  Future<void> _finish() async {
+    setState(() {
+      _submitting = true;
+      _error = null;
+    });
+    final appState = context.read<AppState>();
+    try {
+      final photo = _photo;
+      String? photoUrl;
+      if (photo != null && photo.isImage) {
+        photoUrl = await appState.uploads.upload(file: photo, folder: 'profile-photos');
+      }
+      if (photoUrl != null) {
+        await appState.completeProfile(profilePhotoUrl: photoUrl);
+      }
+      if (!mounted) return;
+      widget.onFinish();
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -162,12 +194,17 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
               ],
             ),
           ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
+          ],
           const SizedBox(height: 32),
           PillButton(
-            label: 'Continue',
+            label: _submitting ? 'Saving…' : 'Continue',
             backgroundColor: _role.accent,
             textColor: Colors.white,
-            onPressed: widget.onFinish,
+            loading: _submitting,
+            onPressed: _submitting ? null : _finish,
           ),
           const SizedBox(height: 24),
         ],

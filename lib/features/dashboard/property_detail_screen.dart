@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
@@ -32,24 +33,29 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     );
   }
 
-  void _messageLandlord() {
+  Future<void> _messageLandlord() async {
     final property = widget.property;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder:
-            (_) => ChatThreadScreen(
-              theme: widget.theme,
-              contactName: property.landlordName,
-              property: property,
-              initialMessages: [
-                ChatMessage(
-                  text: "Hi, I'm interested in ${property.title} in ${property.location}. Is it still available?",
-                  fromMe: true,
-                ),
-              ],
-            ),
-      ),
-    );
+    final landlordId = property.landlordId;
+    if (landlordId == null) return;
+    final appState = context.read<AppState>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final thread = await appState.chat.openThread(recipientId: landlordId, propertyId: property.id);
+      if (!mounted) return;
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            theme: widget.theme,
+            contactName: property.landlordName,
+            property: property,
+            threadId: thread.id,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   @override
@@ -207,16 +213,24 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 padding: const EdgeInsets.symmetric(vertical: 18),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                               ),
-                              onPressed: () {
+                              onPressed: () async {
                                 final isShortlet = property.category == 'Shortlet';
-                                context.read<AppState>().recordRentalOrBooking(property.id, isShortlet: isShortlet);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      '${isShortlet ? 'Booking' : 'Rent'} request sent for ${property.title}',
+                                final messenger = ScaffoldMessenger.of(context);
+                                try {
+                                  await context.read<AppState>().recordRentalOrBooking(
+                                    property.id,
+                                    isShortlet: isShortlet,
+                                  );
+                                  messenger.showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        '${isShortlet ? 'Booking' : 'Rent'} request sent for ${property.title}',
+                                      ),
                                     ),
-                                  ),
-                                );
+                                  );
+                                } on ApiException catch (e) {
+                                  messenger.showSnackBar(SnackBar(content: Text(e.message)));
+                                }
                               },
                               child: Text(
                                 property.category == 'Shortlet' ? 'Book Now' : 'Rent Now',

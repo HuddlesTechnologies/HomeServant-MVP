@@ -1,74 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/models/chat.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/landlord_widgets.dart';
 
-enum _ConvoStatus { active, archived, deleted }
-
-class _LandlordConversation {
-  _LandlordConversation({
-    required this.name,
-    required this.preview,
-    required this.time,
-    required this.unreadCount,
-  });
-
-  final String name;
-  String preview;
-  final String time;
-  int unreadCount;
-  _ConvoStatus status = _ConvoStatus.active;
-}
-
-final _mockConversations = [
-  _LandlordConversation(
-    name: 'Stephen Sanu',
-    preview: 'I would be available this Thursday',
-    time: '8:30',
-    unreadCount: 1,
-  ),
-  _LandlordConversation(
-    name: 'Ose Ehrabo',
-    preview: 'Sie, can i come and inspect or do i have to book?',
-    time: '8:30',
-    unreadCount: 3,
-  ),
-  _LandlordConversation(name: 'Michael Kennedy', preview: 'Good afternoon Sir?', time: '8:30', unreadCount: 1),
-  _LandlordConversation(
-    name: 'Emeka Sunday',
-    preview: "That's the price i can give are you still interested?",
-    time: '8:30',
-    unreadCount: 0,
-  ),
-  _LandlordConversation(
-    name: 'Osi',
-    preview: 'I have made payment for the 2 Bedroom apartment',
-    time: '8:30',
-    unreadCount: 2,
-  ),
-  _LandlordConversation(
-    name: 'Olakunle Biju',
-    preview: "That's the price i can give are you still interested?",
-    time: '8:30',
-    unreadCount: 1,
-  ),
-  _LandlordConversation(
-    name: 'Deshsengan Karul',
-    preview: 'I would be available this Thursday',
-    time: '8:30',
-    unreadCount: 1,
-  ),
-];
-
-/// Messages tab of the redesigned landlord dashboard: Unread / Deleted /
-/// Archived filter pills over a list of tenant conversations, each carrying
-/// an unread-count badge instead of the tenant app's plain dot. The search
-/// icon filters by name/preview across every conversation, the overflow
-/// menu can mark everything read, and each row's own menu can move it
-/// between active/archived/deleted — so the Deleted and Archived tabs are
-/// real destinations rather than permanently-empty placeholders.
+/// Messages tab of the redesigned landlord dashboard — real conversations
+/// from the API, filterable by unread. "Deleted"/"Archived" have no backend
+/// model yet (there's no thread-status field), so those filters always show
+/// empty rather than silently keeping fake local state.
 class LandlordMessagesScreen extends StatefulWidget {
   const LandlordMessagesScreen({super.key, required this.theme});
 
@@ -79,7 +22,7 @@ class LandlordMessagesScreen extends StatefulWidget {
 }
 
 class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
-  late final List<_LandlordConversation> _conversations = List.of(_mockConversations);
+  List<ChatThread>? _threads;
   int _filterIndex = 0;
   bool _searching = false;
   final _searchController = TextEditingController();
@@ -88,63 +31,71 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
   static const _filters = ['Unread', 'Deleted', 'Archived'];
 
   @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
-  List<_LandlordConversation> get _visible {
+  Future<void> _load() async {
+    try {
+      final threads = await context.read<AppState>().chat.myThreads();
+      if (!mounted) return;
+      setState(() => _threads = threads);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _threads = []);
+    }
+  }
+
+  List<ChatThread> get _visible {
+    final threads = _threads ?? const [];
     if (_searching && _searchQuery.trim().isNotEmpty) {
       final query = _searchQuery.trim().toLowerCase();
-      return _conversations
+      return threads
           .where(
-            (c) =>
-                c.status != _ConvoStatus.deleted &&
-                (c.name.toLowerCase().contains(query) || c.preview.toLowerCase().contains(query)),
+            (t) =>
+                t.otherParticipantName.toLowerCase().contains(query) ||
+                (t.lastMessage?.body.toLowerCase().contains(query) ?? false),
           )
           .toList();
     }
     switch (_filterIndex) {
       case 0:
-        return _conversations.where((c) => c.status == _ConvoStatus.active && c.unreadCount > 0).toList();
-      case 1:
-        return _conversations.where((c) => c.status == _ConvoStatus.deleted).toList();
+        return threads.where((t) => t.unreadCount > 0).toList();
       default:
-        return _conversations.where((c) => c.status == _ConvoStatus.archived).toList();
+        return const [];
     }
   }
 
-  Future<void> _openThread(_LandlordConversation convo) async {
+  Future<void> _openThread(ChatThread thread) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          theme: widget.theme,
-          contactName: convo.name,
-          initialMessages: [ChatMessage(text: convo.preview, fromMe: false)],
-        ),
+        builder: (_) => ChatThreadScreen(theme: widget.theme, contactName: thread.otherParticipantName, threadId: thread.id),
       ),
     );
     if (!mounted) return;
-    setState(() => convo.unreadCount = 0);
+    _load();
   }
 
-  void _markAllRead() {
-    setState(() {
-      for (final convo in _conversations) {
-        convo.unreadCount = 0;
-      }
-    });
+  Future<void> _markAllRead() async {
+    final appState = context.read<AppState>();
+    final threads = _threads ?? const [];
+    await Future.wait([for (final t in threads.where((t) => t.unreadCount > 0)) appState.chat.markRead(t.id)]);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All conversations marked as read')));
-  }
-
-  void _setStatus(_LandlordConversation convo, _ConvoStatus status) {
-    setState(() => convo.status = status);
+    _load();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final unreadCount = _conversations.where((c) => c.status == _ConvoStatus.active && c.unreadCount > 0).length;
+    final unreadCount = (_threads ?? const []).where((t) => t.unreadCount > 0).length;
 
     return Center(
       child: ConstrainedBox(
@@ -237,76 +188,67 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
               ),
             const SizedBox(height: 12),
             Expanded(
-              child: _visible.isEmpty
-                  ? Center(
-                      child: Text(
-                        _searching && _searchQuery.trim().isNotEmpty
-                            ? 'No conversations match "${_searchQuery.trim()}".'
-                            : 'No ${_filters[_filterIndex].toLowerCase()} conversations.',
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6)),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
-                      itemCount: _visible.length,
-                      separatorBuilder: (_, __) => Divider(color: theme.foreground.withValues(alpha: 0.1), height: 1),
-                      itemBuilder: (context, index) {
-                        final convo = _visible[index];
-                        return InkWell(
-                          onTap: () => _openThread(convo),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              children: [
-                                const LandlordAvatar(radius: 26),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        convo.name,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.body(
-                                          color: theme.foreground,
-                                          size: 15,
-                                          weight: FontWeight.w700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        convo.preview,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.body(
-                                          color: theme.foreground.withValues(alpha: 0.55),
-                                          size: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+              child: _threads == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : _visible.isEmpty
+                      ? Center(
+                          child: Text(
+                            _searching && _searchQuery.trim().isNotEmpty
+                                ? 'No conversations match "${_searchQuery.trim()}".'
+                                : 'No ${_filters[_filterIndex].toLowerCase()} conversations.',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6)),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
+                          itemCount: _visible.length,
+                          separatorBuilder: (_, __) => Divider(color: theme.foreground.withValues(alpha: 0.1), height: 1),
+                          itemBuilder: (context, index) {
+                            final thread = _visible[index];
+                            return InkWell(
+                              onTap: () => _openThread(thread),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                child: Row(
                                   children: [
-                                    Text(
-                                      convo.time,
-                                      style: AppTextStyles.body(
-                                        color: theme.foreground.withValues(alpha: 0.5),
-                                        size: 11,
+                                    const LandlordAvatar(radius: 26),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            thread.otherParticipantName,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTextStyles.body(
+                                              color: theme.foreground,
+                                              size: 15,
+                                              weight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            thread.lastMessage?.body ?? 'No messages yet',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTextStyles.body(
+                                              color: theme.foreground.withValues(alpha: 0.55),
+                                              size: 13,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    const SizedBox(height: 6),
-                                    if (convo.unreadCount > 0)
+                                    const SizedBox(width: 8),
+                                    if (thread.unreadCount > 0)
                                       Container(
                                         width: 18,
                                         height: 18,
                                         alignment: Alignment.center,
                                         decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
                                         child: Text(
-                                          '${convo.unreadCount}',
+                                          '${thread.unreadCount}',
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 10,
@@ -316,24 +258,10 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                                       ),
                                   ],
                                 ),
-                                PopupMenuButton<_ConvoStatus>(
-                                  icon: Icon(Icons.more_vert_rounded, color: theme.foreground.withValues(alpha: 0.5), size: 18),
-                                  onSelected: (status) => _setStatus(convo, status),
-                                  itemBuilder: (context) => [
-                                    if (convo.status != _ConvoStatus.active)
-                                      const PopupMenuItem(value: _ConvoStatus.active, child: Text('Restore')),
-                                    if (convo.status != _ConvoStatus.archived)
-                                      const PopupMenuItem(value: _ConvoStatus.archived, child: Text('Archive')),
-                                    if (convo.status != _ConvoStatus.deleted)
-                                      const PopupMenuItem(value: _ConvoStatus.deleted, child: Text('Delete')),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                              ),
+                            );
+                          },
+                        ),
             ),
           ],
         ),

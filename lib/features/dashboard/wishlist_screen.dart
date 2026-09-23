@@ -15,8 +15,7 @@ class WishlistScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final favoriteIds = context.select<AppState, Set<String>>((state) => state.favoritePropertyIds);
-    final favorites = mockProperties.where((p) => favoriteIds.contains(p.id)).toList();
+    final favorites = context.select<AppState, List<Property>>((state) => state.favoriteProperties);
 
     return Scaffold(
       backgroundColor: theme.background,
