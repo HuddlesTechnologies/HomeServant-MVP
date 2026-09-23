@@ -216,6 +216,13 @@ class AppState extends ChangeNotifier {
     return _authRepo.changePassword(currentPassword: currentPassword, newPassword: newPassword);
   }
 
+  /// [purpose] is `'SIGNUP'` or `'LOGIN_2FA'` — see AuthService.resendOtp.
+  /// Always resolves the same way regardless of whether [email] is
+  /// actually eligible for a new code right now.
+  Future<void> resendOtp({required String purpose}) {
+    return _authRepo.resendOtp(email: email, purpose: purpose);
+  }
+
   /// Always succeeds from the caller's point of view regardless of
   /// whether [email] has an account — see AuthService.forgotPassword on
   /// the backend for why.

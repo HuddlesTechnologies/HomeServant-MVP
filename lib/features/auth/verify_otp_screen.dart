@@ -37,6 +37,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
   Timer? _timer;
   String _code = '';
   bool _submitting = false;
+  bool _resending = false;
   String? _error;
 
   @override
@@ -55,6 +56,24 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
       }
       setState(() => _secondsLeft--);
     });
+  }
+
+  Future<void> _resend() async {
+    setState(() => _resending = true);
+    try {
+      final purpose = switch (widget.purpose) {
+        OtpPurpose.signup => 'SIGNUP',
+        OtpPurpose.login2fa => 'LOGIN_2FA',
+      };
+      await context.read<AppState>().resendOtp(purpose: purpose);
+      if (!mounted) return;
+      _startTimer();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _resending = false);
+    }
   }
 
   @override
@@ -134,9 +153,11 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
           const SizedBox(height: 16),
           Center(
             child: TextButton(
-              onPressed: _secondsLeft == 0 ? _startTimer : null,
+              onPressed: _secondsLeft == 0 && !_resending ? _resend : null,
               child: Text(
-                _secondsLeft == 0 ? 'Resend OTP' : 'Resend available after timer ends',
+                _resending
+                    ? 'Sending…'
+                    : (_secondsLeft == 0 ? 'Resend OTP' : 'Resend available after timer ends'),
                 style: AppTextStyles.body(
                   color: _secondsLeft == 0 ? role.emphasis : role.foreground.withValues(alpha: 0.4),
                   weight: FontWeight.w600,

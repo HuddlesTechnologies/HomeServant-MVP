@@ -11,6 +11,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -96,6 +97,24 @@ export class AuthService {
 
     const tokens = await this.issueTokens(user);
     return { ...tokens, user: this.toPublicUser(user), requiresTwoFactor: false };
+  }
+
+  /// Backs both "Resend OTP" screens (signup verification, login 2FA) —
+  /// previously that button only reset the on-screen countdown and never
+  /// actually requested a new code. Always resolves the same way whether
+  /// or not [dto.email] is eligible (no account, already verified, or 2FA
+  /// off), same reasoning as [forgotPassword] — a different response
+  /// would let a caller enumerate accounts/settings by email.
+  async resendOtp(dto: ResendOtpDto): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (user) {
+      if (dto.purpose === 'SIGNUP' && !user.emailVerifiedAt) {
+        await this.otp.issue(dto.email, OtpPurpose.SIGNUP);
+      } else if (dto.purpose === 'LOGIN_2FA' && user.twoFactorEnabled) {
+        await this.otp.issue(dto.email, OtpPurpose.LOGIN_2FA, user.id);
+      }
+    }
+    return { message: 'If eligible, a new code was sent.' };
   }
 
   async verifyLoginOtp(dto: VerifyOtpDto): Promise<TokenPair & { user: PublicUser }> {

@@ -84,6 +84,16 @@ class AuthRepository {
     });
   }
 
+  Future<void> resendOtp({required String email, required String purpose}) {
+    return _client.call(() async {
+      await _client.dio.post(
+        '/auth/resend-otp',
+        data: {'email': email, 'purpose': purpose},
+        options: Options(extra: {'skipAuth': true}),
+      );
+    });
+  }
+
   Future<void> forgotPassword({required String email}) {
     return _client.call(() async {
       await _client.dio.post(
