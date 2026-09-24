@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { AdminLevel, UserRole } from '@prisma/client';
 import { AllowMustChangePassword } from '../common/decorators/allow-must-change-password.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -12,6 +13,7 @@ import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { AdminService } from './admin.service';
 import { ConfirmAdminDto } from './dto/confirm-admin.dto';
 import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
+import { DelistReasonDto } from './dto/delist-reason.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
@@ -87,8 +89,13 @@ export class AdminController {
 
   @Post('admins/:id/reset-password/confirm')
   @MinAdminLevel(AdminLevel.MODERATOR)
-  confirmAdminPasswordReset(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: ConfirmAdminResetDto) {
-    return this.admin.confirmAdminPasswordReset(actingAdmin.email, actingAdmin.adminLevel!, id, dto);
+  confirmAdminPasswordReset(
+    @CurrentUser() actingAdmin: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: ConfirmAdminResetDto,
+    @Req() req: Request,
+  ) {
+    return this.admin.confirmAdminPasswordReset(actingAdmin.email, actingAdmin.sub, actingAdmin.adminLevel!, id, dto, req.ip);
   }
 
   @Delete('admins/:id')
@@ -97,11 +104,30 @@ export class AdminController {
     await this.admin.removeAdmin(actingAdmin.sub, id);
   }
 
+  // --- Activity log ------------------------------------------------------
+
+  @Get('activity-log')
+  findActivityLog(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.admin.findActivityLog(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
+  }
+
+  @Delete('activity-log')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async clearActivityLog(): Promise<void> {
+    await this.admin.clearActivityLog();
+  }
+
   // --- Users -----------------------------------------------------------
 
   @Get('users')
   findUsers(@Query() query: QueryUsersDto) {
     return this.admin.findUsers(query);
+  }
+
+  @Get('users/:id')
+  findUserDetail(@Param('id') id: string) {
+    return this.admin.findUserDetail(id);
   }
 
   @Patch('users/:id/deactivate')
@@ -155,8 +181,8 @@ export class AdminController {
 
   @Delete('properties/:id')
   @MinAdminLevel(AdminLevel.MODERATOR)
-  async removeProperty(@Param('id') id: string): Promise<void> {
-    await this.admin.removeProperty(id);
+  async removeProperty(@Param('id') id: string, @Body() dto: DelistReasonDto): Promise<void> {
+    await this.admin.removeProperty(id, dto.reason);
   }
 
   // --- Marketplace ---------------------------------------------------------
@@ -168,8 +194,8 @@ export class AdminController {
 
   @Delete('marketplace/products/:id')
   @MinAdminLevel(AdminLevel.MODERATOR)
-  async removeProduct(@Param('id') id: string): Promise<void> {
-    await this.admin.removeProduct(id);
+  async removeProduct(@Param('id') id: string, @Body() dto: DelistReasonDto): Promise<void> {
+    await this.admin.removeProduct(id, dto.reason);
   }
 
   @Get('marketplace/orders')

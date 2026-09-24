@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { MailModule } from '../mail/mail.module';
 import { OtpModule } from '../otp/otp.module';
 import { AccountCleanupService } from './account-cleanup.service';
@@ -9,7 +10,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({}), OtpModule, MailModule],
+  imports: [PassportModule, JwtModule.register({}), OtpModule, MailModule, ActivityLogModule],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, AccountCleanupService],
   exports: [JwtModule, PassportModule, AuthService],

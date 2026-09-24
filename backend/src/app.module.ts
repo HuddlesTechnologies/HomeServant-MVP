@@ -13,6 +13,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PaystackModule } from './paystack/paystack.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PropertiesModule } from './properties/properties.module';
+import { ReportsModule } from './reports/reports.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
@@ -37,6 +38,7 @@ import { VendorsModule } from './vendors/vendors.module';
     PaystackModule,
     NotificationsModule,
     AdminModule,
+    ReportsModule,
   ],
   controllers: [HealthController],
 })

@@ -4,7 +4,9 @@ enum NotificationType {
   vendorRejected,
   bookingStatus,
   marketplaceOrderStatus,
-  newMessage;
+  newMessage,
+  reportAssigned,
+  threadTransferred;
 
   static NotificationType fromApi(String value) => switch (value) {
     'REFERRAL_SIGNUP' => NotificationType.referralSignup,
@@ -13,6 +15,8 @@ enum NotificationType {
     'BOOKING_STATUS' => NotificationType.bookingStatus,
     'MARKETPLACE_ORDER_STATUS' => NotificationType.marketplaceOrderStatus,
     'NEW_MESSAGE' => NotificationType.newMessage,
+    'REPORT_ASSIGNED' => NotificationType.reportAssigned,
+    'THREAD_TRANSFERRED' => NotificationType.threadTransferred,
     _ => NotificationType.referralSignup,
   };
 }

@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { NotificationType } from '@prisma/client';
+import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateThreadDto } from './dto/create-thread.dto';
@@ -12,6 +13,7 @@ export class ChatService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
   ) {}
 
   /// Reuses an existing thread between the same two people about the same
@@ -142,5 +144,40 @@ export class ChatService {
       where: { threadId_userId: { threadId, userId } },
     });
     if (!membership) throw new ForbiddenException('Not a participant of this thread');
+  }
+
+  /// Hands a console conversation off to another admin, "the way Namecheap
+  /// support does it" — [fromAdminId] must actually be in this thread
+  /// (so an admin can only transfer conversations they're personally
+  /// part of, not any thread by id) and [toAdminId] must be an admin
+  /// account. Swaps the ThreadParticipant row's `userId` in place rather
+  /// than delete+recreate, so message history/read state is unaffected.
+  async transferThread(threadId: string, fromAdminId: string, toAdminId: string): Promise<void> {
+    if (fromAdminId === toAdminId) throw new ForbiddenException("Can't transfer a thread to yourself");
+    const membership = await this.prisma.threadParticipant.findUnique({
+      where: { threadId_userId: { threadId, userId: fromAdminId } },
+    });
+    if (!membership) throw new ForbiddenException('Not a participant of this thread');
+
+    const toAdmin = await this.prisma.user.findUnique({ where: { id: toAdminId } });
+    if (!toAdmin || toAdmin.role !== 'ADMIN') throw new NotFoundException('Admin not found');
+    const alreadyIn = await this.prisma.threadParticipant.findUnique({
+      where: { threadId_userId: { threadId, userId: toAdminId } },
+    });
+    if (alreadyIn) throw new ForbiddenException('That admin is already part of this conversation');
+
+    await this.prisma.threadParticipant.update({ where: { id: membership.id }, data: { userId: toAdminId } });
+    await this.notifications.create(
+      toAdminId,
+      NotificationType.THREAD_TRANSFERRED,
+      'A conversation was transferred to you',
+      'Another admin handed off a console conversation to you.',
+    );
+    await this.mail.send(
+      toAdmin.email,
+      'A HomeServant conversation was transferred to you',
+      '<p>Another admin handed off a console conversation to you — open Messages in the admin console to continue it.</p>',
+      'Another admin handed off a console conversation to you — open Messages in the admin console to continue it.',
+    );
   }
 }

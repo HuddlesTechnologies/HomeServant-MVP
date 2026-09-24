@@ -8,6 +8,10 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
+  // Render sits in front of this container as a reverse proxy — without
+  // this, `req.ip` is the proxy's own address for every request, which
+  // is useless for the admin console's Activity Log (login IP/location).
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
   // ChatGateway's realtime message delivery needs this — without it,
   // @WebSocketGateway is registered but nothing actually listens for
   // socket.io connections.

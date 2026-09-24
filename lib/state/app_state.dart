@@ -402,6 +402,11 @@ class AppState extends ChangeNotifier {
   Future<void> _loadInitialData() async {
     if (role == UserRole.admin) {
       await _loadAdminLevel();
+      // Without this, an admin could still send/receive messages over
+      // REST (ChatController has no role restriction), but would never
+      // get the live "message:new" socket event — so a console chat
+      // screen opened mid-session would just sit there until reopened.
+      await _connectChatSocket();
       return;
     }
     await Future.wait([

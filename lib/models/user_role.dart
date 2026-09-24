@@ -41,5 +41,17 @@ enum UserRole {
   /// navy background keeps the gold highlight.
   Color get emphasis => isLandlord ? AppColors.landlordBrown : AppColors.gold;
 
+  /// Only meant for the tenant/landlord auth screens' own copy, where
+  /// this enum is never actually [vendor]/[admin] — see AdminUsersTab/
+  /// AdminUserDetailScreen for a label that covers all four roles.
   String get label => isLandlord ? 'Landlord' : 'Tenant';
+
+  /// Covers every role — for admin-console screens that display a
+  /// vendor's or admin's own role rather than picking auth-screen copy.
+  String get adminLabel => switch (this) {
+    UserRole.tenant => 'Tenant',
+    UserRole.landlord => 'Landlord',
+    UserRole.vendor => 'Vendor',
+    UserRole.admin => 'Admin',
+  };
 }

@@ -61,16 +61,16 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     return RefreshIndicator(
       onRefresh: _load,
       child: GridView.builder(
-        padding: const EdgeInsets.all(20),
-        // A fixed 2-column grid stretched each card to half the full
-        // browser width on desktop admin screens — a max-extent delegate
-        // caps how wide any one tile gets and just adds more columns
-        // instead, so cards stay a sane, compact size at any width.
+        padding: const EdgeInsets.all(16),
+        // 220px still meant only 2 (huge) columns on a phone-width
+        // viewport — this app is mobile-first, so the previous fix only
+        // ever helped on a genuinely wide desktop window. A much smaller
+        // cap forces 3+ compact tiles per row even on a narrow screen.
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 220,
-          crossAxisSpacing: 14,
-          mainAxisSpacing: 14,
-          childAspectRatio: 1.3,
+          maxCrossAxisExtent: 130,
+          crossAxisSpacing: 10,
+          mainAxisSpacing: 10,
+          childAspectRatio: 1.0,
         ),
         itemCount: cards.length,
         itemBuilder: (context, index) => cards[index],
@@ -90,21 +90,30 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: highlight ? Border.all(color: Colors.orange, width: 1.4) : null,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 3))],
+        borderRadius: BorderRadius.circular(12),
+        border: highlight ? Border.all(color: Colors.orange, width: 1.2) : null,
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Icon(icon, color: highlight ? Colors.orange : AppColors.navy, size: 22),
-          const Spacer(),
-          Text(value, style: AppTextStyles.heading(color: AppColors.navy, size: 24)),
-          const SizedBox(height: 2),
-          Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
+          Icon(icon, color: highlight ? Colors.orange : AppColors.navy, size: 16),
+          Text(
+            value,
+            style: AppTextStyles.heading(color: AppColors.navy, size: 17),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Text(
+            label,
+            style: AppTextStyles.body(color: AppColors.hintGrey, size: 10),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );

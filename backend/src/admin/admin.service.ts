@@ -1,7 +1,8 @@
 import { randomBytes } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { AdminLevel, NotificationType, OtpPurpose, Prisma } from '@prisma/client';
+import { AdminLevel, ActivityLogType, NotificationType, OtpPurpose, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AuthService } from '../auth/auth.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -45,6 +46,7 @@ export class AdminService {
     private readonly mail: MailService,
     private readonly notifications: NotificationsService,
     private readonly otp: OtpService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   // --- Bootstrap / admin accounts ---------------------------------------
@@ -179,9 +181,11 @@ export class AdminService {
 
   async confirmAdminPasswordReset(
     actingAdminEmail: string,
+    actingAdminId: string,
     actingAdminLevel: AdminLevel,
     targetId: string,
     dto: ConfirmAdminResetDto,
+    ip?: string,
   ): Promise<{ message: string }> {
     await this.otp.verify(actingAdminEmail, OtpPurpose.ADMIN_RESET_CONFIRM, dto.code);
     const target = await this.requireAdmin(targetId);
@@ -198,6 +202,7 @@ export class AdminService {
     // reset should sign every session for this account out, not just
     // hand out a new password alongside still-valid old ones.
     await this.prisma.refreshToken.updateMany({ where: { userId: targetId, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.activityLog.log(ActivityLogType.ADMIN_PASSWORD_RESET, { actorId: actingAdminId, targetId, ip });
 
     await this.mail.send(
       target.email,
@@ -255,6 +260,18 @@ export class AdminService {
     if (remaining === 0) {
       throw new ForbiddenException("Can't demote/remove the last super admin — promote another admin first");
     }
+  }
+
+  // --- Activity log --------------------------------------------------------
+
+  findActivityLog(page?: number, pageSize?: number) {
+    return this.activityLog.findAll(page, pageSize);
+  }
+
+  /// SUPER_ADMIN only (see AdminController) — every other admin can only
+  /// view the log, never wipe it.
+  clearActivityLog(): Promise<void> {
+    return this.activityLog.clear();
   }
 
   // --- Platform stats ----------------------------------------------------
@@ -320,6 +337,24 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
     return { items, total, page, pageSize };
+  }
+
+  /// Every field on the account (minus [passwordHash]) plus enough of its
+  /// relations to be useful at a glance — full listing/booking/order
+  /// history stays in the dedicated Properties/Marketplace tabs, this is
+  /// just counts. Viewable by any admin tier; only mutating a user is
+  /// tier-gated.
+  async findUserDetail(id: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        vendorProfile: { select: { id: true, businessName: true, status: true, isActive: true } },
+        _count: { select: { properties: true, bookings: true, marketplaceOrders: true, favorites: true, reviews: true } },
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const { passwordHash, ...rest } = user;
+    return rest;
   }
 
   /// Admin-triggered — unlike AuthService.deactivate (self-service), this
@@ -446,10 +481,19 @@ export class AdminService {
     return { items, total, page, pageSize };
   }
 
-  async removeProperty(id: string): Promise<void> {
-    const property = await this.prisma.property.findUnique({ where: { id } });
+  async removeProperty(id: string, reason: string): Promise<void> {
+    const property = await this.prisma.property.findUnique({
+      where: { id },
+      include: { landlord: { select: { email: true } } },
+    });
     if (!property) throw new NotFoundException('Property not found');
     await this.prisma.property.delete({ where: { id } });
+    await this.mail.send(
+      property.landlord.email,
+      `Your listing "${property.title}" was removed`,
+      `<p>Your listing <strong>${property.title}</strong> has been removed from HomeServant by an admin.</p><p>Reason: ${reason}</p>`,
+      `Your listing "${property.title}" has been removed from HomeServant by an admin.\n\nReason: ${reason}`,
+    );
   }
 
   // --- Marketplace ---------------------------------------------------------
@@ -469,10 +513,19 @@ export class AdminService {
     return { items, total, page, pageSize };
   }
 
-  async removeProduct(id: string): Promise<void> {
-    const product = await this.prisma.product.findUnique({ where: { id } });
+  async removeProduct(id: string, reason: string): Promise<void> {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: { vendor: { select: { user: { select: { email: true } } } } },
+    });
     if (!product) throw new NotFoundException('Product not found');
     await this.prisma.product.update({ where: { id }, data: { isAvailable: false } });
+    await this.mail.send(
+      product.vendor.user.email,
+      `Your listing "${product.name}" was removed`,
+      `<p>Your listing <strong>${product.name}</strong> has been removed from the HomeServant Marketplace by an admin.</p><p>Reason: ${reason}</p>`,
+      `Your listing "${product.name}" has been removed from the HomeServant Marketplace by an admin.\n\nReason: ${reason}`,
+    );
   }
 
   async findOrders(page = 1, pageSize = 20) {

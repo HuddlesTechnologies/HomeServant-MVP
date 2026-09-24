@@ -165,8 +165,75 @@ model User {
   vendorProfile      VendorProfile?
   marketplaceOrders  MarketplaceOrder[]
   notifications      Notification[]
+  activityActions    ActivityLog[]       @relation("ActivityActor")
+  activityTargets    ActivityLog[]       @relation("ActivityTarget")
+  reportsFiled       Report[]            @relation("ReportsFiled")
+  reportsAssigned    Report[]            @relation("ReportsAssigned")
 
   @@index([role])
+}
+
+enum ActivityLogType {
+  ADMIN_LOGIN
+  ADMIN_PASSWORD_CHANGED
+  ADMIN_PASSWORD_RESET
+}
+
+/// Site-wide admin audit trail (Activity Log console section) — every
+/// admin login and every admin password change/reset writes one of
+/// these. [actorId] is who performed the action; [targetId] is who it
+/// was performed on (same person for a login or a self-service password
+/// change, a different admin for AdminService.confirmAdminPasswordReset).
+/// Both nullable with onDelete: SetNull so deleting an admin account
+/// later doesn't erase the historical record, just the identity link.
+model ActivityLog {
+  id        String          @id @default(uuid())
+  type      ActivityLogType
+  actorId   String?
+  actor     User?           @relation("ActivityActor", fields: [actorId], references: [id], onDelete: SetNull)
+  targetId  String?
+  target    User?           @relation("ActivityTarget", fields: [targetId], references: [id], onDelete: SetNull)
+  ip        String?
+  /// Best-effort city/country from a free IP-geolocation lookup — absent
+  /// if that lookup failed or timed out; never blocks the action itself.
+  location  String?
+  createdAt DateTime        @default(now())
+
+  @@index([createdAt])
+}
+
+enum ReportTargetType {
+  PROPERTY
+  MARKETPLACE_ITEM
+}
+
+enum ReportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+}
+
+/// A tenant can only report a Property they've actually rented (an
+/// ACCEPTED Booking); a buyer can only report a Product they've actually
+/// bought (a MarketplaceOrderItem on one of their orders) — enforced in
+/// ReportsService, not at the schema level.
+model Report {
+  id              String           @id @default(uuid())
+  reporterId      String
+  reporter        User             @relation("ReportsFiled", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType      ReportTargetType
+  propertyId      String?
+  property        Property?        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  productId       String?
+  product         Product?         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  reason          String
+  status          ReportStatus     @default(OPEN)
+  assignedAdminId String?
+  assignedAdmin   User?            @relation("ReportsAssigned", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([status])
 }
 
 enum NotificationType {
@@ -175,6 +242,8 @@ enum NotificationType {
   VENDOR_REJECTED
   BOOKING_STATUS
   MARKETPLACE_ORDER_STATUS
+  REPORT_ASSIGNED
+  THREAD_TRANSFERRED
   NEW_MESSAGE
 }
 
@@ -270,6 +339,7 @@ model Property {
   favorites   Favorite[]
   reviews     Review[]
   threads     Thread[]
+  reports     Report[]
 
   @@index([landlordId])
   @@index([state, category])
@@ -438,6 +508,7 @@ model Product {
   updatedAt          DateTime            @updatedAt
 
   orderItems MarketplaceOrderItem[]
+  reports    Report[]
 
   @@index([vendorId])
   @@index([category])

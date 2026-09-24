@@ -6,6 +6,7 @@ import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { TransferThreadDto } from './dto/transfer-thread.dto';
 
 @Controller('threads')
 @UseGuards(JwtAuthGuard)
@@ -42,5 +43,15 @@ export class ChatController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async markRead(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.chat.markRead(id, user.sub);
+  }
+
+  /// Admin-only in practice — [transferThread] itself already refuses
+  /// unless [user.sub] is a participant and [dto.adminId] is an admin
+  /// account, so a non-admin caller would just get refused there too;
+  /// no separate `@Roles` needed on top.
+  @Patch(':id/transfer')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async transfer(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: TransferThreadDto): Promise<void> {
+    await this.chat.transferThread(id, user.sub, dto.adminId);
   }
 }

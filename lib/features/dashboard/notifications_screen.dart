@@ -15,6 +15,8 @@ IconData _iconForType(NotificationType type) => switch (type) {
   NotificationType.bookingStatus => Icons.event_available_rounded,
   NotificationType.marketplaceOrderStatus => Icons.local_shipping_rounded,
   NotificationType.newMessage => Icons.chat_bubble_rounded,
+  NotificationType.reportAssigned => Icons.flag_rounded,
+  NotificationType.threadTransferred => Icons.forward_to_inbox_rounded,
 };
 
 String _relativeTime(DateTime time) {

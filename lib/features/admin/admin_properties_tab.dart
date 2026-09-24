@@ -43,16 +43,16 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
   }
 
   Future<void> _remove(AdminProperty property) async {
-    final confirmed = await showAdminConfirmSheet(
+    final reason = await showAdminReasonSheet(
       context,
       title: 'Remove "${property.title}"?',
-      body: "This can't be undone — the listing and any bookings/reviews on it will be permanently deleted.",
+      body: "This can't be undone — the listing and any bookings/reviews on it will be permanently deleted. The landlord is emailed the reason you give below.",
       actionLabel: 'Remove',
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppState>().admin.removeProperty(property.id);
+      await context.read<AppState>().admin.removeProperty(property.id, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('${property.title} removed')));
       _load();
     } on ApiException catch (e) {

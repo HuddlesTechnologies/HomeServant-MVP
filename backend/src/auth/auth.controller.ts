@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
@@ -30,8 +31,8 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto) {
-    return this.auth.login(dto);
+  login(@Body() dto: LoginDto, @Req() req: Request) {
+    return this.auth.login(dto, req.ip);
   }
 
   @Post('google')
@@ -42,8 +43,8 @@ export class AuthController {
 
   @Post('verify-2fa')
   @HttpCode(HttpStatus.OK)
-  verifyTwoFactor(@Body() dto: VerifyOtpDto) {
-    return this.auth.verifyLoginOtp(dto);
+  verifyTwoFactor(@Body() dto: VerifyOtpDto, @Req() req: Request) {
+    return this.auth.verifyLoginOtp(dto, req.ip);
   }
 
   @Post('resend-otp')
@@ -78,8 +79,8 @@ export class AuthController {
 
   @Patch('password')
   @UseGuards(JwtAuthGuard)
-  changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto) {
-    return this.auth.changePassword(user.sub, dto);
+  changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto, @Req() req: Request) {
+    return this.auth.changePassword(user.sub, dto, req.ip);
   }
 
   @Patch('deactivate')

@@ -2,9 +2,10 @@ import { randomUUID } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { OtpPurpose, User } from '@prisma/client';
+import { ActivityLogType, OtpPurpose, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { OtpService } from '../otp/otp.service';
@@ -45,6 +46,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly otp: OtpService,
     private readonly mail: MailService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async signup(dto: SignupDto): Promise<{ message: string; email: string }> {
@@ -85,6 +87,7 @@ export class AuthService {
 
   async login(
     dto: LoginDto,
+    ip?: string,
   ): Promise<
     | (TokenPair & { user: PublicUser; requiresTwoFactor: false; requiresReactivation: false })
     | { requiresTwoFactor: true; requiresReactivation: false; email: string }
@@ -121,6 +124,9 @@ export class AuthService {
     }
 
     const tokens = await this.issueTokens(user);
+    if (user.role === 'ADMIN') {
+      await this.activityLog.log(ActivityLogType.ADMIN_LOGIN, { actorId: user.id, targetId: user.id, ip });
+    }
     return { ...tokens, user: this.toPublicUser(user), requiresTwoFactor: false, requiresReactivation: false };
   }
 
@@ -142,10 +148,13 @@ export class AuthService {
     return { message: 'If eligible, a new code was sent.' };
   }
 
-  async verifyLoginOtp(dto: VerifyOtpDto): Promise<TokenPair & { user: PublicUser }> {
+  async verifyLoginOtp(dto: VerifyOtpDto, ip?: string): Promise<TokenPair & { user: PublicUser }> {
     await this.otp.verify(dto.email, OtpPurpose.LOGIN_2FA, dto.code);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { email: dto.email } });
     const tokens = await this.issueTokens(user);
+    if (user.role === 'ADMIN') {
+      await this.activityLog.log(ActivityLogType.ADMIN_LOGIN, { actorId: user.id, targetId: user.id, ip });
+    }
     return { ...tokens, user: this.toPublicUser(user) };
   }
 
@@ -296,7 +305,7 @@ export class AuthService {
   /// the console would stay locked out under that guard for the rest of
   /// the old (up to 15-minute) access token's life even after actually
   /// fixing it.
-  async changePassword(userId: string, dto: ChangePasswordDto): Promise<TokenPair> {
+  async changePassword(userId: string, dto: ChangePasswordDto, ip?: string): Promise<TokenPair> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (!user.passwordHash) {
       throw new BadRequestException('This account signed up with Google and has no password to change');
@@ -316,6 +325,9 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    if (updated.role === 'ADMIN') {
+      await this.activityLog.log(ActivityLogType.ADMIN_PASSWORD_CHANGED, { actorId: userId, targetId: userId, ip });
+    }
     return this.issueTokens(updated);
   }
 

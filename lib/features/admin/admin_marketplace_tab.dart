@@ -57,16 +57,16 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
   }
 
   Future<void> _removeProduct(AdminProduct product) async {
-    final confirmed = await showAdminConfirmSheet(
+    final reason = await showAdminReasonSheet(
       context,
       title: 'Remove "${product.name}"?',
-      body: "It'll be taken off the Marketplace — past orders referencing it are unaffected.",
+      body: "It'll be taken off the Marketplace — past orders referencing it are unaffected. The vendor is emailed the reason you give below.",
       actionLabel: 'Remove',
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppState>().admin.removeProduct(product.id);
+      await context.read<AppState>().admin.removeProduct(product.id, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('${product.name} removed')));
       _load();
     } on ApiException catch (e) {

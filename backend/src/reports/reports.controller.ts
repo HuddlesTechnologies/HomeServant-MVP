@@ -1,0 +1,59 @@
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { AdminLevelGuard } from '../common/guards/admin-level.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { MustChangePasswordGuard } from '../common/guards/must-change-password.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { CreateReportDto } from './dto/create-report.dto';
+import { SetReportStatusDto } from './dto/set-report-status.dto';
+import { TransferReportDto } from './dto/transfer-report.dto';
+import { ReportsService } from './reports.service';
+
+@Controller('reports')
+@UseGuards(JwtAuthGuard)
+export class ReportsController {
+  constructor(private readonly reports: ReportsService) {}
+
+  /// Any authenticated role — eligibility (actually rented/purchased the
+  /// target) is enforced in ReportsService.create, not by role.
+  @Post()
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateReportDto) {
+    return this.reports.create(user.sub, dto);
+  }
+
+  @Get('mine')
+  mine(@CurrentUser() user: AuthenticatedUser) {
+    return this.reports.findMine(user.sub);
+  }
+
+  @Get()
+  @UseGuards(RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
+  @Roles(UserRole.ADMIN)
+  findAll(@Query('status') status?: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED', @Query('page') page?: string, @Query('pageSize') pageSize?: string) {
+    return this.reports.findAll(status, page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
+  }
+
+  @Get('open-count')
+  @UseGuards(RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
+  @Roles(UserRole.ADMIN)
+  async openCount() {
+    return { count: await this.reports.countOpen() };
+  }
+
+  @Patch(':id/status')
+  @UseGuards(RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
+  @Roles(UserRole.ADMIN)
+  setStatus(@Param('id') id: string, @Body() dto: SetReportStatusDto) {
+    return this.reports.setStatus(id, dto.status);
+  }
+
+  @Patch(':id/transfer')
+  @UseGuards(RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
+  @Roles(UserRole.ADMIN)
+  transfer(@Param('id') id: string, @Body() dto: TransferReportDto) {
+    return this.reports.transfer(id, dto.adminId);
+  }
+}

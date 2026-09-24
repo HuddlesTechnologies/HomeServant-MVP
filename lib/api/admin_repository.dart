@@ -29,6 +29,13 @@ class AdminRepository {
     });
   }
 
+  Future<AdminUserDetail> findUserDetail(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/users/$id');
+      return AdminUserDetail.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
   Future<void> deactivateUser(String id) {
     return _client.call(() async {
       await _client.dio.patch('/admin/users/$id/deactivate');
@@ -97,9 +104,9 @@ class AdminRepository {
     });
   }
 
-  Future<void> removeProperty(String id) {
+  Future<void> removeProperty(String id, {required String reason}) {
     return _client.call(() async {
-      await _client.dio.delete('/admin/properties/$id');
+      await _client.dio.delete('/admin/properties/$id', data: {'reason': reason});
     });
   }
 
@@ -119,9 +126,9 @@ class AdminRepository {
     });
   }
 
-  Future<void> removeProduct(String id) {
+  Future<void> removeProduct(String id, {required String reason}) {
     return _client.call(() async {
-      await _client.dio.delete('/admin/marketplace/products/$id');
+      await _client.dio.delete('/admin/marketplace/products/$id', data: {'reason': reason});
     });
   }
 
@@ -203,6 +210,61 @@ class AdminRepository {
   Future<void> removeAdmin(String id) {
     return _client.call(() async {
       await _client.dio.delete('/admin/admins/$id');
+    });
+  }
+
+  Future<AdminPage<ActivityLogEntry>> findActivityLog({int page = 1}) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/activity-log', queryParameters: {'page': page});
+      final data = response.data as Map<String, dynamic>;
+      return AdminPage<ActivityLogEntry>(
+        items: (data['items'] as List).cast<Map<String, dynamic>>().map(ActivityLogEntry.fromApi).toList(),
+        total: data['total'] as int,
+        page: data['page'] as int,
+        pageSize: data['pageSize'] as int,
+      );
+    });
+  }
+
+  /// SUPER_ADMIN only — the backend independently re-checks this.
+  Future<void> clearActivityLog() {
+    return _client.call(() async {
+      await _client.dio.delete('/admin/activity-log');
+    });
+  }
+
+  Future<AdminPage<AdminReport>> findReports({ReportStatus? status, int page = 1}) {
+    return _client.call(() async {
+      final response = await _client.dio.get(
+        '/reports',
+        queryParameters: {if (status != null) 'status': status.apiValue, 'page': page},
+      );
+      final data = response.data as Map<String, dynamic>;
+      return AdminPage<AdminReport>(
+        items: (data['items'] as List).cast<Map<String, dynamic>>().map(AdminReport.fromApi).toList(),
+        total: data['total'] as int,
+        page: data['page'] as int,
+        pageSize: data['pageSize'] as int,
+      );
+    });
+  }
+
+  Future<int> openReportsCount() {
+    return _client.call(() async {
+      final response = await _client.dio.get('/reports/open-count');
+      return (response.data as Map<String, dynamic>)['count'] as int;
+    });
+  }
+
+  Future<void> setReportStatus(String id, ReportStatus status) {
+    return _client.call(() async {
+      await _client.dio.patch('/reports/$id/status', data: {'status': status.apiValue});
+    });
+  }
+
+  Future<void> transferReport(String id, String adminId) {
+    return _client.call(() async {
+      await _client.dio.patch('/reports/$id/transfer', data: {'adminId': adminId});
     });
   }
 }

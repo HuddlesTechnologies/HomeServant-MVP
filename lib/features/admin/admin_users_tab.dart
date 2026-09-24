@@ -5,8 +5,11 @@ import '../../api/models/admin_models.dart';
 import '../../api/models/auth_user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/dashboard_theme.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
+import '../dashboard/chat_thread_screen.dart';
+import 'admin_user_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
@@ -60,6 +63,31 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       await context.read<AppState>().admin.deactivateUser(user.id);
       messenger.showSnackBar(SnackBar(content: Text('${user.email} deactivated')));
       _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  void _openDetail(AdminUser user) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AdminUserDetailScreen(userId: user.id)),
+    );
+  }
+
+  Future<void> _message(AdminUser user) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final thread = await context.read<AppState>().chat.openThread(recipientId: user.id);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            theme: DashboardTheme.midnight,
+            contactName: user.fullName?.isNotEmpty == true ? user.fullName! : user.email,
+            threadId: thread.id,
+          ),
+        ),
+      );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -126,52 +154,61 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final user = users[index];
-                      return Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        user.fullName?.isNotEmpty == true ? user.fullName! : user.email,
-                                        style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      _Badge(text: user.role.label, color: AppColors.navy),
-                                      if (user.isDeactivated) ...[
-                                        const SizedBox(width: 6),
-                                        const _Badge(text: 'Deactivated', color: Colors.redAccent),
+                      return InkWell(
+                        onTap: () => _openDetail(user),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text(
+                                          user.fullName?.isNotEmpty == true ? user.fullName! : user.email,
+                                          style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        _Badge(text: user.role.adminLabel, color: AppColors.navy),
+                                        if (user.isDeactivated) ...[
+                                          const SizedBox(width: 6),
+                                          const _Badge(text: 'Deactivated', color: Colors.redAccent),
+                                        ],
                                       ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(user.email, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
-                                ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(user.email, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
+                                  ],
+                                ),
                               ),
-                            ),
-                            if (context.canModerate || !user.isDeactivated)
-                              PopupMenuButton<String>(
-                                onSelected: (value) {
-                                  if (value == 'deactivate') _deactivate(user);
-                                  if (value == 'delete') _delete(user);
-                                },
-                                itemBuilder: (context) => [
-                                  if (!user.isDeactivated)
-                                    const PopupMenuItem(value: 'deactivate', child: Text('Deactivate')),
-                                  // Deleting is more consequential than
-                                  // deactivating — matches the backend's
-                                  // MinAdminLevel(MODERATOR) on DELETE
-                                  // /admin/users/:id.
-                                  if (context.canModerate)
-                                    const PopupMenuItem(value: 'delete', child: Text('Delete permanently')),
-                                ],
+                              IconButton(
+                                onPressed: () => _message(user),
+                                icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.navy),
+                                tooltip: 'Message',
                               ),
-                          ],
+                              if (context.canModerate || !user.isDeactivated)
+                                PopupMenuButton<String>(
+                                  onSelected: (value) {
+                                    if (value == 'deactivate') _deactivate(user);
+                                    if (value == 'delete') _delete(user);
+                                  },
+                                  itemBuilder: (context) => [
+                                    if (!user.isDeactivated)
+                                      const PopupMenuItem(value: 'deactivate', child: Text('Deactivate')),
+                                    // Deleting is more consequential than
+                                    // deactivating — matches the backend's
+                                    // MinAdminLevel(MODERATOR) on DELETE
+                                    // /admin/users/:id.
+                                    if (context.canModerate)
+                                      const PopupMenuItem(value: 'delete', child: Text('Delete permanently')),
+                                  ],
+                                ),
+                            ],
+                          ),
                         ),
                       );
                     },
