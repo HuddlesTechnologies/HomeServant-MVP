@@ -186,6 +186,7 @@ class AppState extends ChangeNotifier {
   Future<void> verifySignupOtp(String code) async {
     final user = await _authRepo.verifySignup(email: email, code: code);
     _applyUser(user);
+    await refreshProfile();
     await _loadInitialData();
   }
 
@@ -207,6 +208,7 @@ class AppState extends ChangeNotifier {
       return LoginOutcome.requiresTwoFactor;
     }
     _applyUser(result.user!);
+    await refreshProfile();
     await _loadInitialData();
     return LoginOutcome.success;
   }
@@ -233,6 +235,7 @@ class AppState extends ChangeNotifier {
     }
     _pendingGoogleIdToken = null;
     _applyUser(result.user!);
+    await refreshProfile();
     await _loadInitialData();
     return LoginOutcome.success;
   }
@@ -240,6 +243,7 @@ class AppState extends ChangeNotifier {
   Future<void> verifyLoginTwoFactor(String code) async {
     final user = await _authRepo.verifyLoginTwoFactor(email: email, code: code);
     _applyUser(user);
+    await refreshProfile();
     await _loadInitialData();
   }
 
@@ -282,7 +286,6 @@ class AppState extends ChangeNotifier {
       referralCode: referralCode,
     );
     _applyUser(user);
-    if (houseAddress != null) this.houseAddress = houseAddress;
     notifyListeners();
   }
 
@@ -334,6 +337,11 @@ class AppState extends ChangeNotifier {
     if (user.fullName != null) fullName = user.fullName!;
     if (user.phoneNumber != null) phoneNumber = user.phoneNumber!;
     if (user.profilePhotoUrl != null) profilePhotoPath = user.profilePhotoUrl;
+    // Both absent from the narrower login/signup response shape (see
+    // AuthUser's doc comment) — only ever present once the full profile's
+    // been fetched, so a null here means "not fetched yet", not "cleared".
+    if (user.houseAddress != null) houseAddress = user.houseAddress!;
+    if (user.dateOfBirth != null) dateOfBirth = user.dateOfBirth;
     twoFactorEnabled = user.twoFactorEnabled;
     bankCode = user.bankCode;
     bankName = user.bankName;

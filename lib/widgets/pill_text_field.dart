@@ -25,6 +25,7 @@ class PillTextField extends StatefulWidget {
     this.minLines,
     this.maxLines = 1,
     this.borderRadius = 28,
+    this.focusNode,
   });
 
   final String hint;
@@ -41,6 +42,7 @@ class PillTextField extends StatefulWidget {
   final int? minLines;
   final int? maxLines;
   final double borderRadius;
+  final FocusNode? focusNode;
 
   @override
   State<PillTextField> createState() => _PillTextFieldState();
@@ -54,6 +56,7 @@ class _PillTextFieldState extends State<PillTextField> {
     final showPasswordToggle = widget.obscureText && widget.trailing == null;
     return TextFormField(
       controller: widget.controller,
+      focusNode: widget.focusNode,
       obscureText: _obscured,
       keyboardType: widget.keyboardType,
       onTap: widget.onTap,

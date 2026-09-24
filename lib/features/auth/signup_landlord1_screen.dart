@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
+import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
@@ -24,6 +25,8 @@ class _SignupLandlord1ScreenState extends State<SignupLandlord1Screen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _houseAddress = TextEditingController();
+  final _dob = TextEditingController();
+  DateTime? _dateOfBirth;
   PickedUpload? _certificate;
   static const _role = UserRole.landlord;
   bool _submitting = false;
@@ -36,11 +39,28 @@ class _SignupLandlord1ScreenState extends State<SignupLandlord1Screen> {
     }
   }
 
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dateOfBirth ?? DateTime(now.year - 25),
+      firstDate: DateTime(now.year - 100),
+      lastDate: now,
+    );
+    if (picked != null) {
+      setState(() {
+        _dateOfBirth = picked;
+        _dob.text = formatShortDate(picked);
+      });
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();
     _phone.dispose();
     _houseAddress.dispose();
+    _dob.dispose();
     super.dispose();
   }
 
@@ -57,6 +77,7 @@ class _SignupLandlord1ScreenState extends State<SignupLandlord1Screen> {
         fullName: _name.text.trim(),
         phoneNumber: _phone.text.trim(),
         houseAddress: _houseAddress.text.trim(),
+        dateOfBirth: _dateOfBirth,
       );
       if (!mounted) return;
       widget.onContinue({
@@ -108,6 +129,16 @@ class _SignupLandlord1ScreenState extends State<SignupLandlord1Screen> {
             controller: _houseAddress,
             hint: 'Street, area, city',
           ),
+          const SizedBox(height: 18),
+          _Field(
+            label: 'Date of Birth',
+            color: _role.foreground,
+            controller: _dob,
+            hint: 'Tap to select a date',
+            readOnly: true,
+            onTap: _pickDate,
+            trailing: const Icon(Icons.calendar_today_outlined, color: AppColors.navy, size: 18),
+          ),
           const SizedBox(height: 22),
           PillOutlineButton(
             label: _certificate?.fileName ?? 'Certificate of Ownership',
@@ -141,6 +172,9 @@ class _Field extends StatelessWidget {
     required this.controller,
     this.keyboardType,
     this.hint = '',
+    this.readOnly = false,
+    this.onTap,
+    this.trailing,
   });
 
   final String label;
@@ -148,6 +182,9 @@ class _Field extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType? keyboardType;
   final String hint;
+  final bool readOnly;
+  final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -163,6 +200,9 @@ class _Field extends StatelessWidget {
           hint: hint,
           controller: controller,
           keyboardType: keyboardType,
+          readOnly: readOnly,
+          onTap: onTap,
+          trailing: trailing,
         ),
       ],
     );

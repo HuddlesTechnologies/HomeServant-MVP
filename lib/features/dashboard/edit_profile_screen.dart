@@ -25,6 +25,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _dob;
   late final TextEditingController _address;
   late final TextEditingController _phone;
+  final _fullNameFocus = FocusNode();
+  final _addressFocus = FocusNode();
+  final _phoneFocus = FocusNode();
   DateTime? _dateOfBirth;
   String? _photoPath;
   bool _saving = false;
@@ -54,6 +57,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _dob.dispose();
     _address.dispose();
     _phone.dispose();
+    _fullNameFocus.dispose();
+    _addressFocus.dispose();
+    _phoneFocus.dispose();
     super.dispose();
   }
 
@@ -99,10 +105,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           folder: 'profile-photos',
         );
       }
+      // Blank fields must become null, not '' — the backend's phone-number
+      // validator rejects an empty string, so if the phone or address was
+      // never filled in, echoing it back as '' failed validation and
+      // blocked the whole save (including the field actually being
+      // edited, e.g. the name).
       await appState.completeProfile(
         fullName: _fullName.text.trim(),
-        phoneNumber: _phone.text.trim(),
-        houseAddress: _address.text.trim(),
+        phoneNumber: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+        houseAddress: _address.text.trim().isEmpty ? null : _address.text.trim(),
         dateOfBirth: _dateOfBirth,
         profilePhotoUrl: photoUrl,
       );
@@ -208,9 +219,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   label: 'Full Name',
                   theme: theme,
                   controller: _fullName,
+                  focusNode: _fullNameFocus,
                   editable: _fullNameEditable,
                   hint: 'Enter your full name',
-                  onToggleEdit: () => setState(() => _fullNameEditable = !_fullNameEditable),
+                  onToggleEdit: () {
+                    setState(() => _fullNameEditable = !_fullNameEditable);
+                    if (_fullNameEditable) {
+                      FocusScope.of(context).requestFocus(_fullNameFocus);
+                    }
+                  },
                 ),
                 const SizedBox(height: 18),
                 _EditableField(
@@ -234,22 +251,31 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   label: 'House Address',
                   theme: theme,
                   controller: _address,
+                  focusNode: _addressFocus,
                   editable: _addressEditable,
                   hint: 'Enter your house address',
-                  onToggleEdit:
-                      () =>
-                          setState(() => _addressEditable = !_addressEditable),
+                  onToggleEdit: () {
+                    setState(() => _addressEditable = !_addressEditable);
+                    if (_addressEditable) {
+                      FocusScope.of(context).requestFocus(_addressFocus);
+                    }
+                  },
                 ),
                 const SizedBox(height: 18),
                 _EditableField(
                   label: 'Phone Number',
                   theme: theme,
                   controller: _phone,
+                  focusNode: _phoneFocus,
                   editable: _phoneEditable,
                   hint: 'Enter your phone number',
                   keyboardType: TextInputType.phone,
-                  onToggleEdit:
-                      () => setState(() => _phoneEditable = !_phoneEditable),
+                  onToggleEdit: () {
+                    setState(() => _phoneEditable = !_phoneEditable);
+                    if (_phoneEditable) {
+                      FocusScope.of(context).requestFocus(_phoneFocus);
+                    }
+                  },
                 ),
                 const SizedBox(height: 32),
                 PillButton(
@@ -284,6 +310,7 @@ class _EditableField extends StatelessWidget {
     this.extraTrailing,
     this.forceReadOnly = false,
     this.onFieldTap,
+    this.focusNode,
   });
 
   final String label;
@@ -298,6 +325,7 @@ class _EditableField extends StatelessWidget {
   final Widget? extraTrailing;
   final bool forceReadOnly;
   final VoidCallback? onFieldTap;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -319,6 +347,7 @@ class _EditableField extends StatelessWidget {
               child: PillTextField(
                 hint: hint,
                 controller: controller,
+                focusNode: focusNode,
                 readOnly: forceReadOnly || !editable,
                 onTap: onFieldTap,
                 keyboardType: keyboardType,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
+import '../../core/date_format.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
@@ -22,6 +24,8 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _referral = TextEditingController();
+  final _dob = TextEditingController();
+  DateTime? _dateOfBirth;
   static const _role = UserRole.tenant;
   bool _submitting = false;
   String? _error;
@@ -31,7 +35,24 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
     _name.dispose();
     _phone.dispose();
     _referral.dispose();
+    _dob.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dateOfBirth ?? DateTime(now.year - 25),
+      firstDate: DateTime(now.year - 100),
+      lastDate: now,
+    );
+    if (picked != null) {
+      setState(() {
+        _dateOfBirth = picked;
+        _dob.text = formatShortDate(picked);
+      });
+    }
   }
 
   Future<void> _continue() async {
@@ -44,6 +65,7 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
       await context.read<AppState>().completeProfile(
         fullName: _name.text.trim(),
         phoneNumber: _phone.text.trim(),
+        dateOfBirth: _dateOfBirth,
         referralCode: referral.isEmpty ? null : referral,
       );
       if (!mounted) return;
@@ -87,6 +109,16 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
           ),
           const SizedBox(height: 18),
           _Field(
+            label: 'Date of Birth',
+            color: _role.foreground,
+            controller: _dob,
+            hint: 'Tap to select a date',
+            readOnly: true,
+            onTap: _pickDate,
+            trailing: const Icon(Icons.calendar_today_outlined, color: AppColors.navy, size: 18),
+          ),
+          const SizedBox(height: 18),
+          _Field(
             label: 'Referral code (optional)',
             color: _role.foreground,
             controller: _referral,
@@ -118,6 +150,9 @@ class _Field extends StatelessWidget {
     required this.controller,
     this.keyboardType,
     this.hint = '',
+    this.readOnly = false,
+    this.onTap,
+    this.trailing,
   });
 
   final String label;
@@ -125,6 +160,9 @@ class _Field extends StatelessWidget {
   final TextEditingController controller;
   final TextInputType? keyboardType;
   final String hint;
+  final bool readOnly;
+  final VoidCallback? onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -140,6 +178,9 @@ class _Field extends StatelessWidget {
           hint: hint,
           controller: controller,
           keyboardType: keyboardType,
+          readOnly: readOnly,
+          onTap: onTap,
+          trailing: trailing,
         ),
       ],
     );
