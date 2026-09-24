@@ -8,11 +8,14 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { AdminService } from './admin.service';
-import { CreateAdminDto } from './dto/create-admin.dto';
+import { ConfirmAdminDto } from './dto/confirm-admin.dto';
+import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
+import { RequestAdminDto } from './dto/request-admin.dto';
 import { SetAdminLevelDto } from './dto/set-admin-level.dto';
+import { SetAdminTwoFactorDto } from './dto/set-admin-two-factor.dto';
 
 /// Every route here requires an authenticated ADMIN account at minimum
 /// (SUPPORT tier or above); routes that need more than that carry their
@@ -46,16 +49,42 @@ export class AdminController {
     return this.admin.findAdmins();
   }
 
-  @Post('admins')
+  @Post('admins/request')
   @MinAdminLevel(AdminLevel.SUPER_ADMIN)
-  createAdmin(@Body() dto: CreateAdminDto) {
-    return this.admin.createAdmin(dto);
+  requestAdmin(@Body() dto: RequestAdminDto) {
+    return this.admin.requestAdminOtp(dto);
+  }
+
+  @Post('admins/confirm')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  confirmAdmin(@Body() dto: ConfirmAdminDto) {
+    return this.admin.confirmAdminOtp(dto);
   }
 
   @Patch('admins/:id/level')
   @MinAdminLevel(AdminLevel.SUPER_ADMIN)
   setAdminLevel(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: SetAdminLevelDto) {
     return this.admin.setAdminLevel(actingAdmin.sub, id, dto.level);
+  }
+
+  @Patch('admins/:id/two-factor')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  setAdminTwoFactor(@Param('id') id: string, @Body() dto: SetAdminTwoFactorDto) {
+    return this.admin.setAdminTwoFactor(id, dto.enabled);
+  }
+
+  /// SUPPORT can't reach either of these — a locked-out admin needs a
+  /// SUPER_ADMIN or MODERATOR to vouch for the reset.
+  @Post('admins/:id/reset-password/request')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  requestAdminPasswordReset(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string) {
+    return this.admin.requestAdminPasswordReset(actingAdmin.email, actingAdmin.sub, id);
+  }
+
+  @Post('admins/:id/reset-password/confirm')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  confirmAdminPasswordReset(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: ConfirmAdminResetDto) {
+    return this.admin.confirmAdminPasswordReset(actingAdmin.email, id, dto);
   }
 
   @Delete('admins/:id')

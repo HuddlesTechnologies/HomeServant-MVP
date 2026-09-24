@@ -155,18 +155,48 @@ class AdminRepository {
     });
   }
 
-  Future<void> createAdmin({required String email, required String password, required String fullName, required AdminLevel level}) {
+  /// Step 1 of the invite flow — sends a confirmation code and one-time
+  /// temporary password to [email] in a single email. Call [confirmAdmin]
+  /// with that code to actually create the account.
+  Future<void> requestAdmin({required String email, required String fullName, required AdminLevel level}) {
     return _client.call(() async {
       await _client.dio.post(
-        '/admin/admins',
-        data: {'email': email, 'password': password, 'fullName': fullName, 'level': level.apiValue},
+        '/admin/admins/request',
+        data: {'email': email, 'fullName': fullName, 'level': level.apiValue},
       );
+    });
+  }
+
+  Future<void> confirmAdmin({required String email, required String code}) {
+    return _client.call(() async {
+      await _client.dio.post('/admin/admins/confirm', data: {'email': email, 'code': code});
     });
   }
 
   Future<void> setAdminLevel(String id, AdminLevel level) {
     return _client.call(() async {
       await _client.dio.patch('/admin/admins/$id/level', data: {'level': level.apiValue});
+    });
+  }
+
+  Future<void> setAdminTwoFactor(String id, bool enabled) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/admins/$id/two-factor', data: {'enabled': enabled});
+    });
+  }
+
+  /// Step-up flow for a locked-out admin's password — the OTP goes to
+  /// *this* (acting) admin's own email, not the target's. See
+  /// AdminService.requestAdminPasswordReset.
+  Future<void> requestAdminPasswordReset(String id) {
+    return _client.call(() async {
+      await _client.dio.post('/admin/admins/$id/reset-password/request');
+    });
+  }
+
+  Future<void> confirmAdminPasswordReset(String id, String code) {
+    return _client.call(() async {
+      await _client.dio.post('/admin/admins/$id/reset-password/confirm', data: {'code': code});
     });
   }
 

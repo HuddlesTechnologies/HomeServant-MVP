@@ -18,6 +18,7 @@ const profileSelect = {
   dateOfBirth: true,
   profilePhotoUrl: true,
   twoFactorEnabled: true,
+  mustChangePassword: true,
   bankCode: true,
   bankName: true,
   accountNumber: true,

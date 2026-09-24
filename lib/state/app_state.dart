@@ -129,6 +129,10 @@ class AppState extends ChangeNotifier {
   String houseAddress = '';
   DateTime? dateOfBirth;
 
+  /// True for an admin still signed in with the one-time temp password
+  /// from their invite email — see AuthUser.mustChangePassword.
+  bool mustChangePassword = false;
+
   /// This user's own invite code, shown on "Invite Friends" — always
   /// real, from the server (see [_applyUser]); the backend assigns one
   /// lazily on first `GET /users/me` if an account predates this field.
@@ -247,8 +251,12 @@ class AppState extends ChangeNotifier {
     await _loadInitialData();
   }
 
-  Future<void> changePassword({required String currentPassword, required String newPassword}) {
-    return _authRepo.changePassword(currentPassword: currentPassword, newPassword: newPassword);
+  Future<void> changePassword({required String currentPassword, required String newPassword}) async {
+    await _authRepo.changePassword(currentPassword: currentPassword, newPassword: newPassword);
+    // Clears mustChangePassword locally right away — otherwise it'd stay
+    // stuck true (and the admin console's forced change-password gate
+    // stuck up) until something else happened to refetch the profile.
+    await refreshProfile();
   }
 
   /// [purpose] is `'SIGNUP'` or `'LOGIN_2FA'` — see AuthService.resendOtp.
@@ -343,6 +351,7 @@ class AppState extends ChangeNotifier {
     if (user.houseAddress != null) houseAddress = user.houseAddress!;
     if (user.dateOfBirth != null) dateOfBirth = user.dateOfBirth;
     twoFactorEnabled = user.twoFactorEnabled;
+    mustChangePassword = user.mustChangePassword;
     bankCode = user.bankCode;
     bankName = user.bankName;
     accountNumber = user.accountNumber;
@@ -363,6 +372,7 @@ class AppState extends ChangeNotifier {
     dateOfBirth = null;
     profilePhotoPath = null;
     twoFactorEnabled = false;
+    mustChangePassword = false;
     bankCode = null;
     bankName = null;
     accountNumber = null;

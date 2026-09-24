@@ -1,16 +1,30 @@
+import { randomBytes } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { AdminLevel, NotificationType, Prisma } from '@prisma/client';
+import { AdminLevel, NotificationType, OtpPurpose, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from '../auth/auth.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OtpService } from '../otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfirmAdminDto } from './dto/confirm-admin.dto';
+import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
+import { RequestAdminDto } from './dto/request-admin.dto';
 
-const adminSelect = { id: true, email: true, fullName: true, role: true, adminLevel: true, createdAt: true } as const;
+const adminSelect = {
+  id: true,
+  email: true,
+  fullName: true,
+  role: true,
+  adminLevel: true,
+  twoFactorEnabled: true,
+  mustChangePassword: true,
+  createdAt: true,
+} as const;
 
 @Injectable()
 export class AdminService {
@@ -19,26 +33,22 @@ export class AdminService {
     private readonly auth: AuthService,
     private readonly mail: MailService,
     private readonly notifications: NotificationsService,
+    private readonly otp: OtpService,
   ) {}
 
   // --- Bootstrap / admin accounts ---------------------------------------
 
   /// The only way the very first admin account is ever created — after
-  /// this, [createAdmin] (a SUPER_ADMIN acting from the console) is the
-  /// only other way one can exist; signup/Google auth both explicitly
-  /// refuse role: ADMIN. Always SUPER_ADMIN — someone has to be able to
-  /// manage the rest.
+  /// this, [requestAdminOtp]/[confirmAdminOtp] (a SUPER_ADMIN acting from
+  /// the console) is the only other way one can exist; signup/Google auth
+  /// both explicitly refuse role: ADMIN. Always SUPER_ADMIN — someone has
+  /// to be able to manage the rest.
   async bootstrapFirstAdmin(dto: CreateAdminDto) {
     const existingAdmin = await this.prisma.user.findFirst({ where: { role: 'ADMIN' } });
     if (existingAdmin) {
       throw new ForbiddenException('An admin account already exists — sign in and create additional admins from the console');
     }
     return this.createAdminAccount(dto, AdminLevel.SUPER_ADMIN);
-  }
-
-  async createAdmin(dto: CreateAdminDto) {
-    if (!dto.level) throw new BadRequestException('level is required');
-    return this.createAdminAccount(dto, dto.level);
   }
 
   private async createAdminAccount(dto: CreateAdminDto, level: AdminLevel) {
@@ -56,6 +66,113 @@ export class AdminService {
       },
       select: adminSelect,
     });
+  }
+
+  /// Step 1 of adding an admin from the console: generates a one-time
+  /// temporary password and an OTP, emails both to [dto.email] in a
+  /// single message, and stashes [dto.fullName]/[dto.level]/the temp
+  /// password's hash in PendingAdmin until [confirmAdminOtp] is called
+  /// with that code — no User row exists for this email yet, so re-
+  /// requesting before confirming just overwrites the pending invite.
+  async requestAdminOtp(dto: RequestAdminDto): Promise<{ message: string }> {
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing) throw new ConflictException('An account with this email already exists');
+
+    const tempPassword = randomBytes(9).toString('base64url'); // 12 chars
+    const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
+    const code = await this.otp.generate(dto.email, OtpPurpose.ADMIN_CREATE);
+
+    await this.prisma.pendingAdmin.upsert({
+      where: { email: dto.email },
+      create: { email: dto.email, fullName: dto.fullName, level: dto.level, tempPasswordHash },
+      update: { fullName: dto.fullName, level: dto.level, tempPasswordHash },
+    });
+
+    await this.mail.send(
+      dto.email,
+      'Your HomeServant admin invite',
+      `<p>You've been invited to the HomeServant admin console as <strong>${dto.level}</strong>.</p>` +
+        `<p>Confirmation code (give this to whoever is setting up your account):</p>` +
+        `<p style="font-size:28px;font-weight:700;letter-spacing:4px;">${code}</p>` +
+        `<p>Your one-time temporary password (sign in with this, then set your own — it only works until you do):</p>` +
+        `<p style="font-size:20px;font-weight:700;">${tempPassword}</p>` +
+        `<p>The code expires in 10 minutes.</p>`,
+      `You've been invited to the HomeServant admin console as ${dto.level}.\n\n` +
+        `Confirmation code: ${code}\n` +
+        `Temporary password: ${tempPassword}\n\n` +
+        `Sign in with the temporary password, then set your own — it only works until you do. The code expires in 10 minutes.`,
+    );
+
+    return { message: `Code sent to ${dto.email}` };
+  }
+
+  /// Step 2: the code from that same email, entered back in the console,
+  /// actually creates the admin account with the temp password from step
+  /// 1 — see requestAdminOtp's doc comment for why both live there.
+  async confirmAdminOtp(dto: ConfirmAdminDto) {
+    await this.otp.verify(dto.email, OtpPurpose.ADMIN_CREATE, dto.code);
+    const pending = await this.prisma.pendingAdmin.findUnique({ where: { email: dto.email } });
+    if (!pending) throw new BadRequestException('No pending invite for this email — request a new code');
+
+    const admin = await this.prisma.user.create({
+      data: {
+        email: pending.email,
+        passwordHash: pending.tempPasswordHash,
+        role: 'ADMIN',
+        adminLevel: pending.level,
+        fullName: pending.fullName,
+        emailVerifiedAt: new Date(),
+        mustChangePassword: true,
+      },
+      select: adminSelect,
+    });
+    await this.prisma.pendingAdmin.delete({ where: { email: dto.email } });
+    return admin;
+  }
+
+  /// SUPER_ADMIN toggling 2FA on another admin's behalf — distinct from
+  /// that admin turning their own on/off via `PATCH /users/me` (Settings),
+  /// which needs no special permission since it's just their own account.
+  async setAdminTwoFactor(targetId: string, enabled: boolean) {
+    await this.requireAdmin(targetId);
+    return this.prisma.user.update({ where: { id: targetId }, data: { twoFactorEnabled: enabled }, select: adminSelect });
+  }
+
+  /// A locked-out admin has no self-service reset (AuthService.forgotPassword
+  /// explicitly refuses ADMIN accounts) — only a SUPER_ADMIN/MODERATOR can
+  /// get them back in, and only after re-verifying *their own* identity
+  /// first: this sends a step-up OTP to the acting admin's own email
+  /// (never the target's), so resetting someone else's password can't be
+  /// done from an unlocked/unattended console session. [confirmAdminPasswordReset]
+  /// is the second half, gated on that code.
+  async requestAdminPasswordReset(actingAdminEmail: string, actingAdminId: string, targetId: string): Promise<{ message: string }> {
+    await this.requireAdmin(targetId);
+    await this.otp.issue(actingAdminEmail, OtpPurpose.ADMIN_RESET_CONFIRM, actingAdminId);
+    return { message: `Confirmation code sent to ${actingAdminEmail}` };
+  }
+
+  async confirmAdminPasswordReset(actingAdminEmail: string, targetId: string, dto: ConfirmAdminResetDto): Promise<{ message: string }> {
+    await this.otp.verify(actingAdminEmail, OtpPurpose.ADMIN_RESET_CONFIRM, dto.code);
+    const target = await this.requireAdmin(targetId);
+
+    const tempPassword = randomBytes(9).toString('base64url');
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    await this.prisma.user.update({ where: { id: targetId }, data: { passwordHash, mustChangePassword: true } });
+    // Matches AuthService.changePassword/resetPassword — a credential
+    // reset should sign every session for this account out, not just
+    // hand out a new password alongside still-valid old ones.
+    await this.prisma.refreshToken.updateMany({ where: { userId: targetId, revokedAt: null }, data: { revokedAt: new Date() } });
+
+    await this.mail.send(
+      target.email,
+      'Your HomeServant admin password was reset',
+      `<p>A super admin or moderator reset your admin password.</p>` +
+        `<p>Your new one-time temporary password (sign in with this, then set your own — it only works until you do):</p>` +
+        `<p style="font-size:20px;font-weight:700;">${tempPassword}</p>`,
+      `A super admin or moderator reset your admin password.\n\nTemporary password: ${tempPassword}\n\nSign in with this, then set your own — it only works until you do.`,
+    );
+
+    return { message: `Password reset — a new temporary password was emailed to ${target.email}` };
   }
 
   findAdmins() {

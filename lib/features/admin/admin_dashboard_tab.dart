@@ -62,11 +62,15 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
       onRefresh: _load,
       child: GridView.builder(
         padding: const EdgeInsets.all(20),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
+        // A fixed 2-column grid stretched each card to half the full
+        // browser width on desktop admin screens — a max-extent delegate
+        // caps how wide any one tile gets and just adds more columns
+        // instead, so cards stay a sane, compact size at any width.
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 220,
           crossAxisSpacing: 14,
           mainAxisSpacing: 14,
-          childAspectRatio: 1.4,
+          childAspectRatio: 1.3,
         ),
         itemCount: cards.length,
         itemBuilder: (context, index) => cards[index],

@@ -33,13 +33,23 @@ enum AdminLevel {
 }
 
 class AdminAccount {
-  const AdminAccount({required this.id, required this.email, required this.level, this.fullName, required this.createdAt});
+  const AdminAccount({
+    required this.id,
+    required this.email,
+    required this.level,
+    this.fullName,
+    required this.createdAt,
+    this.twoFactorEnabled = false,
+    this.mustChangePassword = false,
+  });
 
   final String id;
   final String email;
   final AdminLevel level;
   final String? fullName;
   final DateTime createdAt;
+  final bool twoFactorEnabled;
+  final bool mustChangePassword;
 
   factory AdminAccount.fromApi(Map<String, dynamic> json) => AdminAccount(
     id: json['id'] as String,
@@ -47,6 +57,8 @@ class AdminAccount {
     level: AdminLevel.fromApi(json['adminLevel'] as String),
     fullName: json['fullName'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
+    twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
+    mustChangePassword: json['mustChangePassword'] as bool? ?? false,
   );
 }
 

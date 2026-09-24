@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
+import '../../widgets/change_password_sheet.dart';
 import 'admin_admins_tab.dart';
 import 'admin_dashboard_tab.dart';
 import 'admin_marketplace_tab.dart';
@@ -14,10 +15,12 @@ import 'admin_vendors_tab.dart';
 /// Navigation shell for the whole admin console — a bottom nav switching
 /// between moderation areas, matching the tab-shell pattern every other
 /// role's dashboard already uses in this app. The "Admins" destination
-/// (managing other admin accounts) only appears for a SUPER_ADMIN — every
-/// write it leads to is independently re-checked server-side
-/// (AdminLevelGuard), so hiding it here is a UX nicety, not the actual
-/// security boundary.
+/// appears for MODERATOR and up — a MODERATOR only sees a read-only list
+/// plus the "reset another admin's password" action there (see
+/// AdminAdminsTab), while creating/removing admins and changing
+/// levels/2FA stays SUPER_ADMIN-only within that same screen. Every write
+/// is independently re-checked server-side (AdminLevelGuard) regardless
+/// of what's shown here.
 class AdminShell extends StatefulWidget {
   const AdminShell({super.key});
 
@@ -27,6 +30,97 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptPasswordChange());
+  }
+
+  /// Blocking, not just advisory — an admin created via the console's
+  /// invite flow is still signed in with the one-time temp password from
+  /// their invite email, and re-shows itself after a cancelled sheet
+  /// (mustChangePassword only clears once AppState.changePassword
+  /// actually succeeds) so it can't just be dismissed away.
+  Future<void> _maybePromptPasswordChange() async {
+    if (!mounted || !context.read<AppState>().mustChangePassword) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text("You're using a temporary password"),
+          content: const Text('Set your own password to continue using the admin console.'),
+          actions: [
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await showChangePasswordSheet(context);
+                if (mounted) _maybePromptPasswordChange();
+              },
+              child: const Text('Change Password'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSettings(BuildContext context) async {
+    final appState = context.read<AppState>();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => Padding(
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 24 + MediaQuery.of(context).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Account Settings', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Two-Factor Authentication', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 14)),
+                        Text('Require a one-time code by email at login', style: AppTextStyles.body(color: AppColors.hintGrey, size: 12)),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: appState.twoFactorEnabled,
+                    onChanged: (value) async {
+                      await appState.setTwoFactorEnabled(value);
+                      setSheetState(() {});
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    showChangePasswordSheet(context);
+                  },
+                  style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                  child: const Text('Change Password'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   static const _baseTabs = [
     AdminDashboardTab(),
@@ -51,9 +145,9 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
-    final isSuperAdmin = context.watch<AppState>().adminLevel?.isSuperAdmin ?? false;
-    final tabs = isSuperAdmin ? const [..._baseTabs, AdminAdminsTab()] : _baseTabs;
-    final destinations = isSuperAdmin
+    final canSeeAdmins = context.watch<AppState>().adminLevel?.atLeastModerator ?? false;
+    final tabs = canSeeAdmins ? const [..._baseTabs, AdminAdminsTab()] : _baseTabs;
+    final destinations = canSeeAdmins
         ? const [
             ..._baseDestinations,
             NavigationDestination(
@@ -73,6 +167,11 @@ class _AdminShellState extends State<AdminShell> {
         automaticallyImplyLeading: false,
         title: Text('Admin Console', style: AppTextStyles.heading(color: Colors.white, size: 18)),
         actions: [
+          IconButton(
+            onPressed: () => _openSettings(context),
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            tooltip: 'Account settings',
+          ),
           IconButton(
             onPressed: () => _logOut(context),
             icon: const Icon(Icons.logout_rounded, color: Colors.white),

@@ -38,7 +38,9 @@ import '../widgets/app_lock_screen.dart';
 /// from another platform's session.
 void _proceedPastTwoFactor(BuildContext context) {
   final appState = context.read<AppState>();
-  if (!kIsWeb && appState.appLockEnabled && appState.appLockPin != null) {
+  if (appState.role == UserRole.admin) {
+    context.go('/admin');
+  } else if (!kIsWeb && appState.appLockEnabled && appState.appLockPin != null) {
     context.go('/app-lock-verify');
   } else {
     context.go('/dashboard');

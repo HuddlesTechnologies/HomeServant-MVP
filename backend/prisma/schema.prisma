@@ -57,6 +57,8 @@ enum OtpPurpose {
   SIGNUP
   LOGIN_2FA
   PASSWORD_RESET
+  ADMIN_CREATE
+  ADMIN_RESET_CONFIRM
 }
 
 enum MarketplaceCategory {
@@ -111,6 +113,13 @@ model User {
   profilePhotoUrl  String?
   emailVerifiedAt  DateTime?
   twoFactorEnabled Boolean   @default(false)
+  /// Set true for an admin account created via the console's invite-by-
+  /// email flow (AdminService.confirmAdminOtp) — signed in with the
+  /// one-time password from that invite email. AuthService.changePassword
+  /// clears it. The Flutter admin console checks this right after login
+  /// and blocks entry into the console behind a mandatory "set your
+  /// password" step until it's cleared.
+  mustChangePassword Boolean @default(false)
   /// Set by `PATCH /auth/deactivate` (Settings > Danger Zone). Hides this
   /// landlord's properties from the public feed and every session gets
   /// signed out; cleared automatically the next time this account logs
@@ -221,6 +230,21 @@ model OtpCode {
   createdAt   DateTime   @default(now())
 
   @@index([destination, purpose])
+}
+
+/// An admin invite waiting on its ADMIN_CREATE OTP to be confirmed from
+/// the console (see AdminService.requestAdminOtp/confirmAdminOtp) — no
+/// User row exists yet for [email] at this point, so the details entered
+/// on the "New Admin" form have to live somewhere between the two steps.
+/// Deleted once confirmed (or replaced if requested again for the same
+/// email before that happens).
+model PendingAdmin {
+  id               String     @id @default(uuid())
+  email            String     @unique
+  fullName         String
+  level            AdminLevel
+  tempPasswordHash String
+  createdAt        DateTime   @default(now())
 }
 
 model Property {

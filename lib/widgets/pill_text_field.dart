@@ -52,6 +52,19 @@ class _PillTextFieldState extends State<PillTextField> {
   late bool _obscured = widget.obscureText;
 
   @override
+  void didUpdateWidget(covariant PillTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A caller driving visibility externally (its own IconButton passed as
+    // `trailing`, e.g. AdminLoginScreen) toggles its own state and passes
+    // a new `obscureText` down — without this, `_obscured` stayed frozen
+    // at whatever it was on first build, so the field never actually
+    // revealed the password despite the icon itself flipping.
+    if (oldWidget.obscureText != widget.obscureText) {
+      _obscured = widget.obscureText;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final showPasswordToggle = widget.obscureText && widget.trailing == null;
     return TextFormField(

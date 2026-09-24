@@ -19,6 +19,16 @@ export class OtpService {
   /// which is 4 boxes), stores its hash, and sends it through whichever
   /// OtpProvider is configured.
   async issue(destination: string, purpose: OtpPurpose, userId?: string): Promise<void> {
+    const code = await this.generate(destination, purpose, userId);
+    await this.provider.send(destination, code);
+  }
+
+  /// Same as [issue] but hands back the plaintext code instead of sending
+  /// it through [OtpProvider] — for a caller that needs to fold the code
+  /// into a larger custom email (e.g. AdminService's invite email, which
+  /// also carries a temporary password) rather than the bare-code
+  /// template every other OTP purpose uses.
+  async generate(destination: string, purpose: OtpPurpose, userId?: string): Promise<string> {
     const code = String(Math.floor(1000 + Math.random() * 9000));
     const codeHash = await bcrypt.hash(code, 10);
 
@@ -32,7 +42,7 @@ export class OtpService {
       },
     });
 
-    await this.provider.send(destination, code);
+    return code;
   }
 
   /// Verifies [code] against the most recent unconsumed, unexpired code

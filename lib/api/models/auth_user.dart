@@ -19,6 +19,7 @@ class AuthUser {
     this.referralCode,
     this.houseAddress,
     this.dateOfBirth,
+    this.mustChangePassword = false,
   });
 
   final String id;
@@ -36,6 +37,12 @@ class AuthUser {
   /// don't stay stuck at their pre-session-restore defaults.
   final String? houseAddress;
   final DateTime? dateOfBirth;
+
+  /// True for an admin account still signed in with the one-time
+  /// temporary password from its invite email — the console blocks entry
+  /// behind a mandatory password-change step until this clears. Always
+  /// false for every other role.
+  final bool mustChangePassword;
 
   /// The landlord's payout account — the account a tenant's payment is
   /// credited to. Always set as a group, verified against Paystack; see
@@ -65,6 +72,7 @@ class AuthUser {
     referralCode: json['referralCode'] as String?,
     houseAddress: json['houseAddress'] as String?,
     dateOfBirth: json['dateOfBirth'] != null ? DateTime.parse(json['dateOfBirth'] as String) : null,
+    mustChangePassword: json['mustChangePassword'] as bool? ?? false,
   );
 }
 

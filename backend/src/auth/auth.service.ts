@@ -27,6 +27,7 @@ export interface PublicUser {
   phoneNumber: string | null;
   profilePhotoUrl: string | null;
   twoFactorEnabled: boolean;
+  mustChangePassword: boolean;
 }
 
 export interface TokenPair {
@@ -258,9 +259,14 @@ export class AuthService {
   /// would let an attacker enumerate registered emails. A Google-only
   /// account (no passwordHash) also gets the generic response but no code,
   /// since there's no password on it to reset.
+  /// Self-service — deliberately excludes ADMIN accounts (same "no
+  /// account either way" response, so this can't be used to fingerprint
+  /// which emails are admins). A locked-out admin has to go through
+  /// another SUPER_ADMIN/MODERATOR instead — see
+  /// AdminService.requestAdminPasswordReset.
   async forgotPassword(dto: ForgotPasswordDto): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (user?.passwordHash) {
+    if (user?.passwordHash && user.role !== 'ADMIN') {
       await this.otp.issue(dto.email, OtpPurpose.PASSWORD_RESET, user.id);
     }
     return { message: 'If an account exists for that email, a reset code has been sent.' };
@@ -268,6 +274,12 @@ export class AuthService {
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     await this.otp.verify(dto.email, OtpPurpose.PASSWORD_RESET, dto.code);
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing?.role === 'ADMIN') {
+      // Can only get here if somehow an OTP was issued anyway — refuse to
+      // apply it rather than trusting [forgotPassword] was never bypassed.
+      throw new ForbiddenException('Admin accounts can only be reset by another admin from the console');
+    }
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
     const user = await this.prisma.user.update({ where: { email: dto.email }, data: { passwordHash } });
     // Same as changePassword — a password reset should sign out every
@@ -287,7 +299,7 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect');
     }
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
-    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false } });
     // Every other session's refresh token stops working — matches the
     // usual expectation that changing your password signs out devices
     // that aren't the one that just changed it.
@@ -373,6 +385,7 @@ export class AuthService {
       phoneNumber: user.phoneNumber,
       profilePhotoUrl: user.profilePhotoUrl,
       twoFactorEnabled: user.twoFactorEnabled,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 }
