@@ -25,6 +25,16 @@ enum UserRole {
   ADMIN
 }
 
+/// Ranked low to high — AdminLevelGuard compares enum index, so the
+/// declaration order here *is* the hierarchy (SUPPORT < MODERATOR <
+/// SUPER_ADMIN). Reordering these values changes every endpoint's
+/// effective minimum level.
+enum AdminLevel {
+  SUPPORT
+  MODERATOR
+  SUPER_ADMIN
+}
+
 enum PropertyCategory {
   HOUSE
   SHORTLET
@@ -89,6 +99,10 @@ model User {
   /// email/password, if they later link Google to the same email).
   googleId         String?   @unique
   role             UserRole
+  /// Only meaningful when [role] is ADMIN — which admin console actions
+  /// this account can take (see AdminLevelGuard). Null for every other
+  /// role.
+  adminLevel       AdminLevel?
   firstName        String?
   lastName         String?
   fullName         String?

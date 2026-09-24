@@ -1,6 +1,55 @@
 import '../../models/user_role.dart';
 import 'vendor.dart';
 
+/// Ranked low to high — matches the backend's declaration order
+/// (SUPPORT < MODERATOR < SUPER_ADMIN, see AdminLevel in
+/// backend/prisma/schema.prisma). [index] on the enum itself doubles as
+/// the rank for UI comparisons like "can this admin do X".
+enum AdminLevel {
+  support,
+  moderator,
+  superAdmin;
+
+  String get apiValue => switch (this) {
+    AdminLevel.support => 'SUPPORT',
+    AdminLevel.moderator => 'MODERATOR',
+    AdminLevel.superAdmin => 'SUPER_ADMIN',
+  };
+
+  String get label => switch (this) {
+    AdminLevel.support => 'Support',
+    AdminLevel.moderator => 'Moderator',
+    AdminLevel.superAdmin => 'Super Admin',
+  };
+
+  bool get atLeastModerator => index >= AdminLevel.moderator.index;
+  bool get isSuperAdmin => this == AdminLevel.superAdmin;
+
+  static AdminLevel fromApi(String value) => switch (value) {
+    'MODERATOR' => AdminLevel.moderator,
+    'SUPER_ADMIN' => AdminLevel.superAdmin,
+    _ => AdminLevel.support,
+  };
+}
+
+class AdminAccount {
+  const AdminAccount({required this.id, required this.email, required this.level, this.fullName, required this.createdAt});
+
+  final String id;
+  final String email;
+  final AdminLevel level;
+  final String? fullName;
+  final DateTime createdAt;
+
+  factory AdminAccount.fromApi(Map<String, dynamic> json) => AdminAccount(
+    id: json['id'] as String,
+    email: json['email'] as String,
+    level: AdminLevel.fromApi(json['adminLevel'] as String),
+    fullName: json['fullName'] as String?,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
+}
+
 class AdminStats {
   const AdminStats({
     required this.totalUsers,

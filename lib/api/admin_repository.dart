@@ -138,9 +138,41 @@ class AdminRepository {
     });
   }
 
-  Future<void> createAdmin({required String email, required String password, required String fullName}) {
+  /// The current admin's own level — fetched right after admin login to
+  /// decide what the console shows/allows (the server enforces the real
+  /// authorization on every write regardless, this is only for the UI).
+  Future<AdminLevel> myLevel() {
     return _client.call(() async {
-      await _client.dio.post('/admin/admins', data: {'email': email, 'password': password, 'fullName': fullName});
+      final response = await _client.dio.get('/admin/me');
+      return AdminLevel.fromApi((response.data as Map<String, dynamic>)['adminLevel'] as String);
+    });
+  }
+
+  Future<List<AdminAccount>> findAdmins() {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/admins');
+      return (response.data as List).cast<Map<String, dynamic>>().map(AdminAccount.fromApi).toList();
+    });
+  }
+
+  Future<void> createAdmin({required String email, required String password, required String fullName, required AdminLevel level}) {
+    return _client.call(() async {
+      await _client.dio.post(
+        '/admin/admins',
+        data: {'email': email, 'password': password, 'fullName': fullName, 'level': level.apiValue},
+      );
+    });
+  }
+
+  Future<void> setAdminLevel(String id, AdminLevel level) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/admins/$id/level', data: {'level': level.apiValue});
+    });
+  }
+
+  Future<void> removeAdmin(String id) {
+    return _client.call(() async {
+      await _client.dio.delete('/admin/admins/$id');
     });
   }
 }

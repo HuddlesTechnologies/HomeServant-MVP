@@ -8,6 +8,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
 enum _MarketplaceView { products, orders }
@@ -140,7 +141,7 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
                     ],
                   ),
                 ),
-                if (product.isAvailable)
+                if (product.isAvailable && context.canModerate)
                   IconButton(
                     onPressed: () => _removeProduct(product),
                     icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),

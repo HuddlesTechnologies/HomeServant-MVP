@@ -8,6 +8,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
 class AdminUsersTab extends StatefulWidget {
@@ -153,17 +154,23 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                                 ],
                               ),
                             ),
-                            PopupMenuButton<String>(
-                              onSelected: (value) {
-                                if (value == 'deactivate') _deactivate(user);
-                                if (value == 'delete') _delete(user);
-                              },
-                              itemBuilder: (context) => [
-                                if (!user.isDeactivated)
-                                  const PopupMenuItem(value: 'deactivate', child: Text('Deactivate')),
-                                const PopupMenuItem(value: 'delete', child: Text('Delete permanently')),
-                              ],
-                            ),
+                            if (context.canModerate || !user.isDeactivated)
+                              PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'deactivate') _deactivate(user);
+                                  if (value == 'delete') _delete(user);
+                                },
+                                itemBuilder: (context) => [
+                                  if (!user.isDeactivated)
+                                    const PopupMenuItem(value: 'deactivate', child: Text('Deactivate')),
+                                  // Deleting is more consequential than
+                                  // deactivating — matches the backend's
+                                  // MinAdminLevel(MODERATOR) on DELETE
+                                  // /admin/users/:id.
+                                  if (context.canModerate)
+                                    const PopupMenuItem(value: 'delete', child: Text('Delete permanently')),
+                                ],
+                              ),
                           ],
                         ),
                       );

@@ -1,5 +1,5 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationType, Prisma } from '@prisma/client';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { AdminLevel, NotificationType, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { AuthService } from '../auth/auth.service';
 import { MailService } from '../mail/mail.service';
@@ -9,6 +9,8 @@ import { CreateAdminDto } from './dto/create-admin.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
+
+const adminSelect = { id: true, email: true, fullName: true, role: true, adminLevel: true, createdAt: true } as const;
 
 @Injectable()
 export class AdminService {
@@ -21,23 +23,25 @@ export class AdminService {
 
   // --- Bootstrap / admin accounts ---------------------------------------
 
-  /// The only way an admin account is ever created — either this (once,
-  /// when no admin exists yet, gated by ADMIN_BOOTSTRAP_SECRET at the
-  /// controller) or [createAdmin] (by an existing admin, from the
-  /// console). Signup/Google auth both explicitly refuse role: ADMIN.
+  /// The only way the very first admin account is ever created — after
+  /// this, [createAdmin] (a SUPER_ADMIN acting from the console) is the
+  /// only other way one can exist; signup/Google auth both explicitly
+  /// refuse role: ADMIN. Always SUPER_ADMIN — someone has to be able to
+  /// manage the rest.
   async bootstrapFirstAdmin(dto: CreateAdminDto) {
     const existingAdmin = await this.prisma.user.findFirst({ where: { role: 'ADMIN' } });
     if (existingAdmin) {
       throw new ForbiddenException('An admin account already exists — sign in and create additional admins from the console');
     }
-    return this.createAdminAccount(dto);
+    return this.createAdminAccount(dto, AdminLevel.SUPER_ADMIN);
   }
 
   async createAdmin(dto: CreateAdminDto) {
-    return this.createAdminAccount(dto);
+    if (!dto.level) throw new BadRequestException('level is required');
+    return this.createAdminAccount(dto, dto.level);
   }
 
-  private async createAdminAccount(dto: CreateAdminDto) {
+  private async createAdminAccount(dto: CreateAdminDto, level: AdminLevel) {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('An account with this email already exists');
     const passwordHash = await bcrypt.hash(dto.password, 10);
@@ -46,11 +50,58 @@ export class AdminService {
         email: dto.email,
         passwordHash,
         role: 'ADMIN',
+        adminLevel: level,
         fullName: dto.fullName,
         emailVerifiedAt: new Date(),
       },
-      select: { id: true, email: true, fullName: true, role: true, createdAt: true },
+      select: adminSelect,
     });
+  }
+
+  findAdmins() {
+    return this.prisma.user.findMany({ where: { role: 'ADMIN' }, select: adminSelect, orderBy: { createdAt: 'asc' } });
+  }
+
+  /// [actingAdminId] is only used to block a SUPER_ADMIN demoting
+  /// themself out of being the last one — anyone else moving anyone else
+  /// between tiers is otherwise unrestricted (a SUPER_ADMIN can even
+  /// promote another admin to SUPER_ADMIN, or demote one that isn't the
+  /// last).
+  async setAdminLevel(actingAdminId: string, targetId: string, level: AdminLevel) {
+    const target = await this.requireAdmin(targetId);
+    if (target.adminLevel === AdminLevel.SUPER_ADMIN && level !== AdminLevel.SUPER_ADMIN) {
+      await this.assertNotLastSuperAdmin(targetId);
+    }
+    return this.prisma.user.update({ where: { id: targetId }, data: { adminLevel: level }, select: adminSelect });
+  }
+
+  async removeAdmin(actingAdminId: string, targetId: string): Promise<void> {
+    if (actingAdminId === targetId) {
+      throw new ForbiddenException("Can't remove your own admin account from the console");
+    }
+    const target = await this.requireAdmin(targetId);
+    if (target.adminLevel === AdminLevel.SUPER_ADMIN) {
+      await this.assertNotLastSuperAdmin(targetId);
+    }
+    await this.auth.deleteAccount(targetId);
+  }
+
+  private async requireAdmin(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user || user.role !== 'ADMIN') throw new NotFoundException('Admin not found');
+    return user;
+  }
+
+  /// Guards both [setAdminLevel] (demoting) and [removeAdmin] (deleting)
+  /// against ever leaving the platform with zero SUPER_ADMINs able to
+  /// manage the rest of the console.
+  private async assertNotLastSuperAdmin(excludingId: string): Promise<void> {
+    const remaining = await this.prisma.user.count({
+      where: { role: 'ADMIN', adminLevel: AdminLevel.SUPER_ADMIN, id: { not: excludingId } },
+    });
+    if (remaining === 0) {
+      throw new ForbiddenException("Can't demote/remove the last super admin — promote another admin first");
+    }
   }
 
   // --- Platform stats ----------------------------------------------------

@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
 class AdminVendorsTab extends StatefulWidget {
@@ -211,6 +212,12 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                               Text('Reason: ${vendor.rejectionReason}', style: AppTextStyles.body(color: Colors.redAccent, size: 12)),
                             ],
                             const SizedBox(height: 10),
+                            if (!context.canModerate)
+                              Text(
+                                'View only — moderator level required to act on vendors',
+                                style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5, weight: FontWeight.w600),
+                              )
+                            else
                             Row(
                               children: [
                                 if (vendor.status == VendorApplicationStatus.pending) ...[

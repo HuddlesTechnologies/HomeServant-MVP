@@ -1,8 +1,9 @@
-import { Body, Controller, Delete, Get, Headers, NotFoundException, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { UserRole } from '@prisma/client';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { AdminLevel, UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { MinAdminLevel } from '../common/decorators/min-admin-level.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { AdminLevelGuard } from '../common/guards/admin-level.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -11,142 +12,135 @@ import { CreateAdminDto } from './dto/create-admin.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
+import { SetAdminLevelDto } from './dto/set-admin-level.dto';
 
+/// Every route here requires an authenticated ADMIN account at minimum
+/// (SUPPORT tier or above); routes that need more than that carry their
+/// own `@MinAdminLevel(...)`. See AdminLevel's doc comment in
+/// schema.prisma for the SUPPORT < MODERATOR < SUPER_ADMIN ranking.
 @Controller('admin')
+@UseGuards(JwtAuthGuard, RolesGuard, AdminLevelGuard)
+@Roles(UserRole.ADMIN)
 export class AdminController {
-  constructor(
-    private readonly admin: AdminService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly admin: AdminService) {}
 
-  /// The only unauthenticated route in this controller — creates the
-  /// very first admin account, gated by a long random secret set as the
-  /// ADMIN_BOOTSTRAP_SECRET env var (never committed, shared out of band
-  /// with whoever is standing the platform up). Refuses once any admin
-  /// already exists — see AdminService.bootstrapFirstAdmin.
-  @Post('bootstrap')
-  bootstrap(@Headers('x-admin-bootstrap-secret') secret: string | undefined, @Body() dto: CreateAdminDto) {
-    if (!secret || secret !== this.config.getOrThrow<string>('ADMIN_BOOTSTRAP_SECRET')) {
-      // Same response whether the secret is missing or wrong — no
-      // "close, but no" hint.
-      throw new NotFoundException();
-    }
-    return this.admin.bootstrapFirstAdmin(dto);
-  }
-
-  @Post('admins')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  createAdmin(@Body() dto: CreateAdminDto) {
-    return this.admin.createAdmin(dto);
+  /// Confirms `request.user` is really an admin (and which tier) — used
+  /// by the client right after login to decide whether to route into the
+  /// admin console and which actions to show, rather than trusting a
+  /// client-side guess.
+  @Get('me')
+  me(@CurrentUser() user: AuthenticatedUser) {
+    return { id: user.sub, email: user.email, role: user.role, adminLevel: user.adminLevel };
   }
 
   @Get('stats')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   stats() {
     return this.admin.stats();
   }
 
+  // --- Admin management (SUPER_ADMIN only) --------------------------------
+
+  @Get('admins')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  findAdmins() {
+    return this.admin.findAdmins();
+  }
+
+  @Post('admins')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  createAdmin(@Body() dto: CreateAdminDto) {
+    return this.admin.createAdmin(dto);
+  }
+
+  @Patch('admins/:id/level')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  setAdminLevel(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: SetAdminLevelDto) {
+    return this.admin.setAdminLevel(actingAdmin.sub, id, dto.level);
+  }
+
+  @Delete('admins/:id')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  async removeAdmin(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string): Promise<void> {
+    await this.admin.removeAdmin(actingAdmin.sub, id);
+  }
+
+  // --- Users -----------------------------------------------------------
+
   @Get('users')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   findUsers(@Query() query: QueryUsersDto) {
     return this.admin.findUsers(query);
   }
 
   @Patch('users/:id/deactivate')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   async deactivateUser(@Param('id') id: string): Promise<void> {
     await this.admin.deactivateUser(id);
   }
 
   @Delete('users/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   async deleteUser(@Param('id') id: string): Promise<void> {
     await this.admin.deleteUser(id);
   }
 
+  // --- Vendors ---------------------------------------------------------
+
   @Get('vendors')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   findVendors(@Query() query: QueryVendorsDto) {
     return this.admin.findVendors(query);
   }
 
   @Patch('vendors/:id/approve')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   approveVendor(@Param('id') id: string) {
     return this.admin.approveVendor(id);
   }
 
   @Patch('vendors/:id/reject')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   rejectVendor(@Param('id') id: string, @Body() dto: RejectVendorDto) {
     return this.admin.rejectVendor(id, dto);
   }
 
   @Patch('vendors/:id/suspend')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   suspendVendor(@Param('id') id: string) {
     return this.admin.suspendVendor(id);
   }
 
   @Patch('vendors/:id/unsuspend')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   unsuspendVendor(@Param('id') id: string) {
     return this.admin.unsuspendVendor(id);
   }
 
+  // --- Properties --------------------------------------------------------
+
   @Get('properties')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   findProperties(@Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('search') search?: string) {
     return this.admin.findProperties(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined, search);
   }
 
   @Delete('properties/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   async removeProperty(@Param('id') id: string): Promise<void> {
     await this.admin.removeProperty(id);
   }
 
+  // --- Marketplace ---------------------------------------------------------
+
   @Get('marketplace/products')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   findProducts(@Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('search') search?: string) {
     return this.admin.findProducts(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined, search);
   }
 
   @Delete('marketplace/products/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   async removeProduct(@Param('id') id: string): Promise<void> {
     await this.admin.removeProduct(id);
   }
 
   @Get('marketplace/orders')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   findOrders(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
     return this.admin.findOrders(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
-  }
-
-  /// Confirms `request.user` is really an admin — used by the client
-  /// right after login to decide whether to route into the admin
-  /// console (role is already in the JWT, but this is a real
-  /// authorization check rather than trusting the client's own claim).
-  @Get('me')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  me(@CurrentUser() user: AuthenticatedUser) {
-    return { id: user.sub, email: user.email, role: user.role };
   }
 }

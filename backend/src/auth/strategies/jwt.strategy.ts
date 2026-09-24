@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { UserRole } from '@prisma/client';
+import { AdminLevel, UserRole } from '@prisma/client';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
 export interface JwtPayload {
   sub: string;
   email: string;
   role: UserRole;
+  /// Only set when [role] is ADMIN — see AdminLevelGuard.
+  adminLevel?: AdminLevel;
 }
 
 /// What ends up on `request.user` for every guarded route — deliberately

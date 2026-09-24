@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/admin_repository.dart';
+import '../api/models/admin_models.dart';
 import '../api/api_client.dart';
 import '../api/auth_repository.dart';
 import '../api/bookings_repository.dart';
@@ -366,6 +367,7 @@ class AppState extends ChangeNotifier {
     _rentalHistory = {};
     notifications = [];
     unreadNotificationCount = 0;
+    adminLevel = null;
     pushNotificationsEnabled = true;
     newMessageNotifications = true;
     propertyUpdateNotifications = true;
@@ -380,6 +382,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _loadInitialData() async {
+    if (role == UserRole.admin) {
+      await _loadAdminLevel();
+      return;
+    }
     await Future.wait([
       loadFavorites(),
       loadMyReviews(),
@@ -388,6 +394,19 @@ class AppState extends ChangeNotifier {
       if (role == UserRole.landlord) ...[loadLandlordProperties(), loadLandlordBookings()],
     ]);
     await _connectChatSocket();
+  }
+
+  AdminLevel? adminLevel;
+
+  Future<void> _loadAdminLevel() async {
+    try {
+      adminLevel = await _adminRepo.myLevel();
+      notifyListeners();
+    } catch (_) {
+      // Leaves it null — AdminShell treats that the same as "not yet
+      // loaded" and shows the lowest-privilege view until a retry
+      // succeeds, rather than guessing.
+    }
   }
 
   final ChatSocketService _chatSocket = ChatSocketService();

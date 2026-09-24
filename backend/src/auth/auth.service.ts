@@ -345,7 +345,7 @@ export class AuthService {
 
   private async issueTokens(user: User): Promise<TokenPair> {
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, email: user.email, role: user.role },
+      { sub: user.id, email: user.email, role: user.role, adminLevel: user.adminLevel ?? undefined },
       { secret: this.config.getOrThrow('JWT_ACCESS_SECRET'), expiresIn: this.config.get('JWT_ACCESS_TTL', '15m') },
     );
 

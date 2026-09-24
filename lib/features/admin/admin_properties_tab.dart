@@ -7,6 +7,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
 class AdminPropertiesTab extends StatefulWidget {
@@ -104,10 +105,11 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                                 ],
                               ),
                             ),
-                            IconButton(
-                              onPressed: () => _remove(property),
-                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-                            ),
+                            if (context.canModerate)
+                              IconButton(
+                                onPressed: () => _remove(property),
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                              ),
                           ],
                         ),
                       );
