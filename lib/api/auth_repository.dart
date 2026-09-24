@@ -130,9 +130,18 @@ class AuthRepository {
     });
   }
 
+  /// The response carries a fresh token pair (mainly for an admin
+  /// account, whose access token bakes in `mustChangePassword` — see
+  /// AuthService.changePassword) — saved here so nothing else has to
+  /// remember to, matching every other call on this repository.
   Future<void> changePassword({required String currentPassword, required String newPassword}) {
     return _client.call(() async {
-      await _client.dio.patch('/auth/password', data: {'currentPassword': currentPassword, 'newPassword': newPassword});
+      final response = await _client.dio.patch(
+        '/auth/password',
+        data: {'currentPassword': currentPassword, 'newPassword': newPassword},
+      );
+      final data = response.data as Map<String, dynamic>;
+      await _tokens.save(accessToken: data['accessToken'] as String, refreshToken: data['refreshToken'] as String);
     });
   }
 

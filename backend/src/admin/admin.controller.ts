@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { AdminLevel, UserRole } from '@prisma/client';
+import { AllowMustChangePassword } from '../common/decorators/allow-must-change-password.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { MinAdminLevel } from '../common/decorators/min-admin-level.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AdminLevelGuard } from '../common/guards/admin-level.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { MustChangePasswordGuard } from '../common/guards/must-change-password.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { AdminService } from './admin.service';
@@ -22,7 +24,7 @@ import { SetAdminTwoFactorDto } from './dto/set-admin-two-factor.dto';
 /// own `@MinAdminLevel(...)`. See AdminLevel's doc comment in
 /// schema.prisma for the SUPPORT < MODERATOR < SUPER_ADMIN ranking.
 @Controller('admin')
-@UseGuards(JwtAuthGuard, RolesGuard, AdminLevelGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
 @Roles(UserRole.ADMIN)
 export class AdminController {
   constructor(private readonly admin: AdminService) {}
@@ -30,8 +32,10 @@ export class AdminController {
   /// Confirms `request.user` is really an admin (and which tier) — used
   /// by the client right after login to decide whether to route into the
   /// admin console and which actions to show, rather than trusting a
-  /// client-side guess.
+  /// client-side guess. Exempted from MustChangePasswordGuard since the
+  /// console needs this to render at all, even before that gate clears.
   @Get('me')
+  @AllowMustChangePassword()
   me(@CurrentUser() user: AuthenticatedUser) {
     return { id: user.sub, email: user.email, role: user.role, adminLevel: user.adminLevel };
   }
@@ -78,13 +82,13 @@ export class AdminController {
   @Post('admins/:id/reset-password/request')
   @MinAdminLevel(AdminLevel.MODERATOR)
   requestAdminPasswordReset(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string) {
-    return this.admin.requestAdminPasswordReset(actingAdmin.email, actingAdmin.sub, id);
+    return this.admin.requestAdminPasswordReset(actingAdmin.email, actingAdmin.sub, actingAdmin.adminLevel!, id);
   }
 
   @Post('admins/:id/reset-password/confirm')
   @MinAdminLevel(AdminLevel.MODERATOR)
   confirmAdminPasswordReset(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: ConfirmAdminResetDto) {
-    return this.admin.confirmAdminPasswordReset(actingAdmin.email, id, dto);
+    return this.admin.confirmAdminPasswordReset(actingAdmin.email, actingAdmin.adminLevel!, id, dto);
   }
 
   @Delete('admins/:id')

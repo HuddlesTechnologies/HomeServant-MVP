@@ -290,7 +290,13 @@ export class AuthService {
     });
   }
 
-  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
+  /// Returns a fresh token pair for *this* session — necessary because an
+  /// admin's access token carries `mustChangePassword`
+  /// (MustChangePasswordGuard) baked in at login; without reissuing here,
+  /// the console would stay locked out under that guard for the rest of
+  /// the old (up to 15-minute) access token's life even after actually
+  /// fixing it.
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<TokenPair> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (!user.passwordHash) {
       throw new BadRequestException('This account signed up with Google and has no password to change');
@@ -299,7 +305,10 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect');
     }
     const passwordHash = await bcrypt.hash(dto.newPassword, 10);
-    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash, mustChangePassword: false } });
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash, mustChangePassword: false },
+    });
     // Every other session's refresh token stops working — matches the
     // usual expectation that changing your password signs out devices
     // that aren't the one that just changed it.
@@ -307,6 +316,7 @@ export class AuthService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    return this.issueTokens(updated);
   }
 
   /// Settings > Danger Zone > "Deactivate Account". Hides this account's
@@ -357,7 +367,13 @@ export class AuthService {
 
   private async issueTokens(user: User): Promise<TokenPair> {
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, email: user.email, role: user.role, adminLevel: user.adminLevel ?? undefined },
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        adminLevel: user.adminLevel ?? undefined,
+        mustChangePassword: user.mustChangePassword,
+      },
       { secret: this.config.getOrThrow('JWT_ACCESS_SECRET'), expiresIn: this.config.get('JWT_ACCESS_TTL', '15m') },
     );
 

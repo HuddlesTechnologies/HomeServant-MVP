@@ -270,7 +270,8 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
   Widget build(BuildContext context) {
     final admins = _admins;
     final myId = context.watch<AppState>().userId;
-    final isSuperAdmin = context.watch<AppState>().adminLevel?.isSuperAdmin ?? false;
+    final myLevel = context.watch<AppState>().adminLevel;
+    final isSuperAdmin = myLevel?.isSuperAdmin ?? false;
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButton: isSuperAdmin
@@ -351,7 +352,11 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                         ] else ...[
                           Text(admin.level.label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5, weight: FontWeight.w600)),
                         ],
-                        if (!isSelf)
+                        // Resetting an admin ranked above you is refused
+                        // server-side too (AdminService.requestAdminPasswordReset)
+                        // — hidden here just so a MODERATOR isn't shown a
+                        // button that would 403 against a SUPER_ADMIN row.
+                        if (!isSelf && myLevel != null && myLevel.index >= admin.level.index)
                           IconButton(
                             onPressed: () => _resetPassword(admin),
                             icon: const Icon(Icons.lock_reset_rounded, color: AppColors.navy),

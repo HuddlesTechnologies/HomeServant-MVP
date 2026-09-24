@@ -15,6 +15,17 @@ import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
 import { RequestAdminDto } from './dto/request-admin.dto';
 
+/// Mirrors AdminLevelGuard's RANK map — declaration order in the Prisma
+/// schema is the rank (SUPPORT < MODERATOR < SUPER_ADMIN). Used here (not
+/// just server-authorized by `@MinAdminLevel`) because
+/// requestAdminPasswordReset needs to compare the *acting* admin against
+/// the *target*, not just check a fixed minimum.
+const RANK: Record<AdminLevel, number> = {
+  SUPPORT: 0,
+  MODERATOR: 1,
+  SUPER_ADMIN: 2,
+};
+
 const adminSelect = {
   id: true,
   email: true,
@@ -145,15 +156,40 @@ export class AdminService {
   /// (never the target's), so resetting someone else's password can't be
   /// done from an unlocked/unattended console session. [confirmAdminPasswordReset]
   /// is the second half, gated on that code.
-  async requestAdminPasswordReset(actingAdminEmail: string, actingAdminId: string, targetId: string): Promise<{ message: string }> {
-    await this.requireAdmin(targetId);
+  ///
+  /// [actingAdminLevel] must outrank (or match, for SUPER_ADMIN) the
+  /// target — otherwise a MODERATOR could force-reset a SUPER_ADMIN's
+  /// password (and sign every one of their sessions out) at will, which
+  /// is a denial-of-service against a higher-privileged account even
+  /// though the MODERATOR never actually learns the new password (that's
+  /// emailed only to the target).
+  async requestAdminPasswordReset(
+    actingAdminEmail: string,
+    actingAdminId: string,
+    actingAdminLevel: AdminLevel,
+    targetId: string,
+  ): Promise<{ message: string }> {
+    const target = await this.requireAdmin(targetId);
+    if (RANK[actingAdminLevel] < RANK[target.adminLevel!]) {
+      throw new ForbiddenException("Can't reset the password of an admin ranked above you");
+    }
     await this.otp.issue(actingAdminEmail, OtpPurpose.ADMIN_RESET_CONFIRM, actingAdminId);
     return { message: `Confirmation code sent to ${actingAdminEmail}` };
   }
 
-  async confirmAdminPasswordReset(actingAdminEmail: string, targetId: string, dto: ConfirmAdminResetDto): Promise<{ message: string }> {
+  async confirmAdminPasswordReset(
+    actingAdminEmail: string,
+    actingAdminLevel: AdminLevel,
+    targetId: string,
+    dto: ConfirmAdminResetDto,
+  ): Promise<{ message: string }> {
     await this.otp.verify(actingAdminEmail, OtpPurpose.ADMIN_RESET_CONFIRM, dto.code);
     const target = await this.requireAdmin(targetId);
+    // Re-checked here too (not just in the request step) in case the
+    // target's level changed in between.
+    if (RANK[actingAdminLevel] < RANK[target.adminLevel!]) {
+      throw new ForbiddenException("Can't reset the password of an admin ranked above you");
+    }
 
     const tempPassword = randomBytes(9).toString('base64url');
     const passwordHash = await bcrypt.hash(tempPassword, 10);

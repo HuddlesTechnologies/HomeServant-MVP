@@ -78,9 +78,8 @@ export class AuthController {
 
   @Patch('password')
   @UseGuards(JwtAuthGuard)
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto): Promise<void> {
-    await this.auth.changePassword(user.sub, dto);
+  changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto) {
+    return this.auth.changePassword(user.sub, dto);
   }
 
   @Patch('deactivate')

@@ -10,6 +10,10 @@ export interface JwtPayload {
   role: UserRole;
   /// Only set when [role] is ADMIN — see AdminLevelGuard.
   adminLevel?: AdminLevel;
+  /// Only meaningful when [role] is ADMIN — see MustChangePasswordGuard.
+  /// Optional so a token minted before this field existed still decodes;
+  /// treated as `false` wherever it's read.
+  mustChangePassword?: boolean;
 }
 
 /// What ends up on `request.user` for every guarded route — deliberately

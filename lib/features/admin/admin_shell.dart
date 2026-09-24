@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,12 @@ import 'admin_marketplace_tab.dart';
 import 'admin_properties_tab.dart';
 import 'admin_users_tab.dart';
 import 'admin_vendors_tab.dart';
+
+/// Auto-signs the console out after this long with no pointer activity —
+/// an unattended admin session is a much bigger blast radius than a
+/// regular user's, so it gets its own (shorter, non-configurable) timeout
+/// distinct from the tenant/landlord app's optional App Lock.
+const _idleTimeout = Duration(minutes: 15);
 
 /// Navigation shell for the whole admin console — a bottom nav switching
 /// between moderation areas, matching the tab-shell pattern every other
@@ -30,11 +37,33 @@ class AdminShell extends StatefulWidget {
 
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
+  Timer? _idleTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptPasswordChange());
+    _resetIdleTimer();
+  }
+
+  @override
+  void dispose() {
+    _idleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _resetIdleTimer() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(_idleTimeout, _onIdleTimeout);
+  }
+
+  Future<void> _onIdleTimeout() async {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await context.read<AppState>().logout();
+    if (!mounted) return;
+    context.go('/admin-login');
+    messenger.showSnackBar(const SnackBar(content: Text('Signed out after 15 minutes of inactivity')));
   }
 
   /// Blocking, not just advisory — an admin created via the console's
@@ -159,6 +188,15 @@ class _AdminShellState extends State<AdminShell> {
         : _baseDestinations;
     final index = _index >= tabs.length ? 0 : _index;
 
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _resetIdleTimer(),
+      onPointerSignal: (_) => _resetIdleTimer(),
+      child: _buildScaffold(context, tabs, destinations, index),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, List<Widget> tabs, List<NavigationDestination> destinations, int index) {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
