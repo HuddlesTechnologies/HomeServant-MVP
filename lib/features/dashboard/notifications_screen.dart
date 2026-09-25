@@ -6,27 +6,23 @@ import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/empty_state.dart';
 
 IconData _iconForType(NotificationType type) => switch (type) {
   NotificationType.referralSignup => Icons.card_giftcard_rounded,
   NotificationType.vendorApproved => Icons.storefront_rounded,
   NotificationType.vendorRejected => Icons.storefront_outlined,
+  NotificationType.vendorSuspended => Icons.storefront_outlined,
+  NotificationType.vendorUnsuspended => Icons.storefront_rounded,
   NotificationType.bookingStatus => Icons.event_available_rounded,
   NotificationType.marketplaceOrderStatus => Icons.local_shipping_rounded,
   NotificationType.newMessage => Icons.chat_bubble_rounded,
   NotificationType.reportAssigned => Icons.flag_rounded,
   NotificationType.threadTransferred => Icons.forward_to_inbox_rounded,
+  NotificationType.rentExpiryReminder => Icons.event_busy_rounded,
+  NotificationType.newListingMessage => Icons.chat_bubble_outline_rounded,
 };
-
-String _relativeTime(DateTime time) {
-  final diff = DateTime.now().difference(time);
-  if (diff.inMinutes < 1) return 'Just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
-  return formatShortDate(time);
-}
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, required this.theme});
@@ -48,17 +44,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final notifications = context.watch<AppState>().notifications;
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.foreground),
-        title: Text(
-          'Notifications',
-          style: AppTextStyles.heading(color: theme.foreground, size: 18),
-        ),
-      ),
+    return DashboardPageScaffold(
+      background: theme.background,
+      foreground: theme.foreground,
+      title: 'Notifications',
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 640,
@@ -132,7 +121,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                             ),
                                           ),
                                           Text(
-                                            _relativeTime(item.createdAt),
+                                            formatRelativeTime(item.createdAt),
                                             style: AppTextStyles.body(
                                               color: theme.onSurface.withValues(alpha: 0.5),
                                               size: 11,
@@ -211,7 +200,7 @@ class NotificationDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  _relativeTime(item.createdAt),
+                  formatRelativeTime(item.createdAt),
                   style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.5), size: 12),
                 ),
                 const SizedBox(height: 16),

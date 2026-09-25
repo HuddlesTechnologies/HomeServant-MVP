@@ -1,10 +1,9 @@
-import '../../../state/app_state.dart';
+import '../../../api/models/tenancy_agreement.dart';
 import '../models/property.dart';
-import '../models/rental_record.dart';
 
-/// One side of the agreement — whatever contact details Home Servant
-/// actually has on file for them. Nothing here is invented: a field the app
-/// doesn't collect is labelled as on file rather than guessed.
+/// One side of the agreement, built from whatever the persisted
+/// [TenancyAgreement] actually has on file — a field the backend didn't
+/// capture is labelled as on file rather than guessed.
 class TenancyParty {
   const TenancyParty({required this.name, required this.address, required this.phone, required this.email});
 
@@ -58,43 +57,45 @@ String _formatLongDate(DateTime date) {
   return '${date.day} ${months[date.month - 1]} ${date.year}';
 }
 
-/// Builds the filled MOU for [property]/[record] using whatever the tenant
-/// has on their Home Servant profile. Only meant for a real lease (not a
-/// shortlet) — callers filter to those before reaching here.
-TenancyAgreementContent buildTenancyAgreementContent({
-  required Property property,
-  required RentalRecord record,
-  required AppState appState,
-}) {
-  final landlord = TenancyParty(name: property.landlordName, address: _onFile, phone: _onFile, email: _onFile);
+/// Builds the filled MOU from the real, persisted [agreement] — generated
+/// server-side on move-in (see `GET /bookings/:id/tenancy-agreement`).
+/// Nothing here is fabricated: lease dates, rent, and both parties' details
+/// all come straight from that record.
+TenancyAgreementContent buildTenancyAgreementContent(TenancyAgreement agreement) {
+  final landlord = TenancyParty(
+    name: agreement.landlordName,
+    address: _onFile,
+    phone: agreement.landlordPhone ?? _onFile,
+    email: agreement.landlordEmail ?? _onFile,
+  );
   final tenant = TenancyParty(
-    name: appState.fullName.isNotEmpty ? appState.fullName : 'Tenant',
-    address: appState.houseAddress.isNotEmpty ? appState.houseAddress : _onFile,
-    phone: appState.phoneNumber.isNotEmpty ? appState.phoneNumber : _onFile,
-    email: appState.email.isNotEmpty ? appState.email : _onFile,
+    name: agreement.tenantName,
+    address: _onFile,
+    phone: agreement.tenantPhone ?? _onFile,
+    email: agreement.tenantEmail ?? _onFile,
   );
 
-  final payFrequency = property.priceUnit == 'year' ? 'annually' : 'per ${property.priceUnit}';
+  final payFrequency = agreement.priceUnit.toLowerCase() == 'year' ? 'annually' : 'per ${agreement.priceUnit.toLowerCase()}';
 
   final clauses = [
     TenancyClause(
       1,
       'PROPERTY',
-      'The Landlord agrees to let and the Tenant agrees to occupy the property at ${property.location}, '
-          'being a ${property.category.toLowerCase()} known as "${property.title}", together '
-          'with the fixtures and facilities stated in the attached schedule, if any.',
+      'The Landlord agrees to let and the Tenant agrees to occupy the property at ${agreement.propertyLocation}, '
+          '${agreement.propertyState}, known as "${agreement.propertyTitle}", together with the fixtures and '
+          'facilities stated in the attached schedule, if any.',
     ),
     TenancyClause(
       2,
       'TERM AND POSSESSION',
-      'The occupation shall commence on ${_formatLongDate(record.startDate)} and end on '
-          '${_formatLongDate(record.endDate)}. The Landlord shall give possession to the Tenant on '
-          '${_formatLongDate(record.startDate)}. Any renewal shall be by mutual written agreement.',
+      'The occupation shall commence on ${_formatLongDate(agreement.leaseStartDate)} and end on '
+          '${_formatLongDate(agreement.leaseEndDate)}. The Landlord shall give possession to the Tenant on '
+          '${_formatLongDate(agreement.leaseStartDate)}. Any renewal shall be by mutual written agreement.',
     ),
     TenancyClause(
       3,
       'RENT',
-      'The agreed rent is ₦${formatNaira(property.price)} for the period stated above, payable $payFrequency '
+      'The agreed rent is ₦${formatNaira(agreement.rentAmount)} for the period stated above, payable $payFrequency '
           'on or before the commencement date shown above, via the payment method used at booking on the '
           'Home Servant platform.',
     ),
@@ -162,14 +163,14 @@ TenancyAgreementContent buildTenancyAgreementContent({
   ];
 
   return TenancyAgreementContent(
-    propertyTitle: property.title,
-    madeOnLine: 'This Memorandum of Understanding ("MOU") is made on ${_formatLongDate(record.startDate)} between:',
+    propertyTitle: agreement.propertyTitle,
+    madeOnLine: 'This Memorandum of Understanding ("MOU") is made on ${_formatLongDate(agreement.leaseStartDate)} between:',
     landlord: landlord,
     tenant: tenant,
     clauses: clauses,
     generatedNote:
-        'Generated automatically by Home Servant on ${_formatLongDate(DateTime.now())} for the tenancy created '
-        'between the parties above.',
+        'Generated automatically by Home Servant on ${_formatLongDate(agreement.generatedAt)} for the tenancy '
+        'created between the parties above.',
     disclaimer:
         'This is a general-purpose template intended as a starting reference and does not constitute legal '
         'advice. Please have it reviewed by a qualified lawyer and ensure compliance with applicable tenancy '

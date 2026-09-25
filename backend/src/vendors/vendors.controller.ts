@@ -11,7 +11,7 @@ import { VendorsService } from './vendors.service';
 
 @Controller('vendors')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.VENDOR)
+@Roles(UserRole.TENANT, UserRole.VENDOR)
 export class VendorsController {
   constructor(private readonly vendors: VendorsService) {}
 

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/models/chat.dart';
+import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/chat_thread_list_tile.dart';
+import '../../widgets/dashboard_page_scaffold.dart';
 import 'chat_thread_screen.dart';
 
 class MessagesScreen extends StatefulWidget {
@@ -50,17 +53,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Widget build(BuildContext context) {
     final theme = widget.theme;
     final threads = _threads;
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.foreground),
-        title: Text(
-          'Messages',
-          style: AppTextStyles.heading(color: theme.foreground, size: 18),
-        ),
-      ),
+    return DashboardPageScaffold(
+      background: theme.background,
+      foreground: theme.foreground,
+      title: 'Messages',
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 640,
@@ -96,64 +92,37 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                 ),
                               ],
                             ),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 24,
-                                  backgroundColor: theme.accent.withValues(alpha: 0.25),
-                                  child: Icon(Icons.person, color: theme.accent),
+                            child: ChatThreadListTile(
+                              thread: thread,
+                              avatar: CircleAvatar(
+                                radius: 24,
+                                backgroundColor: theme.accent.withValues(alpha: 0.25),
+                                child: Icon(Icons.person, color: theme.accent),
+                              ),
+                              nameStyle: AppTextStyles.body(
+                                color: theme.onSurface,
+                                size: 14,
+                                weight: unread ? FontWeight.w800 : FontWeight.w700,
+                              ),
+                              messageStyle: AppTextStyles.body(
+                                color: theme.onSurface.withValues(alpha: unread ? 0.9 : 0.6),
+                                size: 13,
+                                weight: unread ? FontWeight.w600 : FontWeight.w400,
+                              ),
+                              time: Text(
+                                formatRelativeTime(thread.updatedAt),
+                                style: AppTextStyles.body(
+                                  color: theme.onSurface.withValues(alpha: 0.5),
+                                  size: 11,
                                 ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              thread.otherParticipantName,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: AppTextStyles.body(
-                                                color: theme.onSurface,
-                                                size: 14,
-                                                weight: unread ? FontWeight.w800 : FontWeight.w700,
-                                              ),
-                                            ),
-                                          ),
-                                          Text(
-                                            _formatTime(thread.updatedAt),
-                                            style: AppTextStyles.body(
-                                              color: theme.onSurface.withValues(alpha: 0.5),
-                                              size: 11,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        thread.lastMessage?.body ?? 'No messages yet',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTextStyles.body(
-                                          color: theme.onSurface.withValues(alpha: unread ? 0.9 : 0.6),
-                                          size: 13,
-                                          weight: unread ? FontWeight.w600 : FontWeight.w400,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (unread) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    width: 9,
-                                    height: 9,
-                                    decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
-                                  ),
-                                ],
-                              ],
+                              ),
+                              trailing: unread
+                                  ? Container(
+                                      width: 9,
+                                      height: 9,
+                                      decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
+                                    )
+                                  : null,
                             ),
                           ),
                         );
@@ -163,17 +132,4 @@ class _MessagesScreenState extends State<MessagesScreen> {
       ),
     );
   }
-}
-
-String _formatTime(DateTime date) {
-  final now = DateTime.now();
-  final isToday = date.year == now.year && date.month == now.month && date.day == now.day;
-  if (isToday) {
-    final hour12 = date.hour % 12 == 0 ? 12 : date.hour % 12;
-    final minute = date.minute.toString().padLeft(2, '0');
-    return '$hour12:$minute ${date.hour >= 12 ? 'PM' : 'AM'}';
-  }
-  final yesterday = now.subtract(const Duration(days: 1));
-  if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) return 'Yesterday';
-  return '${date.day}/${date.month}';
 }

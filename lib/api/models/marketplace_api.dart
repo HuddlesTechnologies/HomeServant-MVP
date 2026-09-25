@@ -28,6 +28,46 @@ extension OrderItemStatusApi on OrderItemStatus {
   };
 }
 
+/// Escrow/payment-derived progress for a marketplace order item — distinct
+/// from the coarser [OrderItemStatus] (PENDING/COMPLETED/CANCELLED on the
+/// item itself). Mirrors the held→released escrow lifecycle described in
+/// the payment-engine plan (see `Payment.status` server-side): a buyer's
+/// payment is held until they confirm receipt, then released to the
+/// vendor. The exact backend field/values weren't finalized when this was
+/// written, so [fromApi] tries several likely codes and simply returns
+/// null for anything unrecognized — callers fall back to [OrderItemStatus]
+/// when this is null (see [MarketplaceOrderItemApi.progressLabel]).
+enum OrderItemPaymentProgress {
+  held,
+  released,
+  refunded;
+
+  String get label => switch (this) {
+    OrderItemPaymentProgress.held => 'Payment Held — Awaiting Your Confirmation',
+    OrderItemPaymentProgress.released => 'Completed',
+    OrderItemPaymentProgress.refunded => 'Refunded',
+  };
+
+  static OrderItemPaymentProgress? fromApi(String? value) {
+    switch (value?.toUpperCase()) {
+      case 'INITIATED':
+      case 'PAID_HELD':
+      case 'HELD':
+      case 'PAYMENT_HELD':
+        return OrderItemPaymentProgress.held;
+      case 'RELEASED':
+      case 'PAID':
+      case 'PAID_OUT':
+      case 'COMPLETED':
+        return OrderItemPaymentProgress.released;
+      case 'REFUNDED':
+        return OrderItemPaymentProgress.refunded;
+      default:
+        return null;
+    }
+  }
+}
+
 /// A vendor summary embedded on a product/order-item response — just
 /// enough to render "sold by X" without a separate lookup.
 class VendorSummary {
@@ -111,6 +151,8 @@ class MarketplaceOrderItemApi {
     this.vendorName,
     this.vendorUserId,
     this.order,
+    this.paymentProgressLabel,
+    this.paymentProgress,
   });
 
   final String id;
@@ -132,12 +174,41 @@ class MarketplaceOrderItemApi {
   /// parent order's context inline.
   final MarketplaceOrderContext? order;
 
+  /// A ready-made human-readable progress string, if the server sends one
+  /// directly (e.g. "Payment held, awaiting your confirmation").
+  final String? paymentProgressLabel;
+
+  /// A recognized payment-status code, if the server sends one instead of
+  /// (or alongside) [paymentProgressLabel]. See [OrderItemPaymentProgress].
+  final OrderItemPaymentProgress? paymentProgress;
+
   int get subtotal => unitPrice * quantity;
+
+  /// Best available progress text for this item — prefers a ready-made
+  /// label straight from the server, then falls back to a recognized
+  /// status code, then finally to the plain item [status] label if
+  /// neither newer field is present yet.
+  String get progressLabel => paymentProgressLabel ?? paymentProgress?.label ?? status.label;
+
+  /// Whether a "Mark as Received" action makes sense right now. True when
+  /// the server explicitly says payment is held, or — until that signal is
+  /// wired in everywhere — the item is simply still PENDING with neither
+  /// new field present yet (a reasonable default: nothing has completed
+  /// or been refunded, so there's nothing wrong with letting the buyer
+  /// confirm receipt).
+  bool get isPaymentHeld =>
+      paymentProgress == OrderItemPaymentProgress.held ||
+      (paymentProgress == null && paymentProgressLabel == null && status == OrderItemStatus.pending);
 
   factory MarketplaceOrderItemApi.fromApi(Map<String, dynamic> json) {
     final product = json['product'] as Map<String, dynamic>?;
     final vendor = json['vendor'] as Map<String, dynamic>?;
     final order = json['order'] as Map<String, dynamic>?;
+    // Real backend shape: a nested `payment: { status }` (raw Payment
+    // status enum — PAID_HELD/RELEASED/REFUNDED/etc, see
+    // OrderItemPaymentProgress.fromApi), not a flat top-level field. The
+    // other key names below are kept as a defensive fallback only.
+    final payment = json['payment'] as Map<String, dynamic>?;
     return MarketplaceOrderItemApi(
       id: json['id'] as String,
       orderId: json['orderId'] as String,
@@ -153,6 +224,11 @@ class MarketplaceOrderItemApi {
       vendorName: vendor?['businessName'] as String?,
       vendorUserId: vendor?['userId'] as String?,
       order: order != null ? MarketplaceOrderContext.fromApi(order) : null,
+      paymentProgressLabel:
+          json['paymentProgressLabel'] as String? ?? json['progressLabel'] as String? ?? json['escrowStatusLabel'] as String?,
+      paymentProgress: OrderItemPaymentProgress.fromApi(
+        payment?['status'] as String? ?? json['paymentProgress'] as String? ?? json['escrowStatus'] as String? ?? json['paymentStatus'] as String?,
+      ),
     );
   }
 }
@@ -229,6 +305,35 @@ class MarketplaceOrderApi {
     customerPhone: json['customerPhone'] as String,
     customerAddress: json['customerAddress'] as String,
     items: (json['items'] as List).cast<Map<String, dynamic>>().map(MarketplaceOrderItemApi.fromApi).toList(),
+  );
+}
+
+/// Best-effort delivery-tracking snapshot for a delivery-fulfillment order
+/// item. The GIG Logistics integration behind `GET
+/// /marketplace-orders/items/:id/tracking` is unverified scaffolding as of
+/// this writing (no real API contract to build against yet — see the plan
+/// doc), and may not exist server-side at all yet, so every field here is
+/// optional and parsed defensively from a few likely key spellings; the
+/// screen that reads this treats "endpoint 404s / nothing parseable" as
+/// "hide the tracking section", not an error.
+class DeliveryTrackingApi {
+  const DeliveryTrackingApi({this.status, this.trackingNumber, this.carrier, this.estimatedDelivery, this.lastUpdate});
+
+  final String? status;
+  final String? trackingNumber;
+  final String? carrier;
+  final String? estimatedDelivery;
+  final String? lastUpdate;
+
+  bool get hasAnyDetail =>
+      status != null || trackingNumber != null || carrier != null || estimatedDelivery != null || lastUpdate != null;
+
+  factory DeliveryTrackingApi.fromApi(Map<String, dynamic> json) => DeliveryTrackingApi(
+    status: json['status'] as String? ?? json['trackingStatus'] as String?,
+    trackingNumber: json['trackingNumber'] as String? ?? json['trackingId'] as String? ?? json['waybillNumber'] as String?,
+    carrier: json['carrier'] as String? ?? json['provider'] as String?,
+    estimatedDelivery: json['estimatedDelivery'] as String? ?? json['eta'] as String?,
+    lastUpdate: json['lastUpdate'] as String? ?? json['statusMessage'] as String? ?? json['note'] as String?,
   );
 }
 

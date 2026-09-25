@@ -6,7 +6,9 @@ import '../../api/models/vendor.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
+import 'admin_vendor_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
@@ -120,27 +122,32 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
   }
 
   Future<void> _toggleSuspend(AdminVendor vendor) async {
-    final confirmed = await showAdminConfirmSheet(
+    final reason = await showAdminReasonSheet(
       context,
       title: vendor.isActive ? 'Suspend ${vendor.businessName}?' : 'Unsuspend ${vendor.businessName}?',
       body: vendor.isActive
-          ? 'Their products will be hidden from the Marketplace until unsuspended.'
-          : 'Their products will become visible in the Marketplace again.',
+          ? 'Their products will be hidden from the Marketplace until unsuspended. An email will be sent to the vendor with your reason.'
+          : 'Their products will become visible in the Marketplace again. An email will be sent to the vendor with your reason.',
       actionLabel: vendor.isActive ? 'Suspend' : 'Unsuspend',
-      destructive: vendor.isActive,
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       if (vendor.isActive) {
-        await context.read<AppState>().admin.suspendVendor(vendor.id);
+        await context.read<AppState>().admin.suspendVendor(vendor.id, reason: reason);
       } else {
-        await context.read<AppState>().admin.unsuspendVendor(vendor.id);
+        await context.read<AppState>().admin.unsuspendVendor(vendor.id, reason: reason);
       }
       _load();
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
+  }
+
+  void _openDetail(AdminVendor vendor) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AdminVendorDetailScreen(vendorId: vendor.id)),
+    ).then((_) => _load());
   }
 
   @override
@@ -161,13 +168,13 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              _StatusChip(label: 'Pending', selected: _statusFilter == VendorApplicationStatus.pending, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.pending; _load(); })),
+              AdminFilterChip(label: 'Pending', selected: _statusFilter == VendorApplicationStatus.pending, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.pending; _load(); })),
               const SizedBox(width: 8),
-              _StatusChip(label: 'Approved', selected: _statusFilter == VendorApplicationStatus.approved, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.approved; _load(); })),
+              AdminFilterChip(label: 'Approved', selected: _statusFilter == VendorApplicationStatus.approved, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.approved; _load(); })),
               const SizedBox(width: 8),
-              _StatusChip(label: 'Rejected', selected: _statusFilter == VendorApplicationStatus.rejected, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.rejected; _load(); })),
+              AdminFilterChip(label: 'Rejected', selected: _statusFilter == VendorApplicationStatus.rejected, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.rejected; _load(); })),
               const SizedBox(width: 8),
-              _StatusChip(label: 'All', selected: _statusFilter == null, onTap: () => setState(() { _statusFilter = null; _load(); })),
+              AdminFilterChip(label: 'All', selected: _statusFilter == null, onTap: () => setState(() { _statusFilter = null; _load(); })),
             ],
           ),
         ),
@@ -185,9 +192,12 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final vendor = vendors[index];
-                      return Container(
+                      return InkWell(
+                        onTap: () => _openDetail(vendor),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
                         padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                        decoration: adminCardDecoration,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -253,33 +263,13 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                             ),
                           ],
                         ),
+                        ),
                       );
                     },
                   ),
                 ),
         ),
       ],
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      backgroundColor: Colors.white,
-      selectedColor: AppColors.navy,
-      labelStyle: AppTextStyles.body(color: selected ? Colors.white : AppColors.navy, size: 12.5, weight: FontWeight.w600),
-      side: BorderSide.none,
     );
   }
 }

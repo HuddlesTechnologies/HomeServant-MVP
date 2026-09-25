@@ -7,6 +7,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
 import '../../widgets/otp_input_row.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_filter_chip.dart';
 
 /// Only reachable by a SUPER_ADMIN — see AdminShell, which hides this
 /// destination entirely for MODERATOR/SUPPORT. The server enforces the
@@ -269,8 +270,8 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
   @override
   Widget build(BuildContext context) {
     final admins = _admins;
-    final myId = context.watch<AppState>().userId;
-    final myLevel = context.watch<AppState>().adminLevel;
+    final myId = context.select<AppState, String?>((s) => s.userId);
+    final myLevel = context.select<AppState, AdminLevel?>((s) => s.adminLevel);
     final isSuperAdmin = myLevel?.isSuperAdmin ?? false;
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -295,7 +296,7 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                   final isSelf = admin.id == myId;
                   return Container(
                     padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                    decoration: adminCardDecoration,
                     child: Row(
                       children: [
                         Expanded(

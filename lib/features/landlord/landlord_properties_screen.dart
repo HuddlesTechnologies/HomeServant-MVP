@@ -4,9 +4,11 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/dashboard_page_scaffold.dart';
 import '../dashboard/models/property.dart';
 import '../dashboard/property_detail_screen.dart';
 import '../dashboard/widgets/property_image.dart';
+import 'landlord_add_property_screen.dart';
 import 'landlord_property_status.dart';
 
 enum PropertyStatusFilter { all, occupied, available }
@@ -35,14 +37,10 @@ class LandlordPropertiesScreen extends StatelessWidget {
       PropertyStatusFilter.available => all.where(isAvailable).toList(),
     };
 
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.foreground),
-        title: Text(_title, style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-      ),
+    return DashboardPageScaffold(
+      background: theme.background,
+      foreground: theme.foreground,
+      title: _title,
       body: SafeArea(
         child: entries.isEmpty
             ? Center(
@@ -65,6 +63,11 @@ class LandlordPropertiesScreen extends StatelessWidget {
                           builder: (_) => PropertyDetailScreen(property: entries[index], theme: theme),
                         ),
                       ),
+                      onEdit: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => LandlordAddPropertyScreen(initial: entries[index]),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -75,11 +78,12 @@ class LandlordPropertiesScreen extends StatelessWidget {
 }
 
 class _PropertyTile extends StatelessWidget {
-  const _PropertyTile({required this.property, required this.occupied, required this.onTap});
+  const _PropertyTile({required this.property, required this.occupied, required this.onTap, required this.onEdit});
 
   final Property property;
   final bool occupied;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +136,11 @@ class _PropertyTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: AppColors.navy),
+            IconButton(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined, color: AppColors.navy),
+              tooltip: 'Edit listing',
+            ),
           ],
         ),
       ),

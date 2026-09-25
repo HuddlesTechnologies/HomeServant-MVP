@@ -3,7 +3,7 @@ import '../../../api/models/marketplace_api.dart';
 import '../../../api/models/vendor.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/dashboard_theme.dart';
-import '../../../widgets/upload_picker.dart';
+import 'product_thumbnail.dart';
 
 class MarketplaceProductCard extends StatefulWidget {
   const MarketplaceProductCard({
@@ -75,14 +75,13 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
           children: [
             AspectRatio(
               aspectRatio: 16 / 11,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: images.isNotEmpty
-                    ? Image(image: imageProviderForPath(images.first), fit: BoxFit.cover)
-                    : DecoratedBox(
-                        decoration: BoxDecoration(color: theme.onSurface.withValues(alpha: 0.06)),
-                        child: Icon(product.category.icon, color: theme.onSurface.withValues(alpha: 0.55), size: 36),
-                      ),
+              child: ProductThumbnail(
+                imageUrl: images.isNotEmpty ? images.first : null,
+                icon: product.category.icon,
+                iconColor: theme.onSurface.withValues(alpha: 0.55),
+                backgroundColor: theme.onSurface.withValues(alpha: 0.06),
+                iconSize: 36,
+                borderRadius: 14,
               ),
             ),
             const SizedBox(height: 10),
@@ -99,6 +98,24 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12, weight: FontWeight.w600),
             ),
+            if (product.vendor?.state != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Row(
+                  children: [
+                    Icon(Icons.location_on_rounded, size: 10, color: theme.onSurface.withValues(alpha: 0.4)),
+                    const SizedBox(width: 2),
+                    Expanded(
+                      child: Text(
+                        product.vendor!.state!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.4), size: 10.5, weight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const SizedBox(height: 6),
             Row(
               children: [

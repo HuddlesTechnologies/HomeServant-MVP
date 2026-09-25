@@ -9,11 +9,10 @@ import '../../state/app_state.dart';
 import '../../widgets/profile_edit_button.dart';
 import '../../widgets/support_sheet.dart';
 import '../../widgets/upload_picker.dart';
-import 'vendor_dashboard_screen.dart';
 import 'vendor_edit_profile_screen.dart';
-import 'vendor_products_screen.dart';
 import 'vendor_transactions_screen.dart';
 import 'widgets/vendor_bottom_nav.dart';
+import 'widgets/vendor_tab_route.dart';
 
 /// The vendor's own shop profile — business details plus the "Danger
 /// Zone" actions (deactivating the shop). Reached from the vendor
@@ -49,8 +48,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
 
   void _onNavTap(BuildContext context, int index) {
     if (index == 2) return;
-    final screen = index == 0 ? VendorDashboardScreen(theme: theme) : VendorProductsScreen(theme: theme);
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => screen));
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => vendorTabRoute(index, theme)));
   }
 
   Future<void> _editProfile(BuildContext context) async {

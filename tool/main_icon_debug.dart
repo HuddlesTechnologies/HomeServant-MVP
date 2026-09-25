@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'models/dashboard_theme.dart';
-import 'services/app_icon_service.dart';
+import 'package:homeservant/models/dashboard_theme.dart';
+import 'package:homeservant/services/app_icon_service.dart';
 
 void main() {
   runApp(const _IconDebugApp());

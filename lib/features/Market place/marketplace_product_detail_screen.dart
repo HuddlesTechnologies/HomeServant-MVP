@@ -114,9 +114,28 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                   const SizedBox(height: 20),
                   Text(product.name, style: AppTextStyles.heading(color: theme.foreground, size: 20)),
                   const SizedBox(height: 4),
-                  Text(
-                    product.vendor?.businessName ?? 'Vendor',
-                    style: AppTextStyles.body(color: theme.accent, size: 13.5, weight: FontWeight.w600),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          product.vendor?.businessName ?? 'Vendor',
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.body(color: theme.accent, size: 13.5, weight: FontWeight.w600),
+                        ),
+                      ),
+                      if (product.vendor?.state != null) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.location_on_rounded, size: 13, color: theme.foreground.withValues(alpha: 0.45)),
+                        const SizedBox(width: 2),
+                        Flexible(
+                          child: Text(
+                            product.vendor!.state!,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.55), size: 12.5, weight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 10),
                   Row(

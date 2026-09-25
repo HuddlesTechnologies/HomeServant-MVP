@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -807,8 +808,19 @@ class _Footer extends StatelessWidget {
   final VoidCallback onBuildingTap;
   final VoidCallback onGetOnboarded;
 
-  void _followUs(BuildContext context, String platform) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("We'll be posting on $platform soon — follow to be first to know.")));
+  static const _handle = 'homeservantafrica';
+
+  Future<void> _followUs(BuildContext context, String platform) async {
+    final uri = switch (platform) {
+      'Instagram' => Uri.parse('https://instagram.com/$_handle'),
+      'Threads' => Uri.parse('https://www.threads.net/@$_handle'),
+      'X' => Uri.parse('https://x.com/$_handle'),
+      _ => throw ArgumentError('Unknown platform: $platform'),
+    };
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Couldn't open $platform right now.")));
+    }
   }
 
   @override
@@ -888,11 +900,11 @@ class _Footer extends StatelessWidget {
   }
 }
 
-/// A footer social link. No real Home Servant account exists to link to
-/// yet, so taps acknowledge interest instead of opening a URL — accurate is
-/// better than a dead or guessed link. [pathData] is the brand's actual
-/// glyph (single-color logo mark) on a 24x24 viewBox, tinted to match the
-/// surrounding UI rather than reproduced in brand color.
+/// A footer social link — opens the real Home Servant account for that
+/// platform (handle: homeservantafrica) in an external browser/app.
+/// [pathData] is the brand's actual glyph (single-color logo mark) on a
+/// 24x24 viewBox, tinted to match the surrounding UI rather than
+/// reproduced in brand color.
 class _SocialIconButton extends StatelessWidget {
   const _SocialIconButton({required this.tooltip, required this.onTap, required this.pathData});
 

@@ -58,4 +58,13 @@ class ChatRepository {
       await _client.dio.patch('/threads/$threadId/read');
     });
   }
+
+  /// Admin-only — hands the thread off to another admin. The backend
+  /// (`chat.service.ts`'s `transferThread`) already sends the new admin an
+  /// in-app notification + email; this just adds the missing client call.
+  Future<void> transferThread(String threadId, String adminId) {
+    return _client.call(() async {
+      await _client.dio.patch('/threads/$threadId/transfer', data: {'adminId': adminId});
+    });
+  }
 }

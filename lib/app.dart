@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'routes/app_router.dart';
 import 'state/app_state.dart';
 import 'widgets/app_lock_gate.dart';
+import 'widgets/notification_banner_overlay.dart';
 import 'widgets/session_expired_gate.dart';
 
 class HomeServantApp extends StatefulWidget {
@@ -37,7 +38,8 @@ class _HomeServantAppState extends State<HomeServantApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
         routerConfig: _router,
-        builder: (context, child) => SessionExpiredGate(child: AppLockGate(child: child!)),
+        builder: (context, child) =>
+            SessionExpiredGate(child: AppLockGate(child: NotificationBannerOverlay(child: child!))),
       ),
     );
   }

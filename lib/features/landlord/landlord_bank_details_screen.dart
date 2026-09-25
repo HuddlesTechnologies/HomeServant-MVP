@@ -8,6 +8,7 @@ import '../../api/models/bank.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
+import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 
@@ -140,14 +141,10 @@ class _LandlordBankDetailsScreenState extends State<LandlordBankDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final canSave = _selectedBank != null && _resolvedAccountName != null && !_resolving;
-    return Scaffold(
-      backgroundColor: AppColors.navy,
-      appBar: AppBar(
-        backgroundColor: AppColors.navy,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.gold),
-        title: Text('Bank Details', style: AppTextStyles.heading(color: AppColors.gold, size: 18)),
-      ),
+    return DashboardPageScaffold(
+      background: AppColors.navy,
+      foreground: AppColors.gold,
+      title: 'Bank Details',
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),

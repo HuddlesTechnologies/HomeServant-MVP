@@ -1,23 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import 'marketplace_home_screen.dart';
-import 'vendor_login_screen.dart';
+import 'vendor_dashboard_screen.dart';
 import 'vendor_signup_screen.dart';
 
 /// Entry point for the Marketplace tab (the dashboard's cart icon). Asks
 /// whether the visitor wants to shop as a customer or sell as a vendor
-/// before handing off to the matching flow.
-class MarketplaceAuthScreen extends StatelessWidget {
+/// before handing off to the matching flow. The vendor side needs no
+/// separate login — it's the same account (see AppState.hasVendorProfile) —
+/// so this just branches on whether a shop already exists.
+class MarketplaceAuthScreen extends StatefulWidget {
   const MarketplaceAuthScreen({super.key, required this.theme});
 
   final DashboardTheme theme;
 
   @override
+  State<MarketplaceAuthScreen> createState() => _MarketplaceAuthScreenState();
+}
+
+class _MarketplaceAuthScreenState extends State<MarketplaceAuthScreen> {
+  bool? _hasVendorProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkVendorProfile();
+  }
+
+  Future<void> _checkVendorProfile() async {
+    final appState = context.read<AppState>();
+    final existing = appState.hasVendorProfile;
+    final hasProfile = existing ?? await appState.checkVendorProfile();
+    if (!mounted) return;
+    setState(() => _hasVendorProfile = hasProfile);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final theme = widget.theme;
+    final hasVendorProfile = _hasVendorProfile ?? false;
     return Scaffold(
       backgroundColor: theme.background,
       body: SafeArea(
@@ -58,29 +85,15 @@ class MarketplaceAuthScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     PillOutlineButton(
-                      label: 'Become a Vendor',
+                      label: hasVendorProfile ? 'Go to My Shop' : 'Become a Vendor',
                       backgroundColor: theme.surface,
                       textColor: theme.onSurface,
                       icon: Icons.storefront_outlined,
                       onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => VendorSignupScreen(theme: theme)),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => VendorLoginScreen(theme: theme)),
-                      ),
-                      child: RichText(
-                        text: TextSpan(
-                          style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.65), size: 14),
-                          children: [
-                            const TextSpan(text: 'Already a vendor? '),
-                            TextSpan(
-                              text: 'Login as a Vendor',
-                              style: AppTextStyles.body(color: theme.accent, weight: FontWeight.w700, size: 14),
-                            ),
-                          ],
+                        MaterialPageRoute(
+                          builder: (_) => hasVendorProfile
+                              ? VendorDashboardScreen(theme: theme)
+                              : VendorSignupScreen(theme: theme),
                         ),
                       ),
                     ),

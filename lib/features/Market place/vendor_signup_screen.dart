@@ -5,14 +5,17 @@ import '../../api/models/vendor.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
-import '../../models/user_role.dart';
 import '../../state/app_state.dart';
+import '../../widgets/labeled_pill_field.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
 import '../dashboard/models/property.dart';
-import 'vendor_verify_otp_screen.dart';
+import 'vendor_dashboard_screen.dart';
 
+/// Shop-setup form for an already-authenticated tenant/vendor (see
+/// AppState.hasVendorProfile) — the same login can shop as a customer and
+/// sell as a vendor, so this is just `POST /vendors/me`'s business-profile
+/// fields, not a separate account/password/OTP signup.
 class VendorSignupScreen extends StatefulWidget {
   const VendorSignupScreen({super.key, required this.theme});
 
@@ -24,32 +27,17 @@ class VendorSignupScreen extends StatefulWidget {
 
 class _VendorSignupScreenState extends State<VendorSignupScreen> {
   final _businessName = TextEditingController();
-  final _ownerName = TextEditingController();
-  final _email = TextEditingController();
-  final _phone = TextEditingController();
-  final _address = TextEditingController();
   final _rcNumber = TextEditingController();
-  final _password = TextEditingController();
-  final _confirmPassword = TextEditingController();
 
   MarketplaceCategory? _category;
   String? _state;
   PickedUpload? _logo;
-  bool _obscurePassword = true;
-  bool _obscureConfirm = true;
-  bool _agreedToTerms = false;
   bool _submitting = false;
 
   @override
   void dispose() {
     _businessName.dispose();
-    _ownerName.dispose();
-    _email.dispose();
-    _phone.dispose();
-    _address.dispose();
     _rcNumber.dispose();
-    _password.dispose();
-    _confirmPassword.dispose();
     super.dispose();
   }
 
@@ -64,8 +52,9 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
       options: marketplaceCategoryLabels,
       current: _category?.label,
     );
-    if (result != null)
+    if (result != null) {
       setState(() => _category = MarketplaceCategoryApi.fromLabel(result));
+    }
   }
 
   Future<void> _pickState() async {
@@ -145,31 +134,13 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
   }
 
   bool get _formIsValid =>
-      _businessName.text.trim().isNotEmpty &&
-      _ownerName.text.trim().isNotEmpty &&
-      _email.text.trim().contains('@') &&
-      _phone.text.trim().isNotEmpty &&
-      _category != null &&
-      _address.text.trim().isNotEmpty &&
-      _state != null &&
-      _password.text.length >= 8 &&
-      _agreedToTerms;
+      _businessName.text.trim().isNotEmpty && _category != null && _state != null;
 
   Future<void> _submit() async {
     if (!_formIsValid) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please fill in all required fields (password at least 8 characters) and accept the vendor terms',
-          ),
-        ),
+        const SnackBar(content: Text('Please fill in the business name, category and state')),
       );
-      return;
-    }
-    if (_password.text != _confirmPassword.text) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
       return;
     }
 
@@ -177,28 +148,24 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      appState.selectRole(UserRole.vendor);
-      final email = _email.text.trim();
-      await appState.signup(
-        email: email,
-        password: _password.text,
-        fullName: _ownerName.text.trim(),
+      String? logoUrl;
+      final logo = _logo;
+      if (logo != null && logo.isImage) {
+        logoUrl = await appState.uploads.upload(file: logo, folder: 'vendor-logos');
+      }
+
+      await appState.vendors.create(
+        businessName: _businessName.text.trim(),
+        category: _category!,
+        state: _state!,
+        rcNumber: _rcNumber.text.trim().isEmpty ? null : _rcNumber.text.trim(),
+        logoUrl: logoUrl,
       );
+      appState.markVendorProfileCreated();
+
       if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder:
-              (_) => VendorVerifyOtpScreen(
-                theme: widget.theme,
-                email: email,
-                businessName: _businessName.text.trim(),
-                category: _category!,
-                state: _state!,
-                rcNumber: _rcNumber.text.trim(),
-                phone: _phone.text.trim(),
-                logo: _logo,
-              ),
-        ),
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => VendorDashboardScreen(theme: widget.theme)),
       );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -284,43 +251,11 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   hint: 'e.g. Comfort Home Furniture',
                 ),
                 const SizedBox(height: 16),
-                _Field(
-                  label: "Owner's Full Name",
-                  theme: theme,
-                  controller: _ownerName,
-                  hint: 'Full name',
-                ),
-                const SizedBox(height: 16),
-                _Field(
-                  label: 'Email Address',
-                  theme: theme,
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  hint: 'Enter your email',
-                ),
-                const SizedBox(height: 16),
-                _Field(
-                  label: 'Phone Number',
-                  theme: theme,
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  hint: 'e.g. 0801 234 5678',
-                ),
-                const SizedBox(height: 16),
                 _Dropdown(
                   label: 'Business Category',
                   theme: theme,
                   value: _category?.label ?? 'Select a category',
                   onTap: _pickCategory,
-                ),
-                const SizedBox(height: 16),
-                _Field(
-                  label: 'Business Address',
-                  theme: theme,
-                  controller: _address,
-                  minLines: 2,
-                  maxLines: 3,
-                  hint: 'Street, area, city',
                 ),
                 const SizedBox(height: 16),
                 _Dropdown(
@@ -337,78 +272,9 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   keyboardType: TextInputType.text,
                   hint: 'e.g. RC1234567',
                 ),
-                const SizedBox(height: 16),
-                _Field(
-                  label: 'Password',
-                  theme: theme,
-                  controller: _password,
-                  obscureText: _obscurePassword,
-                  hint: 'At least 8 characters',
-                  trailing: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: theme.onSurface.withValues(alpha: 0.6),
-                      size: 20,
-                    ),
-                    onPressed:
-                        () => setState(
-                          () => _obscurePassword = !_obscurePassword,
-                        ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                _Field(
-                  label: 'Confirm Password',
-                  theme: theme,
-                  controller: _confirmPassword,
-                  obscureText: _obscureConfirm,
-                  hint: 'Re-enter your password',
-                  trailing: IconButton(
-                    icon: Icon(
-                      _obscureConfirm
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                      color: theme.onSurface.withValues(alpha: 0.6),
-                      size: 20,
-                    ),
-                    onPressed:
-                        () =>
-                            setState(() => _obscureConfirm = !_obscureConfirm),
-                  ),
-                ),
-                const SizedBox(height: 20),
-                InkWell(
-                  onTap: () => setState(() => _agreedToTerms = !_agreedToTerms),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Checkbox(
-                        value: _agreedToTerms,
-                        activeColor: theme.accent,
-                        onChanged:
-                            (value) =>
-                                setState(() => _agreedToTerms = value ?? false),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 14),
-                          child: Text(
-                            'I agree to the Home Servant Vendor Terms & Conditions',
-                            style: AppTextStyles.body(
-                              color: theme.foreground.withValues(alpha: 0.75),
-                              size: 13,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
                 const SizedBox(height: 24),
                 PillButton(
-                  label: _submitting ? 'Signing up…' : 'Sign Up as a Vendor',
+                  label: _submitting ? 'Setting up your shop…' : 'Create My Shop',
                   backgroundColor: theme.accent,
                   textColor: theme.onAccent,
                   loading: _submitting,
@@ -429,10 +295,6 @@ class _Field extends StatelessWidget {
     required this.theme,
     required this.controller,
     this.keyboardType,
-    this.obscureText = false,
-    this.trailing,
-    this.minLines,
-    this.maxLines = 1,
     this.hint = '',
   });
 
@@ -440,38 +302,19 @@ class _Field extends StatelessWidget {
   final DashboardTheme theme;
   final TextEditingController controller;
   final TextInputType? keyboardType;
-  final bool obscureText;
-  final Widget? trailing;
-  final int? minLines;
-  final int? maxLines;
   final String hint;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: AppTextStyles.body(
-            color: theme.foreground,
-            weight: FontWeight.w600,
-            size: 13.5,
-          ),
-        ),
-        const SizedBox(height: 8),
-        PillTextField(
-          hint: hint,
-          controller: controller,
-          keyboardType: keyboardType,
-          obscureText: obscureText,
-          trailing: trailing,
-          minLines: minLines,
-          maxLines: obscureText ? 1 : maxLines,
-          fillColor: theme.surface,
-          textColor: theme.onSurface,
-        ),
-      ],
+    return LabeledPillField(
+      label: label,
+      labelColor: theme.foreground,
+      labelSize: 13.5,
+      controller: controller,
+      keyboardType: keyboardType,
+      hint: hint,
+      fillColor: theme.surface,
+      textColor: theme.onSurface,
     );
   }
 }

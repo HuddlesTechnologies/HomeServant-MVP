@@ -1,29 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
+import '../../../api/models/tenancy_agreement.dart';
 import '../../../core/responsive.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/dashboard_theme.dart';
 import '../../../state/app_state.dart';
-import '../models/property.dart';
-import '../models/rental_record.dart';
+import '../../../widgets/dashboard_page_scaffold.dart';
 import 'tenancy_agreement_content.dart';
 import 'tenancy_agreement_pdf.dart';
 
+/// Fetches and renders the real, persisted `TenancyAgreement` for
+/// [bookingId] (`GET /bookings/:id/tenancy-agreement`) — generated
+/// server-side on move-in. No client-side fabrication: if the backend
+/// hasn't generated one yet (booking not yet moved in), this shows an
+/// explicit "not ready" state instead of inventing one.
 class TenancyAgreementViewScreen extends StatefulWidget {
-  const TenancyAgreementViewScreen({super.key, required this.theme, required this.property, required this.record});
+  const TenancyAgreementViewScreen({super.key, required this.theme, required this.bookingId});
 
   final DashboardTheme theme;
-  final Property property;
-  final RentalRecord record;
+  final String bookingId;
 
   @override
   State<TenancyAgreementViewScreen> createState() => _TenancyAgreementViewScreenState();
 }
 
 class _TenancyAgreementViewScreenState extends State<TenancyAgreementViewScreen> {
+  bool _loading = true;
   bool _downloading = false;
+  TenancyAgreement? _agreement;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final agreement = await context.read<AppState>().fetchTenancyAgreement(widget.bookingId);
+      if (!mounted) return;
+      setState(() {
+        _agreement = agreement;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+    }
+  }
 
   Future<void> _download(TenancyAgreementContent content) async {
     setState(() => _downloading = true);
@@ -40,54 +66,70 @@ class _TenancyAgreementViewScreenState extends State<TenancyAgreementViewScreen>
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final appState = context.watch<AppState>();
-    final content = buildTenancyAgreementContent(property: widget.property, record: widget.record, appState: appState);
+    final agreement = _agreement;
 
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.foreground),
-        title: Text('Tenancy Agreement', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-      ),
+    return DashboardPageScaffold(
+      background: theme.background,
+      foreground: theme.foreground,
+      title: 'Tenancy Agreement',
       body: SafeArea(
-        child: ResponsiveCenter(
-          maxWidth: 720,
-          child: Column(
-            children: [
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  children: [
-                    _DocumentPaper(theme: theme, content: content),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _downloading ? null : () => _download(content),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.accent,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    ),
-                    icon: _downloading
-                        ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: theme.onAccent))
-                        : Icon(Icons.download_rounded, color: theme.onAccent, size: 20),
-                    label: Text(
-                      _downloading ? 'Preparing PDF…' : 'Download PDF',
-                      style: AppTextStyles.button(color: theme.onAccent),
-                    ),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : agreement == null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    "This tenancy agreement isn't ready yet — it's generated automatically once move-in is "
+                    'confirmed.',
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.7), size: 14),
                   ),
                 ),
+              )
+            : ResponsiveCenter(
+                maxWidth: 720,
+                child: Builder(
+                  builder: (context) {
+                    final content = buildTenancyAgreementContent(agreement);
+                    return Column(
+                      children: [
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                            children: [_DocumentPaper(theme: theme, content: content)],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _downloading ? null : () => _download(content),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: theme.accent,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                              ),
+                              icon: _downloading
+                                  ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: theme.onAccent),
+                                    )
+                                  : Icon(Icons.download_rounded, color: theme.onAccent, size: 20),
+                              label: Text(
+                                _downloading ? 'Preparing PDF…' : 'Download PDF',
+                                style: AppTextStyles.button(color: theme.onAccent),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
-            ],
-          ),
-        ),
       ),
     );
   }

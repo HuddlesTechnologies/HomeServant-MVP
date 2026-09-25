@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
+import '../../api/models/auth_user.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
@@ -25,17 +26,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _dob;
   late final TextEditingController _address;
   late final TextEditingController _phone;
+  late final TextEditingController _gender;
+  late final TextEditingController _occupation;
+  late final TextEditingController _maritalStatus;
   final _fullNameFocus = FocusNode();
   final _addressFocus = FocusNode();
   final _phoneFocus = FocusNode();
+  final _occupationFocus = FocusNode();
   DateTime? _dateOfBirth;
   String? _photoPath;
+  Gender? _genderValue;
+  MaritalStatus? _maritalStatusValue;
   bool _saving = false;
 
   bool _fullNameEditable = false;
   bool _dobEditable = false;
   bool _addressEditable = false;
   bool _phoneEditable = false;
+  bool _genderEditable = false;
+  bool _occupationEditable = false;
+  bool _maritalStatusEditable = false;
 
   @override
   void initState() {
@@ -49,6 +59,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _address = TextEditingController(text: appState.houseAddress);
     _phone = TextEditingController(text: appState.phoneNumber);
     _photoPath = appState.profilePhotoPath;
+    _genderValue = appState.gender;
+    _gender = TextEditingController(text: _genderValue?.label ?? '');
+    _occupation = TextEditingController(text: appState.occupation ?? '');
+    _maritalStatusValue = appState.maritalStatus;
+    _maritalStatus = TextEditingController(text: _maritalStatusValue?.label ?? '');
   }
 
   @override
@@ -57,10 +72,66 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _dob.dispose();
     _address.dispose();
     _phone.dispose();
+    _gender.dispose();
+    _occupation.dispose();
+    _maritalStatus.dispose();
     _fullNameFocus.dispose();
     _addressFocus.dispose();
     _phoneFocus.dispose();
+    _occupationFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickGender() async {
+    final result = await showModalBottomSheet<Gender>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: Gender.values
+              .map((option) => ListTile(
+                    title: Text(option.label, style: AppTextStyles.body(color: AppColors.navy)),
+                    trailing: option == _genderValue ? const Icon(Icons.check, color: AppColors.navy) : null,
+                    onTap: () => Navigator.pop(context, option),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _genderValue = result;
+        _gender.text = result.label;
+      });
+    }
+  }
+
+  Future<void> _pickMaritalStatus() async {
+    final result = await showModalBottomSheet<MaritalStatus>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: MaritalStatus.values
+              .map((option) => ListTile(
+                    title: Text(option.label, style: AppTextStyles.body(color: AppColors.navy)),
+                    trailing: option == _maritalStatusValue ? const Icon(Icons.check, color: AppColors.navy) : null,
+                    onTap: () => Navigator.pop(context, option),
+                  ))
+              .toList(),
+        ),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _maritalStatusValue = result;
+        _maritalStatus.text = result.label;
+      });
+    }
   }
 
   Future<void> _pickPhoto() async {
@@ -116,6 +187,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         houseAddress: _address.text.trim().isEmpty ? null : _address.text.trim(),
         dateOfBirth: _dateOfBirth,
         profilePhotoUrl: photoUrl,
+        gender: _genderValue,
+        occupation: _occupation.text.trim().isEmpty ? null : _occupation.text.trim(),
+        maritalStatus: _maritalStatusValue,
       );
       if (!mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('Profile updated')));
@@ -276,6 +350,53 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       FocusScope.of(context).requestFocus(_phoneFocus);
                     }
                   },
+                ),
+                const SizedBox(height: 18),
+                _EditableField(
+                  label: 'Gender',
+                  theme: theme,
+                  controller: _gender,
+                  editable: _genderEditable,
+                  hint: 'Tap to select a gender',
+                  forceReadOnly: true,
+                  onFieldTap: _genderEditable ? _pickGender : null,
+                  extraTrailing: Icon(
+                    Icons.arrow_drop_down,
+                    color: AppColors.navy,
+                    size: 22,
+                  ),
+                  onToggleEdit: () => setState(() => _genderEditable = !_genderEditable),
+                ),
+                const SizedBox(height: 18),
+                _EditableField(
+                  label: 'Occupation',
+                  theme: theme,
+                  controller: _occupation,
+                  focusNode: _occupationFocus,
+                  editable: _occupationEditable,
+                  hint: 'Enter your occupation',
+                  onToggleEdit: () {
+                    setState(() => _occupationEditable = !_occupationEditable);
+                    if (_occupationEditable) {
+                      FocusScope.of(context).requestFocus(_occupationFocus);
+                    }
+                  },
+                ),
+                const SizedBox(height: 18),
+                _EditableField(
+                  label: 'Marital Status',
+                  theme: theme,
+                  controller: _maritalStatus,
+                  editable: _maritalStatusEditable,
+                  hint: 'Tap to select a marital status',
+                  forceReadOnly: true,
+                  onFieldTap: _maritalStatusEditable ? _pickMaritalStatus : null,
+                  extraTrailing: Icon(
+                    Icons.arrow_drop_down,
+                    color: AppColors.navy,
+                    size: 22,
+                  ),
+                  onToggleEdit: () => setState(() => _maritalStatusEditable = !_maritalStatusEditable),
                 ),
                 const SizedBox(height: 32),
                 PillButton(

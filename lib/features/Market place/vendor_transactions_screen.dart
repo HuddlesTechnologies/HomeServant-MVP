@@ -6,6 +6,7 @@ import '../../core/thousands_separator.dart';
 import '../../features/Market place/models/order_options.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/order_status_badge.dart';
 import 'vendor_order_detail_screen.dart';
 
 /// A ledger view of everything the vendor has sold — the same underlying
@@ -131,17 +132,7 @@ class _VendorTransactionsScreenState extends State<VendorTransactionsScreen> {
                                     style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w700),
                                   ),
                                   const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                    decoration: BoxDecoration(
-                                      color: item.status.color.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      item.status.label,
-                                      style: AppTextStyles.body(color: item.status.color, size: 10.5, weight: FontWeight.w700),
-                                    ),
-                                  ),
+                                  OrderStatusBadge(status: item.status),
                                 ],
                               ),
                             ],

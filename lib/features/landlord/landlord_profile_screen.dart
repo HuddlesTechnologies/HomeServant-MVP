@@ -3,11 +3,9 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
-import '../../widgets/profile_edit_button.dart';
-import '../../widgets/profile_menu_tile.dart';
+import '../../widgets/profile_menu_scaffold.dart';
 import '../../widgets/support_sheet.dart';
 import '../../widgets/theme_picker_sheet.dart';
-import '../../widgets/upload_picker.dart';
 import '../dashboard/edit_profile_screen.dart';
 import '../dashboard/notifications_screen.dart';
 import 'landlord_add_property_screen.dart';
@@ -30,118 +28,135 @@ class LandlordProfileScreen extends StatelessWidget {
     final appState = context.watch<AppState>();
     final photoPath = appState.profilePhotoPath;
     final theme = appState.dashboardTheme;
+    final badgeColor = Colors.white.withValues(alpha: 0.08);
+    final dividerColor = Colors.white.withValues(alpha: 0.15);
 
-    return Container(
-      color: AppColors.navy,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
+    return ProfileMenuScaffold(
+      backgroundColor: AppColors.navy,
+      iconColor: AppColors.gold,
+      labelColor: Colors.white,
+      badgeColor: badgeColor,
+      dividerColor: dividerColor,
+      photoPath: photoPath,
+      photoBorderColor: Colors.white,
+      editButtonColor: AppColors.gold,
+      onEditProfileTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfileScreen())),
+      header: Row(
         children: [
-          Row(
-            children: [
-              const Icon(Icons.tune_rounded, color: AppColors.gold, size: 20),
-              const SizedBox(width: 10),
-              Text('Profile Settings', style: AppTextStyles.heading(color: AppColors.gold, size: 19)),
-            ],
+          const Icon(Icons.tune_rounded, color: AppColors.gold, size: 20),
+          const SizedBox(width: 10),
+          Text('Profile Settings', style: AppTextStyles.heading(color: AppColors.gold, size: 19)),
+        ],
+      ),
+      items: [
+        ProfileMenuItemSpec(
+          icon: Icons.remove_red_eye_outlined,
+          label: 'Overview',
+          onTap: onOverview ?? () {},
+        ),
+        ProfileMenuItemSpec(
+          icon: Icons.add_circle_outline_rounded,
+          label: 'Add Property',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LandlordAddPropertyScreen()),
           ),
-          const SizedBox(height: 22),
+        ),
+        ProfileMenuItemSpec(
+          icon: Icons.account_balance_rounded,
+          label: 'Bank Details',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LandlordBankDetailsScreen()),
+          ),
+        ),
+        ProfileMenuItemSpec(
+          icon: Icons.remove_red_eye_outlined,
+          label: 'Theme',
+          onTap: () async {
+            final picked = await showThemePickerSheet(context, current: theme);
+            if (picked != null && context.mounted) {
+              context.read<AppState>().setDashboardTheme(picked);
+            }
+          },
+        ),
+        ProfileMenuItemSpec(
+          icon: Icons.error_outline_rounded,
+          label: 'Alert',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => NotificationsScreen(theme: theme)),
+          ),
+        ),
+        ProfileMenuItemSpec(
+          icon: Icons.support_agent_rounded,
+          label: 'Support',
+          onTap: () => showSupportOptionsSheet(context, theme: theme),
+        ),
+        ProfileMenuItemSpec(
+          icon: Icons.logout_rounded,
+          label: 'Log Out',
+          onTap: onLogOut,
+          showDivider: false,
+        ),
+      ],
+      footer: _BannerAutoDismissRow(
+        iconColor: AppColors.gold,
+        badgeColor: badgeColor,
+        labelColor: Colors.white,
+        value: appState.bannerAutoDismiss,
+        onChanged: appState.setBannerAutoDismiss,
+      ),
+    );
+  }
+}
+
+/// A device-local on/off row for the Instagram-style notification banner's
+/// auto-dismiss behaviour — styled to match [ProfileMenuTile]'s badge +
+/// label layout, but with a trailing [Switch] instead of a chevron/onTap,
+/// since it's a toggle rather than a navigable row.
+class _BannerAutoDismissRow extends StatelessWidget {
+  const _BannerAutoDismissRow({
+    required this.iconColor,
+    required this.badgeColor,
+    required this.labelColor,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final Color iconColor;
+  final Color badgeColor;
+  final Color labelColor;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
           Container(
-            width: 78,
-            height: 78,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 1.4),
-              // BoxFit.contain rather than cover — there's no crop step at
-              // pick time, so covering the circle would zoom into whatever
-              // was centered in the original photo instead of showing all
-              // of it.
-              image: photoPath != null
-                  ? DecorationImage(image: imageProviderForPath(photoPath), fit: BoxFit.contain)
-                  : null,
-            ),
-            child: photoPath == null ? const Icon(Icons.person_outline, color: Colors.white, size: 40) : null,
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle),
+            child: Icon(Icons.timer_outlined, color: iconColor, size: 19),
           ),
-          const SizedBox(height: 16),
-          ProfileEditButton(
-            color: AppColors.gold,
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfileScreen())),
-          ),
-          const SizedBox(height: 20),
-          Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
-          ProfileMenuTile(
-            icon: Icons.remove_red_eye_outlined,
-            label: 'Overview',
-            iconColor: AppColors.gold,
-            badgeColor: Colors.white.withValues(alpha: 0.08),
-            labelColor: Colors.white,
-            dividerColor: Colors.white.withValues(alpha: 0.15),
-            onTap: onOverview ?? () {},
-          ),
-          ProfileMenuTile(
-            icon: Icons.add_circle_outline_rounded,
-            label: 'Add Property',
-            iconColor: AppColors.gold,
-            badgeColor: Colors.white.withValues(alpha: 0.08),
-            labelColor: Colors.white,
-            dividerColor: Colors.white.withValues(alpha: 0.15),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LandlordAddPropertyScreen()),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Auto-dismiss Notification Banners',
+                  style: AppTextStyles.body(color: labelColor, size: 15.5, weight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value ? 'Disappears automatically after 3 seconds' : 'Keep until swiped away',
+                  style: AppTextStyles.body(color: labelColor.withValues(alpha: 0.6), size: 12),
+                ),
+              ],
             ),
           ),
-          ProfileMenuTile(
-            icon: Icons.account_balance_rounded,
-            label: 'Bank Details',
-            iconColor: AppColors.gold,
-            badgeColor: Colors.white.withValues(alpha: 0.08),
-            labelColor: Colors.white,
-            dividerColor: Colors.white.withValues(alpha: 0.15),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LandlordBankDetailsScreen()),
-            ),
-          ),
-          ProfileMenuTile(
-            icon: Icons.remove_red_eye_outlined,
-            label: 'Theme',
-            iconColor: AppColors.gold,
-            badgeColor: Colors.white.withValues(alpha: 0.08),
-            labelColor: Colors.white,
-            dividerColor: Colors.white.withValues(alpha: 0.15),
-            onTap: () async {
-              final picked = await showThemePickerSheet(context, current: theme);
-              if (picked != null && context.mounted) {
-                context.read<AppState>().setDashboardTheme(picked);
-              }
-            },
-          ),
-          ProfileMenuTile(
-            icon: Icons.error_outline_rounded,
-            label: 'Alert',
-            iconColor: AppColors.gold,
-            badgeColor: Colors.white.withValues(alpha: 0.08),
-            labelColor: Colors.white,
-            dividerColor: Colors.white.withValues(alpha: 0.15),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => NotificationsScreen(theme: theme)),
-            ),
-          ),
-          ProfileMenuTile(
-            icon: Icons.support_agent_rounded,
-            label: 'Support',
-            iconColor: AppColors.gold,
-            badgeColor: Colors.white.withValues(alpha: 0.08),
-            labelColor: Colors.white,
-            dividerColor: Colors.white.withValues(alpha: 0.15),
-            onTap: () => showSupportOptionsSheet(context, theme: theme),
-          ),
-          ProfileMenuTile(
-            icon: Icons.logout_rounded,
-            label: 'Log Out',
-            iconColor: AppColors.gold,
-            badgeColor: Colors.white.withValues(alpha: 0.08),
-            labelColor: Colors.white,
-            dividerColor: Colors.white.withValues(alpha: 0.15),
-            onTap: onLogOut,
-            showDivider: false,
-          ),
+          Switch.adaptive(value: value, onChanged: onChanged, activeColor: iconColor),
         ],
       ),
     );

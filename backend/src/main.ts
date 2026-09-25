@@ -6,7 +6,13 @@ import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true makes Nest's body-parser stash the untouched request
+  // bytes on `req.rawBody` for every route, alongside the normal parsed
+  // `req.body` — needed only by PaystackController's webhook, which must
+  // HMAC the exact bytes Paystack signed (re-serializing the parsed JSON
+  // can produce different bytes and break the signature check). Every
+  // other route is unaffected; it just also gets a rawBody it ignores.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
   // Render sits in front of this container as a reverse proxy — without
   // this, `req.ip` is the proxy's own address for every request, which

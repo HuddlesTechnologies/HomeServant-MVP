@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/responsive.dart';
-import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/empty_state.dart';
 import 'models/property.dart';
 import 'widgets/property_card.dart';
@@ -17,14 +17,10 @@ class WishlistScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final favorites = context.select<AppState, List<Property>>((state) => state.favoriteProperties);
 
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.foreground),
-        title: Text('WishList', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-      ),
+    return DashboardPageScaffold(
+      background: theme.background,
+      foreground: theme.foreground,
+      title: 'WishList',
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 640,

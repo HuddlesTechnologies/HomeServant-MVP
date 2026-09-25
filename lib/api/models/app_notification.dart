@@ -2,21 +2,29 @@ enum NotificationType {
   referralSignup,
   vendorApproved,
   vendorRejected,
+  vendorSuspended,
+  vendorUnsuspended,
   bookingStatus,
   marketplaceOrderStatus,
   newMessage,
   reportAssigned,
-  threadTransferred;
+  threadTransferred,
+  rentExpiryReminder,
+  newListingMessage;
 
   static NotificationType fromApi(String value) => switch (value) {
     'REFERRAL_SIGNUP' => NotificationType.referralSignup,
     'VENDOR_APPROVED' => NotificationType.vendorApproved,
     'VENDOR_REJECTED' => NotificationType.vendorRejected,
+    'VENDOR_SUSPENDED' => NotificationType.vendorSuspended,
+    'VENDOR_UNSUSPENDED' => NotificationType.vendorUnsuspended,
     'BOOKING_STATUS' => NotificationType.bookingStatus,
     'MARKETPLACE_ORDER_STATUS' => NotificationType.marketplaceOrderStatus,
     'NEW_MESSAGE' => NotificationType.newMessage,
     'REPORT_ASSIGNED' => NotificationType.reportAssigned,
     'THREAD_TRANSFERRED' => NotificationType.threadTransferred,
+    'RENT_EXPIRY_REMINDER' => NotificationType.rentExpiryReminder,
+    'NEW_LISTING_MESSAGE' => NotificationType.newListingMessage,
     _ => NotificationType.referralSignup,
   };
 }

@@ -19,13 +19,7 @@ class AdminRepository {
         '/admin/users',
         queryParameters: {if (role != null) 'role': role, if (search != null && search.isNotEmpty) 'search': search, 'page': page},
       );
-      final data = response.data as Map<String, dynamic>;
-      return AdminPage<AdminUser>(
-        items: (data['items'] as List).cast<Map<String, dynamic>>().map(AdminUser.fromApi).toList(),
-        total: data['total'] as int,
-        page: data['page'] as int,
-        pageSize: data['pageSize'] as int,
-      );
+      return AdminPage<AdminUser>.fromApi(response.data as Map<String, dynamic>, AdminUser.fromApi);
     });
   }
 
@@ -33,6 +27,23 @@ class AdminRepository {
     return _client.call(() async {
       final response = await _client.dio.get('/admin/users/$id');
       return AdminUserDetail.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
+  /// Edits basic profile fields — available to every admin tier
+  /// (including Support), unlike deactivate/delete which stay
+  /// MODERATOR+. Only the fields the caller passes are sent, so a partial
+  /// edit doesn't clobber the others.
+  Future<void> updateUser(String id, {String? name, String? phone, String? houseAddress}) {
+    return _client.call(() async {
+      await _client.dio.patch(
+        '/admin/users/$id',
+        data: {
+          if (name != null) 'name': name,
+          if (phone != null) 'phone': phone,
+          if (houseAddress != null) 'houseAddress': houseAddress,
+        },
+      );
     });
   }
 
@@ -54,13 +65,14 @@ class AdminRepository {
         '/admin/vendors',
         queryParameters: {if (status != null) 'status': status, if (search != null && search.isNotEmpty) 'search': search, 'page': page},
       );
-      final data = response.data as Map<String, dynamic>;
-      return AdminPage<AdminVendor>(
-        items: (data['items'] as List).cast<Map<String, dynamic>>().map(AdminVendor.fromApi).toList(),
-        total: data['total'] as int,
-        page: data['page'] as int,
-        pageSize: data['pageSize'] as int,
-      );
+      return AdminPage<AdminVendor>.fromApi(response.data as Map<String, dynamic>, AdminVendor.fromApi);
+    });
+  }
+
+  Future<AdminVendorDetail> vendorDetail(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/vendors/$id');
+      return AdminVendorDetail.fromApi(response.data as Map<String, dynamic>);
     });
   }
 
@@ -76,15 +88,17 @@ class AdminRepository {
     });
   }
 
-  Future<void> suspendVendor(String id) {
+  /// [reason] is required — it's emailed to the vendor, same as
+  /// [removeProperty]/[removeProduct]'s delist reason.
+  Future<void> suspendVendor(String id, {required String reason}) {
     return _client.call(() async {
-      await _client.dio.patch('/admin/vendors/$id/suspend');
+      await _client.dio.patch('/admin/vendors/$id/suspend', data: {'reason': reason});
     });
   }
 
-  Future<void> unsuspendVendor(String id) {
+  Future<void> unsuspendVendor(String id, {required String reason}) {
     return _client.call(() async {
-      await _client.dio.patch('/admin/vendors/$id/unsuspend');
+      await _client.dio.patch('/admin/vendors/$id/unsuspend', data: {'reason': reason});
     });
   }
 
@@ -94,13 +108,7 @@ class AdminRepository {
         '/admin/properties',
         queryParameters: {if (search != null && search.isNotEmpty) 'search': search, 'page': page},
       );
-      final data = response.data as Map<String, dynamic>;
-      return AdminPage<AdminProperty>(
-        items: (data['items'] as List).cast<Map<String, dynamic>>().map(AdminProperty.fromApi).toList(),
-        total: data['total'] as int,
-        page: data['page'] as int,
-        pageSize: data['pageSize'] as int,
-      );
+      return AdminPage<AdminProperty>.fromApi(response.data as Map<String, dynamic>, AdminProperty.fromApi);
     });
   }
 
@@ -110,19 +118,23 @@ class AdminRepository {
     });
   }
 
+  /// Moderator/super-admin override for the landlord-side "can't re-list
+  /// an occupied property" rule. Not yet confirmed against a real backend
+  /// route as of this writing — this is the reasonably-named endpoint this
+  /// action expects; confirm/add it server-side if it 404s.
+  Future<void> relistProperty(String id) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/properties/$id/relist');
+    });
+  }
+
   Future<AdminPage<AdminProduct>> findProducts({String? search, int page = 1}) {
     return _client.call(() async {
       final response = await _client.dio.get(
         '/admin/marketplace/products',
         queryParameters: {if (search != null && search.isNotEmpty) 'search': search, 'page': page},
       );
-      final data = response.data as Map<String, dynamic>;
-      return AdminPage<AdminProduct>(
-        items: (data['items'] as List).cast<Map<String, dynamic>>().map(AdminProduct.fromApi).toList(),
-        total: data['total'] as int,
-        page: data['page'] as int,
-        pageSize: data['pageSize'] as int,
-      );
+      return AdminPage<AdminProduct>.fromApi(response.data as Map<String, dynamic>, AdminProduct.fromApi);
     });
   }
 
@@ -135,13 +147,7 @@ class AdminRepository {
   Future<AdminPage<AdminOrder>> findOrders({int page = 1}) {
     return _client.call(() async {
       final response = await _client.dio.get('/admin/marketplace/orders', queryParameters: {'page': page});
-      final data = response.data as Map<String, dynamic>;
-      return AdminPage<AdminOrder>(
-        items: (data['items'] as List).cast<Map<String, dynamic>>().map(AdminOrder.fromApi).toList(),
-        total: data['total'] as int,
-        page: data['page'] as int,
-        pageSize: data['pageSize'] as int,
-      );
+      return AdminPage<AdminOrder>.fromApi(response.data as Map<String, dynamic>, AdminOrder.fromApi);
     });
   }
 
@@ -216,13 +222,7 @@ class AdminRepository {
   Future<AdminPage<ActivityLogEntry>> findActivityLog({int page = 1}) {
     return _client.call(() async {
       final response = await _client.dio.get('/admin/activity-log', queryParameters: {'page': page});
-      final data = response.data as Map<String, dynamic>;
-      return AdminPage<ActivityLogEntry>(
-        items: (data['items'] as List).cast<Map<String, dynamic>>().map(ActivityLogEntry.fromApi).toList(),
-        total: data['total'] as int,
-        page: data['page'] as int,
-        pageSize: data['pageSize'] as int,
-      );
+      return AdminPage<ActivityLogEntry>.fromApi(response.data as Map<String, dynamic>, ActivityLogEntry.fromApi);
     });
   }
 
@@ -239,13 +239,7 @@ class AdminRepository {
         '/reports',
         queryParameters: {if (status != null) 'status': status.apiValue, 'page': page},
       );
-      final data = response.data as Map<String, dynamic>;
-      return AdminPage<AdminReport>(
-        items: (data['items'] as List).cast<Map<String, dynamic>>().map(AdminReport.fromApi).toList(),
-        total: data['total'] as int,
-        page: data['page'] as int,
-        pageSize: data['pageSize'] as int,
-      );
+      return AdminPage<AdminReport>.fromApi(response.data as Map<String, dynamic>, AdminReport.fromApi);
     });
   }
 

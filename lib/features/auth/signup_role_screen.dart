@@ -5,19 +5,26 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
+import '../../widgets/login_outcome_handler.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
-import '../../widgets/reactivate_account_dialog.dart';
 import '../../widgets/terms_footer.dart';
 import '../../widgets/themed_scaffold.dart';
 
-class SignupTenantScreen extends StatefulWidget {
-  const SignupTenantScreen({
+/// Sign-up screen for either tenant or landlord accounts — the two were
+/// identical line-for-line apart from which [UserRole] they used (and one
+/// hint's capitalisation, preserved below), so this single screen is
+/// parameterized by [role] and used for both `/signup-landlord` and
+/// `/signup-tenant`.
+class SignupRoleScreen extends StatefulWidget {
+  const SignupRoleScreen({
     super.key,
+    required this.role,
     required this.onContinue,
     required this.onGoogleSignedIn,
   });
 
+  final UserRole role;
   final ValueChanged<String> onContinue;
 
   /// Google sign-in skips email/OTP entirely — a distinct callback from
@@ -26,18 +33,19 @@ class SignupTenantScreen extends StatefulWidget {
   final VoidCallback onGoogleSignedIn;
 
   @override
-  State<SignupTenantScreen> createState() => _SignupTenantScreenState();
+  State<SignupRoleScreen> createState() => _SignupRoleScreenState();
 }
 
-class _SignupTenantScreenState extends State<SignupTenantScreen> {
+class _SignupRoleScreenState extends State<SignupRoleScreen> {
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
-  static const _role = UserRole.tenant;
   bool _submitting = false;
   bool _googleSubmitting = false;
   String? _error;
+
+  UserRole get _role => widget.role;
 
   @override
   void dispose() {
@@ -76,15 +84,13 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
     try {
       final outcome = await context.read<AppState>().loginWithGoogle(reactivate: reactivate);
       if (!mounted || outcome == null) return;
-      switch (outcome) {
-        case LoginOutcome.success:
-          widget.onGoogleSignedIn();
-        case LoginOutcome.requiresTwoFactor:
-          break;
-        case LoginOutcome.requiresReactivation:
-          final confirmed = await showReactivateAccountDialog(context);
-          if (confirmed == true && mounted) await _continueWithGoogle(reactivate: true);
-      }
+      await handleLoginOutcome(
+        context,
+        outcome,
+        onSuccess: widget.onGoogleSignedIn,
+        onTwoFactor: () {},
+        onReactivate: () => _continueWithGoogle(reactivate: true),
+      );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
@@ -119,12 +125,15 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
             ),
             const SizedBox(height: 28),
             PillTextField(
-              hint: 'Enter your email',
+              // Preserved from each original screen: the landlord version
+              // used a lowercase hint, the tenant one capitalised.
+              hint: _role.isLandlord ? 'enter your email' : 'Enter your email',
               controller: _email,
               keyboardType: TextInputType.emailAddress,
               validator: (value) {
-                if (value == null || !value.contains('@'))
+                if (value == null || !value.contains('@')) {
                   return 'Enter a valid email';
+                }
                 return null;
               },
             ),
@@ -134,8 +143,9 @@ class _SignupTenantScreenState extends State<SignupTenantScreen> {
               controller: _password,
               obscureText: true,
               validator: (value) {
-                if (value == null || value.length < 8)
+                if (value == null || value.length < 8) {
                   return 'At least 8 characters';
+                }
                 return null;
               },
             ),

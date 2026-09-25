@@ -8,6 +8,7 @@ import '../api/api_client.dart';
 import '../api/auth_repository.dart';
 import '../api/bookings_repository.dart';
 import '../api/chat_repository.dart';
+export '../api/bookings_repository.dart' show PaymentInitiation, BookingCreationResult;
 import '../api/favorites_repository.dart';
 import '../api/marketplace_orders_repository.dart';
 import '../api/marketplace_products_repository.dart';
@@ -22,8 +23,8 @@ import '../api/token_storage.dart';
 import '../api/uploads_repository.dart';
 import '../api/users_repository.dart';
 import '../api/vendors_repository.dart';
+import '../api/models/tenancy_agreement.dart';
 import '../features/dashboard/models/property.dart';
-import '../features/dashboard/models/rental_record.dart';
 import '../models/dashboard_theme.dart';
 import '../models/user_role.dart';
 import '../services/app_icon_service.dart';
@@ -128,6 +129,9 @@ class AppState extends ChangeNotifier {
   String phoneNumber = '';
   String houseAddress = '';
   DateTime? dateOfBirth;
+  Gender? gender;
+  String? occupation;
+  MaritalStatus? maritalStatus;
 
   /// True for an admin still signed in with the one-time temp password
   /// from their invite email — see AuthUser.mustChangePassword.
@@ -284,6 +288,9 @@ class AppState extends ChangeNotifier {
     DateTime? dateOfBirth,
     String? profilePhotoUrl,
     String? referralCode,
+    Gender? gender,
+    String? occupation,
+    MaritalStatus? maritalStatus,
   }) async {
     final user = await _usersRepo.updateProfile(
       fullName: fullName,
@@ -292,6 +299,9 @@ class AppState extends ChangeNotifier {
       dateOfBirth: dateOfBirth,
       profilePhotoUrl: profilePhotoUrl,
       referralCode: referralCode,
+      gender: gender,
+      occupation: occupation,
+      maritalStatus: maritalStatus,
     );
     _applyUser(user);
     notifyListeners();
@@ -350,6 +360,9 @@ class AppState extends ChangeNotifier {
     // been fetched, so a null here means "not fetched yet", not "cleared".
     if (user.houseAddress != null) houseAddress = user.houseAddress!;
     if (user.dateOfBirth != null) dateOfBirth = user.dateOfBirth;
+    if (user.gender != null) gender = user.gender;
+    if (user.occupation != null) occupation = user.occupation;
+    if (user.maritalStatus != null) maritalStatus = user.maritalStatus;
     twoFactorEnabled = user.twoFactorEnabled;
     mustChangePassword = user.mustChangePassword;
     bankCode = user.bankCode;
@@ -370,6 +383,9 @@ class AppState extends ChangeNotifier {
     houseAddress = '';
     myReferralCode = '';
     dateOfBirth = null;
+    gender = null;
+    occupation = null;
+    maritalStatus = null;
     profilePhotoPath = null;
     twoFactorEnabled = false;
     mustChangePassword = false;
@@ -382,18 +398,18 @@ class AppState extends ChangeNotifier {
     myBookings = [];
     landlordBookings = [];
     _myReviews = [];
-    _rentalHistory = {};
     notifications = [];
     unreadNotificationCount = 0;
+    _hasVendorProfile = null;
     adminLevel = null;
     pushNotificationsEnabled = true;
     newMessageNotifications = true;
     propertyUpdateNotifications = true;
     wishlistPriceDropAlerts = true;
     promotionalNotifications = false;
+    bannerAutoDismiss = true;
     appLockEnabled = false;
     appLockPin = null;
-    landlordMessagesEnabled = true;
     dashboardTheme = DashboardTheme.classic;
     notifyListeners();
     AppIconService.apply(dashboardTheme);
@@ -489,6 +505,40 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- Vendor profile (tenant-owned shop) ---------------------------------
+  //
+  // Any authenticated tenant/vendor can have a shop under the same login
+  // (see vendors.controller.ts's TENANT|VENDOR role gate) — this caches
+  // whether *this* account already has one, so MarketplaceAuthScreen and
+  // MarketplaceNavigatorHost don't need to hit `GET /vendors/me` on every
+  // rebuild. Null means "not checked yet this session"; populated lazily by
+  // [checkVendorProfile] the first time something needs it, not eagerly on
+  // launch.
+  bool? _hasVendorProfile;
+  bool? get hasVendorProfile => _hasVendorProfile;
+
+  Future<bool> checkVendorProfile() async {
+    if (_hasVendorProfile != null) return _hasVendorProfile!;
+    try {
+      final profile = await _vendorsRepo.findMine();
+      _hasVendorProfile = profile != null;
+    } catch (_) {
+      // Couldn't tell either way (network error, etc.) — default to false
+      // rather than leaving callers hanging; a later retry can still
+      // succeed since this only short-circuits once already non-null.
+      _hasVendorProfile = false;
+    }
+    notifyListeners();
+    return _hasVendorProfile!;
+  }
+
+  /// Call right after `POST /vendors/me` succeeds so the cached flag
+  /// reflects the new shop immediately, without an extra round trip.
+  void markVendorProfileCreated() {
+    _hasVendorProfile = true;
+    notifyListeners();
+  }
+
   // --- Properties (public browse feed) --------------------------------
 
   List<Property> properties = [];
@@ -522,6 +572,24 @@ class AppState extends ChangeNotifier {
     _landlordProperties = [created, ..._landlordProperties];
     notifyListeners();
     return created;
+  }
+
+  /// Full re-edit (rent duration, messaging toggle, shortlet fields, etc.)
+  /// of an existing listing — `PATCH /properties/:id`.
+  Future<Property> updateLandlordProperty(Property property) async {
+    final updated = await _propertiesRepo.update(property.id, property.toUpdateJson());
+    _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
+    notifyListeners();
+    return updated;
+  }
+
+  /// Just the per-property messaging toggle — used from the listing edit
+  /// screen without resubmitting every other field.
+  Future<Property> setPropertyMessagingEnabled(String propertyId, bool enabled) async {
+    final updated = await _propertiesRepo.update(propertyId, {'messagingEnabled': enabled});
+    _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
+    notifyListeners();
+    return updated;
   }
 
   // --- Wishlist ----------------------------------------------------------
@@ -563,14 +631,18 @@ class AppState extends ChangeNotifier {
   List<Booking> myBookings = [];
   List<Booking> landlordBookings = [];
   List<_ReviewSummary> _myReviews = [];
-  Map<String, RentalRecord> _rentalHistory = {};
 
-  Map<String, RentalRecord> get rentalHistory => Map.unmodifiable(_rentalHistory);
+  /// This tenant's own star rating for [propertyId], if they've rated it —
+  /// used by history/booking tiles instead of the removed derived
+  /// `RentalRecord` map.
+  double? myReviewFor(String propertyId) {
+    final match = _myReviews.where((r) => r.propertyId == propertyId);
+    return match.isEmpty ? null : match.first.rating;
+  }
 
   Future<void> loadMyBookings() async {
     if (userId == null) return;
     myBookings = await _bookingsRepo.mine();
-    _rebuildRentalHistory();
     notifyListeners();
   }
 
@@ -586,13 +658,66 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sends a real booking request to the landlord — no longer an instant
-  /// local "success", so [rentalHistory] only reflects bookings the
-  /// landlord has actually accepted (see [_rebuildRentalHistory]).
-  Future<void> recordRentalOrBooking(String propertyId, {required bool isShortlet}) async {
-    final booking = await _bookingsRepo.create(propertyId: propertyId);
-    myBookings = [booking, ...myBookings];
-    _rebuildRentalHistory();
+  /// For a Shortlet property, sends a booking request to the landlord
+  /// (unchanged flow: request → landlord `respond`s → tenant `pay`s
+  /// separately). For a non-Shortlet property, creates the booking and
+  /// immediately starts its Paystack charge — [BookingCreationResult.payment]
+  /// is set in that case; open its `authorizationUrl` right away. [nights]
+  /// is required only when [isShortlet].
+  Future<BookingCreationResult> recordRentalOrBooking(String propertyId, {required bool isShortlet, int? nights}) async {
+    final result = await _bookingsRepo.create(propertyId: propertyId, isShortlet: isShortlet, nights: isShortlet ? nights : null);
+    myBookings = [result.booking, ...myBookings];
+    notifyListeners();
+    return result;
+  }
+
+  /// Starts a Paystack charge for [bookingId] — open the returned
+  /// authorization URL in a browser/webview. Also usable as a retry if a
+  /// create-time charge attempt didn't finish.
+  Future<PaymentInitiation> payForBooking(String bookingId) => _bookingsRepo.pay(bookingId);
+
+  Future<void> markBookingMovedIn(String bookingId) async {
+    final updated = await _bookingsRepo.markMovedIn(bookingId);
+    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
+    notifyListeners();
+  }
+
+  Future<void> refundBooking(String bookingId) async {
+    final updated = await _bookingsRepo.refund(bookingId);
+    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
+    notifyListeners();
+  }
+
+  Future<void> renewBooking(String bookingId) async {
+    final updated = await _bookingsRepo.renew(bookingId);
+    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
+    notifyListeners();
+  }
+
+  Future<TenancyAgreement?> fetchTenancyAgreement(String bookingId) => _bookingsRepo.tenancyAgreement(bookingId);
+
+  /// Tenant proposes (or re-proposes) an inspection date for a
+  /// PAID_AWAITING_INSPECTION booking — reachable any time from history,
+  /// including right after paying ("book later") or much later.
+  Future<void> proposeInspection(String bookingId, DateTime requestedDate) async {
+    final updated = await _bookingsRepo.proposeInspection(id: bookingId, requestedDate: requestedDate);
+    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
+    notifyListeners();
+  }
+
+  /// Landlord accepts/declines the tenant's specific proposed inspection
+  /// date — distinct from [rejectBooking], which ends the booking outright.
+  Future<void> respondToInspection(String bookingId, {required bool accepted}) async {
+    final updated = await _bookingsRepo.respondToInspection(id: bookingId, accepted: accepted);
+    landlordBookings = [for (final b in landlordBookings) if (b.id == bookingId) updated else b];
+    notifyListeners();
+  }
+
+  /// Landlord's distinct "reject this booking outright" lever — full
+  /// refund, no platform fee withheld.
+  Future<void> rejectBooking(String bookingId) async {
+    final updated = await _bookingsRepo.rejectBooking(bookingId);
+    landlordBookings = [for (final b in landlordBookings) if (b.id == bookingId) updated else b];
     notifyListeners();
   }
 
@@ -600,34 +725,12 @@ class AppState extends ChangeNotifier {
     if (userId == null) return;
     final reviews = await _reviewsRepo.mine();
     _myReviews = [for (final r in reviews) _ReviewSummary(propertyId: r.propertyId, rating: r.rating.toDouble())];
-    _rebuildRentalHistory();
     notifyListeners();
   }
 
   Future<void> rateHistoryProperty(String propertyId, double rating) async {
     await _reviewsRepo.upsert(propertyId: propertyId, rating: rating.round());
     await loadMyReviews();
-  }
-
-  /// [RentalRecord]s are derived, not stored directly — an ACCEPTED booking
-  /// becomes one, with an end date synthesised the same way the old
-  /// local-only mock did (the API doesn't model a lease term yet), and the
-  /// tenant's own review rating (if any) merged in.
-  void _rebuildRentalHistory() {
-    final history = <String, RentalRecord>{};
-    for (final booking in myBookings) {
-      if (booking.status != BookingStatus.accepted) continue;
-      final isShortlet = booking.property.category == 'Shortlet';
-      final start = booking.createdAt;
-      final end = start.add(Duration(days: isShortlet ? 3 : 365));
-      final ratingMatch = _myReviews.where((r) => r.propertyId == booking.property.id);
-      history[booking.property.id] = RentalRecord(
-        startDate: start,
-        endDate: end,
-        rating: ratingMatch.isEmpty ? null : ratingMatch.first.rating,
-      );
-    }
-    _rentalHistory = history;
   }
 
   // --- Notification preferences (device-local, no server model) ----------
@@ -665,16 +768,15 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Landlord: tenant messaging (device-local, no server model) --------
+  /// Controls the global Instagram-style banner shown by
+  /// NotificationBannerOverlay the instant a `notification:new` socket
+  /// event arrives: `true` (default) auto-dismisses it after ~3s; `false`
+  /// leaves it up until the user swipes it away. Purely a display
+  /// preference (no server model), same as the rest of this section.
+  bool bannerAutoDismiss = true;
 
-  /// Whether tenants can message this landlord — and, from there, book a
-  /// property inspection. Landlord-only setting; when off, a tenant's
-  /// property detail screen hides "Message Landlord" entirely, leaving rent
-  /// payment as the only way forward.
-  bool landlordMessagesEnabled = true;
-
-  void setLandlordMessagesEnabled(bool value) {
-    landlordMessagesEnabled = value;
+  void setBannerAutoDismiss(bool value) {
+    bannerAutoDismiss = value;
     notifyListeners();
   }
 
@@ -721,9 +823,9 @@ class AppState extends ChangeNotifier {
     'propertyUpdateNotifications': propertyUpdateNotifications,
     'wishlistPriceDropAlerts': wishlistPriceDropAlerts,
     'promotionalNotifications': promotionalNotifications,
+    'bannerAutoDismiss': bannerAutoDismiss,
     'appLockEnabled': appLockEnabled,
     'appLockPin': appLockPin,
-    'landlordMessagesEnabled': landlordMessagesEnabled,
   };
 
   void _fromJson(Map<String, dynamic> json) {
@@ -736,9 +838,9 @@ class AppState extends ChangeNotifier {
     propertyUpdateNotifications = json['propertyUpdateNotifications'] as bool? ?? true;
     wishlistPriceDropAlerts = json['wishlistPriceDropAlerts'] as bool? ?? true;
     promotionalNotifications = json['promotionalNotifications'] as bool? ?? false;
+    bannerAutoDismiss = json['bannerAutoDismiss'] as bool? ?? true;
     appLockEnabled = json['appLockEnabled'] as bool? ?? false;
     appLockPin = json['appLockPin'] as String?;
-    landlordMessagesEnabled = json['landlordMessagesEnabled'] as bool? ?? true;
   }
 
   Future<void> _save() async {

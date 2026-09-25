@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
+import '../../api/models/chat.dart' show MessageType;
 import '../../api/models/marketplace_api.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
@@ -13,12 +14,26 @@ import '../../state/app_state.dart';
 import '../../widgets/pill_text_field.dart';
 import '../Market place/models/order_options.dart';
 import 'models/property.dart';
+import 'widgets/property_image.dart';
 
 class ChatMessage {
-  ChatMessage({required this.text, required this.fromMe});
+  ChatMessage({
+    required this.text,
+    required this.fromMe,
+    this.type = MessageType.text,
+    this.previewPropertyTitle,
+    this.previewPropertyImageUrl,
+    this.previewPropertyPrice,
+    this.previewPropertyPriceUnit,
+  });
 
   final String text;
   final bool fromMe;
+  final MessageType type;
+  final String? previewPropertyTitle;
+  final String? previewPropertyImageUrl;
+  final int? previewPropertyPrice;
+  final String? previewPropertyPriceUnit;
 }
 
 class ChatThreadScreen extends StatefulWidget {
@@ -89,7 +104,19 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final senderId = event.message['senderId'] as String?;
     final body = event.message['body'] as String?;
     if (senderId == null || body == null || senderId == appState.userId) return;
-    setState(() => _messages.add(ChatMessage(text: body, fromMe: false)));
+    setState(
+      () => _messages.add(
+        ChatMessage(
+          text: body,
+          fromMe: false,
+          type: event.message['type'] == 'propertyPreview' ? MessageType.propertyPreview : MessageType.text,
+          previewPropertyTitle: event.message['previewPropertyTitle'] as String?,
+          previewPropertyImageUrl: event.message['previewPropertyImageUrl'] as String?,
+          previewPropertyPrice: event.message['previewPropertyPrice'] as int?,
+          previewPropertyPriceUnit: event.message['previewPropertyPriceUnit'] as String?,
+        ),
+      ),
+    );
     _scrollToBottom();
     unawaited(appState.chat.markRead(widget.threadId!));
   }
@@ -103,7 +130,19 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       setState(() {
         _messages
           ..clear()
-          ..addAll(remote.map((m) => ChatMessage(text: m.body, fromMe: m.senderId == appState.userId)));
+          ..addAll(
+            remote.map(
+              (m) => ChatMessage(
+                text: m.body,
+                fromMe: m.senderId == appState.userId,
+                type: m.type,
+                previewPropertyTitle: m.previewPropertyTitle,
+                previewPropertyImageUrl: m.previewPropertyImageUrl,
+                previewPropertyPrice: m.previewPropertyPrice,
+                previewPropertyPriceUnit: m.previewPropertyPriceUnit,
+              ),
+            ),
+          );
         _loadingRemote = false;
       });
       _scrollToBottom();
@@ -180,7 +219,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     if (time == null || !mounted) return;
 
     final scheduled = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-    final formatted = _formatDateTime(scheduled);
+    final formatted = _formatScheduledDateTime(scheduled);
     _send("I'd like to book an inspection of ${property.title} on $formatted.");
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Inspection request sent for $formatted')));
   }
@@ -241,6 +280,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   itemCount: _messages.length,
                   itemBuilder: (context, index) {
                     final message = _messages[index];
+                    if (message.type == MessageType.propertyPreview) {
+                      return Align(
+                        alignment: message.fromMe ? Alignment.centerRight : Alignment.centerLeft,
+                        child: _PropertyPreviewBubble(theme: theme, message: message),
+                      );
+                    }
                     return Align(
                       alignment:
                           message.fromMe
@@ -333,6 +378,79 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   }
 }
 
+/// Formats a future date/time as "24 Oct at 10:00 AM" for the inspection
+/// booking confirmation message. Deliberately kept local rather than routed
+/// through `formatRelativeTime` — that helper measures elapsed time since
+/// [date] (`DateTime.now().difference(date)`), which only makes sense for
+/// timestamps in the past; [date] here is always a chosen future date, so
+/// reusing it would show "Just now" for every booking regardless of when
+/// it's actually scheduled.
+String _formatScheduledDateTime(DateTime date) {
+  final hour12 = date.hour % 12 == 0 ? 12 : date.hour % 12;
+  final minute = date.minute.toString().padLeft(2, '0');
+  final period = date.hour >= 12 ? 'PM' : 'AM';
+  return '${date.day} ${monthAbbreviations[date.month - 1]} at $hour12:$minute $period';
+}
+
+/// Rich preview card rendered in place of a plain text bubble for the
+/// first message in a listing-originated thread (`type: propertyPreview`),
+/// for both participants — everything else in the thread stays a normal
+/// text bubble.
+class _PropertyPreviewBubble extends StatelessWidget {
+  const _PropertyPreviewBubble({required this.theme, required this.message});
+
+  final DashboardTheme theme;
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = message.previewPropertyImageUrl;
+    final price = message.previewPropertyPrice;
+    final priceUnit = message.previewPropertyPriceUnit;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: message.fromMe ? theme.accent.withValues(alpha: 0.12) : theme.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: theme.accent.withValues(alpha: 0.25)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (imageUrl != null && imageUrl.isNotEmpty) PropertyImage(path: imageUrl, height: 130, width: double.infinity),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message.previewPropertyTitle ?? 'Property',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body(color: theme.onSurface, size: 14, weight: FontWeight.w700),
+                ),
+                if (price != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '₦${formatNaira(price)}${priceUnit != null ? '/${priceUnit.toLowerCase()}' : ''}',
+                    style: AppTextStyles.body(color: theme.accent, size: 13, weight: FontWeight.w700),
+                  ),
+                ],
+                if (message.text.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(message.text, style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.8), size: 13)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OrderStatusBanner extends StatelessWidget {
   const _OrderStatusBanner({required this.theme, required this.item, required this.status});
 
@@ -364,11 +482,4 @@ class _OrderStatusBanner extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatDateTime(DateTime date) {
-  final hour12 = date.hour % 12 == 0 ? 12 : date.hour % 12;
-  final minute = date.minute.toString().padLeft(2, '0');
-  final period = date.hour >= 12 ? 'PM' : 'AM';
-  return '${date.day} ${monthAbbreviations[date.month - 1]} at $hour12:$minute $period';
 }

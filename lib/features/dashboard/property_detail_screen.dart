@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../api/api_exception.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
@@ -9,6 +10,7 @@ import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
 import 'widgets/property_video_player.dart';
+import 'widgets/shortlet_unavailable_countdown.dart';
 
 class PropertyDetailScreen extends StatefulWidget {
   const PropertyDetailScreen({super.key, required this.property, required this.theme});
@@ -22,6 +24,7 @@ class PropertyDetailScreen extends StatefulWidget {
 
 class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   bool _descriptionExpanded = false;
+  bool _bookingBusy = false;
 
   List<String> get _allPhotos => [widget.property.image, ...widget.property.galleryImages];
 
@@ -29,6 +32,38 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PropertyGalleryScreen(images: _allPhotos, initialIndex: index, title: widget.property.title),
+      ),
+    );
+  }
+
+  /// For a Shortlet, the number of nights is required by `POST /bookings` —
+  /// prompted with a small stepper dialog before the request is sent.
+  Future<int?> _pickNights() async {
+    var nights = 1;
+    return showDialog<int>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => AlertDialog(
+          title: const Text('How many nights?'),
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: nights > 1 ? () => setSheetState(() => nights--) : null,
+                icon: const Icon(Icons.remove_circle_outline_rounded),
+              ),
+              Text('$nights', style: AppTextStyles.heading(color: widget.theme.foreground, size: 22)),
+              IconButton(
+                onPressed: () => setSheetState(() => nights++),
+                icon: const Icon(Icons.add_circle_outline_rounded),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.of(context).pop(nights), child: const Text('Confirm')),
+          ],
+        ),
       ),
     );
   }
@@ -63,7 +98,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     final property = widget.property;
     final theme = widget.theme;
     final favorited = context.select<AppState, bool>((state) => state.isFavorite(property.id));
-    final messagingEnabled = context.select<AppState, bool>((state) => state.landlordMessagesEnabled);
+    final messagingEnabled = property.messagingEnabled;
+    final isShortlet = property.category == 'Shortlet';
+    final unavailable = isShortlet && property.shortletUnavailable;
     return Scaffold(
       backgroundColor: theme.background,
       body: SafeArea(
@@ -205,39 +242,88 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             PropertyVideoPlayer(path: property.videoPath!),
                           ],
                           const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: theme.accent,
-                                padding: const EdgeInsets.symmetric(vertical: 18),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          if (unavailable)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: theme.foreground.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(30),
                               ),
-                              onPressed: () async {
-                                final isShortlet = property.category == 'Shortlet';
-                                final messenger = ScaffoldMessenger.of(context);
-                                try {
-                                  await context.read<AppState>().recordRentalOrBooking(
-                                    property.id,
-                                    isShortlet: isShortlet,
-                                  );
-                                  messenger.showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        '${isShortlet ? 'Booking' : 'Rent'} request sent for ${property.title}',
+                              child: ShortletUnavailableCountdown(
+                                until: property.shortletUnavailableUntil ?? DateTime.now(),
+                                color: theme.foreground,
+                              ),
+                            )
+                          else
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.accent,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                ),
+                                onPressed: _bookingBusy
+                                    ? null
+                                    : () async {
+                                        final messenger = ScaffoldMessenger.of(context);
+                                        final appState = context.read<AppState>();
+                                        int? nights;
+                                        if (isShortlet) {
+                                          nights = await _pickNights();
+                                          if (nights == null || !mounted) return;
+                                        }
+                                        setState(() => _bookingBusy = true);
+                                        try {
+                                          final result = await appState.recordRentalOrBooking(
+                                            property.id,
+                                            isShortlet: isShortlet,
+                                            nights: nights,
+                                          );
+                                          if (!mounted) return;
+                                          final payment = result.payment;
+                                          if (payment != null) {
+                                            // Non-Shortlet: the booking just charged
+                                            // immediately — open the Paystack checkout
+                                            // right away instead of waiting on a
+                                            // landlord pre-approval that no longer
+                                            // happens.
+                                            final uri = Uri.parse(payment.authorizationUrl);
+                                            final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            if (!launched && mounted) {
+                                              messenger.showSnackBar(
+                                                const SnackBar(content: Text("Couldn't open the payment page — try again from History.")),
+                                              );
+                                            }
+                                          } else {
+                                            messenger.showSnackBar(
+                                              SnackBar(
+                                                content: Text(
+                                                  '${isShortlet ? 'Booking' : 'Rent'} request sent for ${property.title}',
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        } on ApiException catch (e) {
+                                          messenger.showSnackBar(SnackBar(content: Text(e.message)));
+                                        } finally {
+                                          if (mounted) setState(() => _bookingBusy = false);
+                                        }
+                                      },
+                                child: _bookingBusy
+                                    ? SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(strokeWidth: 2.4, color: theme.onAccent),
+                                      )
+                                    : Text(
+                                        isShortlet ? 'Book Now' : 'Rent Now',
+                                        style: AppTextStyles.button(color: theme.onAccent),
                                       ),
-                                    ),
-                                  );
-                                } on ApiException catch (e) {
-                                  messenger.showSnackBar(SnackBar(content: Text(e.message)));
-                                }
-                              },
-                              child: Text(
-                                property.category == 'Shortlet' ? 'Book Now' : 'Rent Now',
-                                style: AppTextStyles.button(color: theme.onAccent),
                               ),
                             ),
-                          ),
                           const SizedBox(height: 12),
                           if (messagingEnabled)
                             SizedBox(

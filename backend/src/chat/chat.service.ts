@@ -107,7 +107,7 @@ export class ChatService {
       where: { threadId, userId: { not: userId } },
       select: { userId: true },
     });
-    const senderName = message.sender.fullName ?? 'Someone';
+    const senderName = message.sender?.fullName ?? 'Someone';
     await Promise.all(
       otherParticipants.map((p) =>
         this.notifications.create(

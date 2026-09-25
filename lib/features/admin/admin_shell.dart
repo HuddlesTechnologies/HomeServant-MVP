@@ -4,12 +4,17 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/change_password_sheet.dart';
+import '../../widgets/notification_bell.dart';
+import '../dashboard/notifications_screen.dart';
 import 'admin_admins_tab.dart';
 import 'admin_dashboard_tab.dart';
 import 'admin_marketplace_tab.dart';
+import 'admin_messages_tab.dart';
 import 'admin_properties_tab.dart';
+import 'admin_reports_tab.dart';
 import 'admin_users_tab.dart';
 import 'admin_vendors_tab.dart';
 
@@ -38,12 +43,30 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
   Timer? _idleTimer;
+  int _openReportsCount = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptPasswordChange());
     _resetIdleTimer();
+    _loadOpenReportsCount();
+    // Unlike tenant/landlord, an admin session's `_loadInitialData` skips
+    // `loadNotifications()` entirely (it only loads the admin level + opens
+    // the chat socket) — so without this, `AppState.unreadNotificationCount`
+    // would just stay 0 forever and the bell below would never show a dot.
+    context.read<AppState>().loadNotifications();
+  }
+
+  Future<void> _loadOpenReportsCount() async {
+    try {
+      final count = await context.read<AppState>().admin.openReportsCount();
+      if (!mounted) return;
+      setState(() => _openReportsCount = count);
+    } catch (_) {
+      // Best-effort — the Reports tab itself still loads the real list;
+      // this only affects the nav badge.
+    }
   }
 
   @override
@@ -157,15 +180,55 @@ class _AdminShellState extends State<AdminShell> {
     AdminVendorsTab(),
     AdminPropertiesTab(),
     AdminMarketplaceTab(),
+    AdminReportsTab(),
+    AdminMessagesTab(),
   ];
 
-  static const _baseDestinations = [
-    NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-    NavigationDestination(icon: Icon(Icons.people_outline_rounded), selectedIcon: Icon(Icons.people_rounded), label: 'Users'),
-    NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Vendors'),
-    NavigationDestination(icon: Icon(Icons.home_work_outlined), selectedIcon: Icon(Icons.home_work_rounded), label: 'Properties'),
-    NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), selectedIcon: Icon(Icons.shopping_bag_rounded), label: 'Marketplace'),
+  /// Not `static const` like the old list — the Reports destination's icon
+  /// carries a live open-reports-count badge (`_openReportsCount`), so this
+  /// has to be rebuilt from instance state rather than fixed at compile time.
+  List<NavigationDestination> get _baseDestinations => [
+    const NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
+    const NavigationDestination(icon: Icon(Icons.people_outline_rounded), selectedIcon: Icon(Icons.people_rounded), label: 'Users'),
+    const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Vendors'),
+    const NavigationDestination(icon: Icon(Icons.home_work_outlined), selectedIcon: Icon(Icons.home_work_rounded), label: 'Properties'),
+    const NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), selectedIcon: Icon(Icons.shopping_bag_rounded), label: 'Marketplace'),
+    NavigationDestination(
+      icon: _badgedIcon(Icons.flag_outlined, _openReportsCount),
+      selectedIcon: _badgedIcon(Icons.flag_rounded, _openReportsCount),
+      label: 'Reports',
+    ),
+    const NavigationDestination(icon: Icon(Icons.forum_outlined), selectedIcon: Icon(Icons.forum_rounded), label: 'Messages'),
   ];
+
+  /// Numeric unread/open-count badge matching the style the vendor
+  /// dashboard's bell already uses (`VendorDashboardScreen`'s
+  /// `_openNotifications` icon — a `Stack` + `Positioned` count `Container`)
+  /// rather than `NotificationBell`'s plain dot, since a bare dot can't
+  /// convey "how many" the way this destination needs to.
+  Widget _badgedIcon(IconData icon, int count) {
+    if (count <= 0) return Icon(icon);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Icon(icon),
+        Positioned(
+          top: -4,
+          right: -6,
+          child: Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+            constraints: const BoxConstraints(minWidth: 15, minHeight: 15),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   Future<void> _logOut(BuildContext context) async {
     await context.read<AppState>().logout();
@@ -175,11 +238,11 @@ class _AdminShellState extends State<AdminShell> {
   @override
   Widget build(BuildContext context) {
     final canSeeAdmins = context.watch<AppState>().adminLevel?.atLeastModerator ?? false;
-    final tabs = canSeeAdmins ? const [..._baseTabs, AdminAdminsTab()] : _baseTabs;
+    final tabs = canSeeAdmins ? [..._baseTabs, const AdminAdminsTab()] : _baseTabs;
     final destinations = canSeeAdmins
-        ? const [
+        ? [
             ..._baseDestinations,
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.admin_panel_settings_outlined),
               selectedIcon: Icon(Icons.admin_panel_settings_rounded),
               label: 'Admins',
@@ -205,6 +268,19 @@ class _AdminShellState extends State<AdminShell> {
         automaticallyImplyLeading: false,
         title: Text('Admin Console', style: AppTextStyles.heading(color: Colors.white, size: 18)),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: NotificationBell(
+              color: Colors.white,
+              showDot: context.watch<AppState>().unreadNotificationCount > 0,
+              onTap: () {
+                context.read<AppState>().markAllNotificationsRead();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen(theme: DashboardTheme.classic)),
+                );
+              },
+            ),
+          ),
           IconButton(
             onPressed: () => _openSettings(context),
             icon: const Icon(Icons.settings_outlined, color: Colors.white),

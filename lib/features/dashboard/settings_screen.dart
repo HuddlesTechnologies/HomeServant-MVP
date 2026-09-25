@@ -6,10 +6,10 @@ import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
-import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/app_lock_pin_sheet.dart';
 import '../../widgets/change_password_sheet.dart';
+import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/support_sheet.dart';
 import 'legal/tenancy_agreements_screen.dart';
 import 'privacy&terms_screen.dart';
@@ -29,14 +29,10 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
 
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.foreground),
-        title: Text('Settings', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-      ),
+    return DashboardPageScaffold(
+      background: theme.background,
+      foreground: theme.foreground,
+      title: 'Settings',
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 640,
@@ -77,24 +73,6 @@ class SettingsScreen extends StatelessWidget {
                     ),
                 ],
               ),
-              if (appState.role == UserRole.landlord) ...[
-                const SizedBox(height: 24),
-                _SectionHeader(theme: theme, label: 'Tenant Messaging'),
-                _SettingsCard(
-                  theme: theme,
-                  children: [
-                    _SwitchRow(
-                      theme: theme,
-                      icon: Icons.chat_bubble_outline_rounded,
-                      label: 'Allow Tenant Messages',
-                      subtitle: 'Off means tenants pay rent directly — no messaging or inspection booking',
-                      value: appState.landlordMessagesEnabled,
-                      onChanged: appState.setLandlordMessagesEnabled,
-                      showDivider: false,
-                    ),
-                  ],
-                ),
-              ],
               const SizedBox(height: 24),
               _SectionHeader(theme: theme, label: 'Notifications'),
               _SettingsCard(
@@ -146,6 +124,22 @@ class SettingsScreen extends StatelessWidget {
                         ],
                       ),
                     ),
+                  ),
+                  // Deliberately outside the Push Notifications-gated group
+                  // above: this governs the in-app realtime banner (socket-
+                  // driven, shown while the app is already open), not
+                  // whether a notification is delivered at all — so it
+                  // stays live even with push notifications toggled off.
+                  _SwitchRow(
+                    theme: theme,
+                    icon: Icons.timer_outlined,
+                    label: 'Auto-dismiss Notification Banners',
+                    subtitle: appState.bannerAutoDismiss
+                        ? 'Disappears automatically after 3 seconds'
+                        : 'Keep until swiped away',
+                    value: appState.bannerAutoDismiss,
+                    onChanged: appState.setBannerAutoDismiss,
+                    showDivider: false,
                   ),
                 ],
               ),

@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/chat_thread_list_tile.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/landlord_widgets.dart';
 
@@ -210,53 +211,35 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                               onTap: () => _openThread(thread),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 12),
-                                child: Row(
-                                  children: [
-                                    const LandlordAvatar(radius: 26),
-                                    const SizedBox(width: 14),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            thread.otherParticipantName,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppTextStyles.body(
-                                              color: theme.foreground,
-                                              size: 15,
-                                              weight: FontWeight.w700,
+                                child: ChatThreadListTile(
+                                  thread: thread,
+                                  avatar: const LandlordAvatar(radius: 26),
+                                  nameMessageSpacing: 3,
+                                  nameStyle: AppTextStyles.body(
+                                    color: theme.foreground,
+                                    size: 15,
+                                    weight: FontWeight.w700,
+                                  ),
+                                  messageStyle: AppTextStyles.body(
+                                    color: theme.foreground.withValues(alpha: 0.55),
+                                    size: 13,
+                                  ),
+                                  trailing: thread.unreadCount > 0
+                                      ? Container(
+                                          width: 18,
+                                          height: 18,
+                                          alignment: Alignment.center,
+                                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                          child: Text(
+                                            '${thread.unreadCount}',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
                                             ),
                                           ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            thread.lastMessage?.body ?? 'No messages yet',
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: AppTextStyles.body(
-                                              color: theme.foreground.withValues(alpha: 0.55),
-                                              size: 13,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    if (thread.unreadCount > 0)
-                                      Container(
-                                        width: 18,
-                                        height: 18,
-                                        alignment: Alignment.center,
-                                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                        child: Text(
-                                          '${thread.unreadCount}',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
+                                        )
+                                      : null,
                                 ),
                               ),
                             );

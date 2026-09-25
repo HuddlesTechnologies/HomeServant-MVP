@@ -6,18 +6,19 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/order_status_badge.dart';
 import '../../widgets/upload_picker.dart';
 import 'models/order_options.dart';
 import 'vendor_messages_screen.dart';
 import 'vendor_notifications_screen.dart';
 import 'vendor_order_detail_screen.dart';
-import 'vendor_products_screen.dart';
-import 'vendor_profile_screen.dart';
 import 'widgets/vendor_bottom_nav.dart';
+import 'widgets/vendor_tab_route.dart';
 
 /// The signed-in vendor's home base — a snapshot of their shop's products,
-/// orders and revenue. Reached after [VendorLoginScreen]; the bottom nav
-/// hands off to the separate [VendorProductsScreen] and
+/// orders and revenue. Reached once the signed-in account has a vendor
+/// profile (see AppState.hasVendorProfile); the bottom nav hands off to
+/// the separate [VendorProductsScreen] and
 /// [VendorProfileScreen] screens.
 class VendorDashboardScreen extends StatefulWidget {
   const VendorDashboardScreen({super.key, required this.theme});
@@ -63,8 +64,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
 
   void _onNavTap(int index) {
     if (index == 0) return;
-    final screen = index == 1 ? VendorProductsScreen(theme: widget.theme) : VendorProfileScreen(theme: widget.theme);
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => screen));
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => vendorTabRoute(index, widget.theme)));
   }
 
   Future<void> _openNotifications() async {
@@ -352,11 +352,7 @@ class _OrderTile extends StatelessWidget {
                 style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w700),
               ),
               const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: item.status.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                child: Text(item.status.label, style: AppTextStyles.body(color: item.status.color, size: 10.5, weight: FontWeight.w700)),
-              ),
+              OrderStatusBadge(status: item.status),
             ],
           ),
         ],

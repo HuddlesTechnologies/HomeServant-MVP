@@ -1,4 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -31,6 +32,9 @@ export class ChatController {
     return this.chat.findMessages(id, user.sub, before);
   }
 
+  // Moderate throttling: authenticated but user-generated/spammable — caps
+  // message-flooding while staying well above normal chat cadence.
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post(':id/messages')
   async send(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: SendMessageDto) {
     const message = await this.chat.sendMessage(id, user.sub, dto);

@@ -5,21 +5,28 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
+import '../../widgets/login_outcome_handler.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
-import '../../widgets/reactivate_account_dialog.dart';
 import '../../widgets/terms_footer.dart';
 import '../../widgets/themed_scaffold.dart';
 
-class LoginTenantScreen extends StatefulWidget {
-  const LoginTenantScreen({
+/// Login screen for either tenant or landlord accounts — the two were
+/// identical line-for-line apart from which [UserRole] they used, so this
+/// single screen is parameterized by [role] and used for both
+/// `/login-landlord` and `/login-tenant`.
+class LoginRoleScreen extends StatefulWidget {
+  const LoginRoleScreen({
     super.key,
+    required this.role,
     required this.onLoginSuccess,
     required this.onGoogleSignedIn,
     required this.onRequiresTwoFactor,
     required this.onSignUp,
     required this.onForgotPassword,
   });
+
+  final UserRole role;
 
   final VoidCallback onLoginSuccess;
 
@@ -32,16 +39,17 @@ class LoginTenantScreen extends StatefulWidget {
   final VoidCallback onForgotPassword;
 
   @override
-  State<LoginTenantScreen> createState() => _LoginTenantScreenState();
+  State<LoginRoleScreen> createState() => _LoginRoleScreenState();
 }
 
-class _LoginTenantScreenState extends State<LoginTenantScreen> {
+class _LoginRoleScreenState extends State<LoginRoleScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
-  static const _role = UserRole.tenant;
   bool _submitting = false;
   bool _googleSubmitting = false;
   String? _error;
+
+  UserRole get _role => widget.role;
 
   @override
   void dispose() {
@@ -62,15 +70,13 @@ class _LoginTenantScreenState extends State<LoginTenantScreen> {
         reactivate: reactivate,
       );
       if (!mounted) return;
-      switch (outcome) {
-        case LoginOutcome.success:
-          widget.onLoginSuccess();
-        case LoginOutcome.requiresTwoFactor:
-          widget.onRequiresTwoFactor();
-        case LoginOutcome.requiresReactivation:
-          final confirmed = await showReactivateAccountDialog(context);
-          if (confirmed == true && mounted) await _login(reactivate: true);
-      }
+      await handleLoginOutcome(
+        context,
+        outcome,
+        onSuccess: widget.onLoginSuccess,
+        onTwoFactor: widget.onRequiresTwoFactor,
+        onReactivate: () => _login(reactivate: true),
+      );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
@@ -86,15 +92,13 @@ class _LoginTenantScreenState extends State<LoginTenantScreen> {
     try {
       final outcome = await context.read<AppState>().loginWithGoogle(reactivate: reactivate);
       if (!mounted || outcome == null) return;
-      switch (outcome) {
-        case LoginOutcome.success:
-          widget.onGoogleSignedIn();
-        case LoginOutcome.requiresTwoFactor:
-          break;
-        case LoginOutcome.requiresReactivation:
-          final confirmed = await showReactivateAccountDialog(context);
-          if (confirmed == true && mounted) await _loginWithGoogle(reactivate: true);
-      }
+      await handleLoginOutcome(
+        context,
+        outcome,
+        onSuccess: widget.onGoogleSignedIn,
+        onTwoFactor: () {},
+        onReactivate: () => _loginWithGoogle(reactivate: true),
+      );
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {

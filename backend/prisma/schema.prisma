@@ -25,6 +25,19 @@ enum UserRole {
   ADMIN
 }
 
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+}
+
 /// Ranked low to high — AdminLevelGuard compares enum index, so the
 /// declaration order here *is* the hierarchy (SUPPORT < MODERATOR <
 /// SUPER_ADMIN). Reordering these values changes every endpoint's
@@ -47,10 +60,37 @@ enum PriceUnit {
   NIGHT
 }
 
+/// Current (non-Shortlet) rental flow: tenant pays immediately on request
+/// (no landlord pre-approval to charge them) -> PAID_AWAITING_INSPECTION
+/// (held in escrow, no inspection date chosen yet — this is also where a
+/// tenant who picked "book later" sits, reachable again any time from
+/// their booking history) -> INSPECTION_PROPOSED (tenant picked a date) ->
+/// landlord either confirms (INSPECTION_CONFIRMED) or declines just that
+/// date (back to PAID_AWAITING_INSPECTION, tenant can propose again/defer/
+/// refund) -> MOVED_IN (escrow released, lease active) once the tenant
+/// confirms they've moved in. At any point before MOVED_IN: the tenant can
+/// request REFUNDED (their own choice, 0.2% fee withheld — see
+/// PaymentsService.refundBookingBeforeMoveIn), or the landlord can reject
+/// the booking outright via DECLINED (a distinct lever from just declining
+/// an inspection date — full refund, no fee, see
+/// PaymentsService.rejectBooking).
+///
+/// PENDING/ACCEPTED/PAID predate this flow and are no longer written by
+/// new bookings — left in the enum rather than removed since existing
+/// rows may still reference them. A Shortlet booking is unaffected by any
+/// of this: it skips inspection entirely and goes straight to PAID on
+/// instant payment (no MOVED_IN click exists for a short stay) — see
+/// BookingsService/PaymentsService.releaseShortletInstant.
 enum BookingStatus {
   PENDING
   ACCEPTED
+  PAID
+  PAID_AWAITING_INSPECTION
+  INSPECTION_PROPOSED
+  INSPECTION_CONFIRMED
+  MOVED_IN
   DECLINED
+  REFUNDED
 }
 
 enum OtpPurpose {
@@ -87,6 +127,64 @@ enum OrderItemStatus {
   CANCELLED
 }
 
+enum PaymentPurpose {
+  RENTAL_BOOKING
+  MARKETPLACE_ORDER_ITEM
+}
+
+/// INITIATED (charge started, webhook not yet confirmed) -> PAID_HELD
+/// (charge confirmed, funds sit in HomeServant's own Paystack balance) ->
+/// RELEASED (Transfer sent to the recipient's bank account) / REFUNDED
+/// (Paystack refund issued to the payer) / FAILED (charge never
+/// succeeded).
+enum PaymentStatus {
+  INITIATED
+  PAID_HELD
+  RELEASED
+  REFUNDED
+  FAILED
+}
+
+/// The escrow ledger — one row per charge, for either a rental Booking or
+/// a single MarketplaceOrderItem (never both; exactly one of bookingId/
+/// orderItemId is set, matching [purpose]). [platformFeeAmount] is 5% of
+/// [amount] for a normal release (marketplace, shortlet, or rental
+/// move-in) or 0.2% of [amount] for a rental refunded before move-in —
+/// see PaymentsService for the exact math. A Booking can have more than
+/// one Payment over time (a renewal charges again), so [bookingId] isn't
+/// unique; an order item is only ever paid for once, so [orderItemId] is.
+model Payment {
+  id                    String         @id @default(uuid())
+  purpose               PaymentPurpose
+  bookingId             String?
+  booking               Booking?       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  orderItemId           String?        @unique
+  orderItem             MarketplaceOrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  payerId               String
+  payer                 User           @relation("PaymentsMade", fields: [payerId], references: [id], onDelete: Cascade)
+  /// The landlord's or vendor's User id — resolved at charge time so the
+  /// eventual Transfer always has a fixed target even if, say, the
+  /// property changes hands later.
+  recipientUserId       String
+  recipient             User           @relation("PaymentsReceived", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  /// Amount actually charged to the payer, in kobo.
+  amount                Int
+  /// HomeServant's cut, in kobo (already reflected in what the recipient
+  /// is transferred — recipient gets amount - platformFeeAmount).
+  platformFeeAmount     Int
+  paystackReference     String         @unique
+  transferRecipientCode String?
+  status                PaymentStatus  @default(INITIATED)
+  paidAt                DateTime?
+  releasedAt            DateTime?
+  refundedAt            DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  @@index([bookingId])
+  @@index([status])
+}
+
 model User {
   id               String    @id @default(uuid())
   email            String    @unique
@@ -111,6 +209,14 @@ model User {
   houseAddress     String?
   dateOfBirth      DateTime?
   profilePhotoUrl  String?
+  /// Tenant profile fields a landlord can see for someone renting (or
+  /// requesting to rent) their property — see BookingsService.findForLandlord,
+  /// which is the only place these are exposed to another user. Optional on
+  /// every role (not just TENANT) since a landlord/vendor account's own
+  /// profile-edit screen can reuse the same fields.
+  gender           Gender?
+  occupation       String?
+  maritalStatus    MaritalStatus?
   emailVerifiedAt  DateTime?
   twoFactorEnabled Boolean   @default(false)
   /// Set true for an admin account created via the console's invite-by-
@@ -169,6 +275,8 @@ model User {
   activityTargets    ActivityLog[]       @relation("ActivityTarget")
   reportsFiled       Report[]            @relation("ReportsFiled")
   reportsAssigned    Report[]            @relation("ReportsAssigned")
+  paymentsMade       Payment[]           @relation("PaymentsMade")
+  paymentsReceived   Payment[]           @relation("PaymentsReceived")
 
   @@index([role])
 }
@@ -177,6 +285,11 @@ enum ActivityLogType {
   ADMIN_LOGIN
   ADMIN_PASSWORD_CHANGED
   ADMIN_PASSWORD_RESET
+  /// An admin edited another user's basic profile fields (name/phone/
+  /// house address) via `PATCH /admin/users/:id` — the one mutation every
+  /// admin tier (including SUPPORT) can perform, so it's logged like every
+  /// other admin action for auditability.
+  ADMIN_USER_EDITED
 }
 
 /// Site-wide admin audit trail (Activity Log console section) — every
@@ -245,6 +358,16 @@ enum NotificationType {
   REPORT_ASSIGNED
   THREAD_TRANSFERRED
   NEW_MESSAGE
+  VENDOR_SUSPENDED
+  VENDOR_UNSUSPENDED
+  /// 30 days / 15 days / day-of reminder that a tenant's lease is about to
+  /// expire — sent by the lease-lifecycle cron, see BookingsCronService.
+  RENT_EXPIRY_REMINDER
+  /// The first message in a thread that started from a property listing —
+  /// distinct from the generic NEW_MESSAGE every later message in that
+  /// same thread still gets, since only the first one also triggers an
+  /// email to the landlord (see ChatService.sendMessage).
+  NEW_LISTING_MESSAGE
 }
 
 /// A user-facing notification — modelled generically so
@@ -331,7 +454,27 @@ model Property {
   description String
   imageUrl    String?
   galleryUrls String[]         @default([])
+  /// True once a tenant has moved into an accepted, paid lease on this
+  /// property (see BookingsService.confirmMovedIn) — hides it from public
+  /// search. Never set for a SHORTLET booking (see [category]); those
+  /// stay visible with a "currently unavailable" state derived from
+  /// whether an active Booking's leaseEndDate is still in the future,
+  /// rather than this flag, so the listing itself keeps taking future
+  /// bookings around the current stay.
   isOccupied  Boolean          @default(false)
+  /// Set by the landlord at listing time for every non-Shortlet category
+  /// — how long a lease runs once a tenant moves in (6-24 months).
+  /// Meaningless for SHORTLET, where a stay's length instead comes from
+  /// however many nights the tenant books.
+  rentDurationMonths Int?
+  /// Off hides the "Message" action on this specific listing and blocks
+  /// starting a new thread from it — replaces the old device-local,
+  /// unsynced AppState toggle of the same intent.
+  messagingEnabled   Boolean   @default(true)
+  /// Shortlet-only — the unit's exact address/room within [location],
+  /// since one shortlet listing is a single bookable unit.
+  unitAddress String?
+  roomNumber  String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
@@ -400,18 +543,40 @@ model ThreadParticipant {
   @@index([userId])
 }
 
+enum MessageType {
+  TEXT
+  /// The very first message in a thread that started from a property
+  /// listing — rendered as a preview card (title/price/image) instead of
+  /// a text bubble, for both participants. The preview fields below are a
+  /// snapshot taken at send time (same convention as
+  /// MarketplaceOrderItem.productName/unitPrice) so the card stays
+  /// accurate even if the listing's price changes or the listing is
+  /// later removed.
+  PROPERTY_PREVIEW
+}
+
 /// Persisted through this API (so history survives even if a client never
 /// opened a Realtime connection); Supabase Realtime is layered on top for
-/// live delivery — see backend/README.md.
+/// live delivery — see backend/README.md. [senderId] is nullable with
+/// onDelete: SetNull (not Cascade) specifically so that when a sender's
+/// account is later deleted (self-deactivation cleanup or an admin
+/// delete), their past messages stay in the other participant's thread
+/// instead of vanishing — matching this model's own "history survives"
+/// intent, which a straight Cascade would have silently violated.
 model Message {
-  id        String    @id @default(uuid())
+  id        String      @id @default(uuid())
   threadId  String
-  thread    Thread    @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  senderId  String
-  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  thread    Thread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId  String?
+  sender    User?       @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  type      MessageType @default(TEXT)
   body      String
+  previewPropertyTitle     String?
+  previewPropertyImageUrl  String?
+  previewPropertyPrice     Int?
+  previewPropertyPriceUnit PriceUnit?
   readAt    DateTime?
-  createdAt DateTime  @default(now())
+  createdAt DateTime    @default(now())
 
   @@index([threadId, createdAt])
 }
@@ -423,13 +588,76 @@ model Booking {
   tenantId      String
   tenant        User          @relation("TenantBookings", fields: [tenantId], references: [id], onDelete: Cascade)
   status        BookingStatus @default(PENDING)
+  /// The tenant's proposed date — an inspection date for a non-Shortlet
+  /// rental, or the requested check-in date for a Shortlet (which has no
+  /// inspection step, see BookingStatus). Confirmed by the landlord via
+  /// [inspectionConfirmedAt] (non-Shortlet only); nothing here supports
+  /// the landlord counter-proposing a different date — they only accept
+  /// or decline the one the tenant asked for.
   requestedDate DateTime?
+  inspectionConfirmedAt DateTime?
+  /// Shortlet-only — number of nights requested/booked (ignored for a
+  /// non-Shortlet booking). Combined with [requestedDate] at webhook time
+  /// to compute leaseEndDate = requestedDate + nights on instant payment
+  /// release — see PaymentsService.
+  nights Int?
+  /// Property.price/priceUnit at the moment this booking was charged — a
+  /// later price change on the listing shouldn't retroactively change
+  /// what this tenant owes (same convention as
+  /// MarketplaceOrderItem.unitPrice). Re-snapshotted on each renewal, since
+  /// a landlord may reasonably raise rent at renewal time.
+  priceSnapshot     Int?
+  priceUnitSnapshot PriceUnit?
+  /// Set together when payment is released (Shortlet: right after instant
+  /// payment; a normal rental: when the tenant clicks "Moved In"). [leaseEndDate]
+  /// is [leaseStartDate] plus Property.rentDurationMonths (or the
+  /// Shortlet's booked night count) — the lease-lifecycle cron reads this
+  /// to auto-expire/relist and to send the 30/15/0-day reminders.
+  leaseStartDate DateTime?
+  leaseEndDate   DateTime?
+  /// De-dupes the lease-lifecycle cron's 30/15/0-day rent-expiry
+  /// reminder — set to whichever of 30/15/0 was last sent, so a daily
+  /// tick doesn't re-send the same threshold every day it's still true.
+  /// Reset to null on a successful renewal (a new leaseEndDate starts a
+  /// new reminder cycle).
+  lastRentReminderDaysOut Int?
   message       String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
+  payments         Payment[]
+  tenancyAgreement TenancyAgreement?
+
   @@index([propertyId])
   @@index([tenantId])
+  @@index([leaseEndDate])
+}
+
+/// Generated once, at the moment a rental Booking's payment is released
+/// (tenant clicked "Moved In") — a persisted snapshot of both parties and
+/// the lease terms, replacing the client-side fabrication that used to
+/// invent a lease end date and hardcode the landlord's details as
+/// "on file with Home Servant". Immutable after creation; a renewal
+/// updates the same Booking's leaseEndDate but does not regenerate this
+/// row, since the original agreement's terms still stand.
+model TenancyAgreement {
+  id               String   @id @default(uuid())
+  bookingId        String   @unique
+  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  propertyTitle    String
+  propertyLocation String
+  propertyState    String
+  rentAmount       Int
+  priceUnit        PriceUnit
+  leaseStartDate   DateTime
+  leaseEndDate     DateTime
+  landlordName     String
+  landlordEmail    String
+  landlordPhone    String?
+  tenantName       String
+  tenantEmail      String
+  tenantPhone      String?
+  generatedAt      DateTime @default(now())
 }
 
 model Favorite {
@@ -458,6 +686,12 @@ model VendorProfile {
   state         String
   rcNumber      String?
   logoUrl       String?
+  /// Payout account — mirrors User's landlord payout fields exactly
+  /// (bankCode added alongside this comment for parity, since a Transfer
+  /// needs the bank code, not just its name). [accountName] must only
+  /// ever be set from Paystack's own account-resolution response, never
+  /// trusted from client input, same rule as User.accountName.
+  bankCode      String?
   bankName      String?
   accountNumber String?
   accountName   String?
@@ -549,6 +783,21 @@ model MarketplaceOrderItem {
   fulfillment      FulfillmentMethod
   status           OrderItemStatus   @default(PENDING)
   notificationRead Boolean           @default(false)
+  /// Set together when the vendor marks a DELIVERY-fulfillment item as
+  /// shipped (see MarketplaceOrdersService.shipItem) — populated from
+  /// DeliveryProvider.createShipment's response. Both null until then;
+  /// PICKUP-fulfillment items never get these set. See
+  /// src/delivery/delivery-provider.interface.ts for the caveat that the
+  /// real GIG Logistics shape behind this is unverified.
+  shipmentId       String?
+  trackingNumber   String?
+  /// Set alongside [shipmentId] — when the 7-day marketplace auto-release
+  /// cron starts counting from for a DELIVERY-fulfillment item (a PICKUP
+  /// item instead counts from Payment.paidAt, since it never ships). See
+  /// MarketplaceAutoReleaseService.
+  shippedAt        DateTime?
+
+  payment Payment?
 
   @@index([orderId])
   @@index([vendorId])

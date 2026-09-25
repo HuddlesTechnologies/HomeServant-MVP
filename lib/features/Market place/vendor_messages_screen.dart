@@ -5,6 +5,7 @@ import '../../api/models/marketplace_api.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/order_status_badge.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'models/order_options.dart';
 
@@ -174,17 +175,7 @@ class _MessageRow extends StatelessWidget {
               ),
             ),
             if (showStatus) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: item.status.color.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  item.status.label,
-                  style: AppTextStyles.body(color: item.status.color, size: 10.5, weight: FontWeight.w700),
-                ),
-              ),
+              OrderStatusBadge(status: item.status),
               const SizedBox(width: 8),
             ],
             Icon(Icons.chevron_right_rounded, color: theme.onSurface.withValues(alpha: 0.3)),

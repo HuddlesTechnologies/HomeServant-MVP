@@ -1,4 +1,5 @@
-import { IsBoolean, IsDateString, IsOptional, IsPhoneNumber, IsString, IsUrl } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsOptional, IsPhoneNumber, IsString, IsUrl } from 'class-validator';
+import { Gender, MaritalStatus } from '@prisma/client';
 
 export class UpdateProfileDto {
   @IsOptional()
@@ -28,6 +29,18 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsUrl()
   profilePhotoUrl?: string;
+
+  @IsOptional()
+  @IsEnum(Gender)
+  gender?: Gender;
+
+  @IsOptional()
+  @IsString()
+  occupation?: string;
+
+  @IsOptional()
+  @IsEnum(MaritalStatus)
+  maritalStatus?: MaritalStatus;
 
   @IsOptional()
   @IsBoolean()

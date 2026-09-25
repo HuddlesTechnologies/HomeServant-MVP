@@ -108,6 +108,7 @@ class VendorProfile {
     this.rejectionReason,
     this.rcNumber,
     this.logoUrl,
+    this.bankCode,
     this.bankName,
     this.accountNumber,
     this.accountName,
@@ -123,9 +124,17 @@ class VendorProfile {
   final String? rejectionReason;
   final String? rcNumber;
   final String? logoUrl;
+
+  /// The vendor's payout account — mirrors [AppState.bankCode]/etc. on the
+  /// landlord side. Only ever set via the server's Paystack-resolved
+  /// response (see [VendorsRepository.update]); never trusted raw from a
+  /// client-side text field.
+  final String? bankCode;
   final String? bankName;
   final String? accountNumber;
   final String? accountName;
+
+  bool get hasPayoutDetails => accountNumber != null && accountNumber!.isNotEmpty;
 
   factory VendorProfile.fromApi(Map<String, dynamic> json) => VendorProfile(
     id: json['id'] as String,
@@ -138,6 +147,7 @@ class VendorProfile {
     rejectionReason: json['rejectionReason'] as String?,
     rcNumber: json['rcNumber'] as String?,
     logoUrl: json['logoUrl'] as String?,
+    bankCode: json['bankCode'] as String?,
     bankName: json['bankName'] as String?,
     accountNumber: json['accountNumber'] as String?,
     accountName: json['accountName'] as String?,

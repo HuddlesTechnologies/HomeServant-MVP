@@ -33,3 +33,16 @@ String timeOfDayGreeting([DateTime? now]) {
   if (hour < 17) return 'Good afternoon';
   return 'Good evening';
 }
+
+/// "2m ago"/"3h ago"-style relative timestamp, falling back to
+/// [formatShortDate] once [dt] is more than a week old — the shared
+/// logic behind the near-identical formatters that used to be
+/// duplicated in the chat thread, messages, and notifications screens.
+String formatRelativeTime(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inMinutes < 1) return 'Just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  return formatShortDate(dt);
+}

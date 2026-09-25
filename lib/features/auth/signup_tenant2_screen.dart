@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
+import '../../api/models/auth_user.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
+import '../../widgets/identification_picker_field.dart';
+import '../../widgets/labeled_pill_field.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/themed_scaffold.dart';
@@ -22,13 +24,13 @@ class SignupTenant2Screen extends StatefulWidget {
 }
 
 class _SignupTenant2ScreenState extends State<SignupTenant2Screen> {
-  static const _idOptions = ['NIN', "Driver's License", "Voter's Card", 'International Passport'];
   static const _role = UserRole.tenant;
 
   final _addressController = TextEditingController();
-  final _idNumberController = TextEditingController();
-  String? _identification;
+  final _occupationController = TextEditingController();
   PickedUpload? _photo;
+  Gender? _gender;
+  MaritalStatus? _maritalStatus;
   bool _submitting = false;
   String? _error;
 
@@ -47,7 +49,13 @@ class _SignupTenant2ScreenState extends State<SignupTenant2Screen> {
       if (photo != null && photo.isImage) {
         photoUrl = await appState.uploads.upload(file: photo, folder: 'profile-photos');
       }
-      await appState.completeProfile(houseAddress: _addressController.text.trim(), profilePhotoUrl: photoUrl);
+      await appState.completeProfile(
+        houseAddress: _addressController.text.trim(),
+        profilePhotoUrl: photoUrl,
+        gender: _gender,
+        occupation: _occupationController.text.trim().isEmpty ? null : _occupationController.text.trim(),
+        maritalStatus: _maritalStatus,
+      );
       if (!mounted) return;
       widget.onFinish();
     } on ApiException catch (e) {
@@ -60,7 +68,7 @@ class _SignupTenant2ScreenState extends State<SignupTenant2Screen> {
   @override
   void dispose() {
     _addressController.dispose();
-    _idNumberController.dispose();
+    _occupationController.dispose();
     super.dispose();
   }
 
@@ -71,47 +79,26 @@ class _SignupTenant2ScreenState extends State<SignupTenant2Screen> {
     }
   }
 
-  Future<void> _pickIdentification() async {
-    final result = await showModalBottomSheet<String>(
+  Future<void> _pickMaritalStatus() async {
+    final result = await showModalBottomSheet<MaritalStatus>(
       context: context,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: _idOptions
+          children: MaritalStatus.values
               .map((option) => ListTile(
-                    title: Text(option, style: AppTextStyles.body(color: AppColors.navy)),
-                    trailing: option == _identification ? const Icon(Icons.check, color: AppColors.gold) : null,
+                    title: Text(option.label, style: AppTextStyles.body(color: AppColors.navy)),
+                    trailing: option == _maritalStatus ? const Icon(Icons.check, color: AppColors.gold) : null,
                     onTap: () => Navigator.pop(context, option),
                   ))
               .toList(),
         ),
       ),
     );
-    if (result != null && result != _identification) {
-      setState(() {
-        _identification = result;
-        _idNumberController.clear();
-      });
-    }
-  }
-
-  // Standard Nigerian ID number formats, keyed by the option label in
-  // _idOptions, so the number field only accepts/shapes input the way
-  // each issuing body actually formats it.
-  ({String hint, int maxLength, bool numeric})? get _idNumberFormat {
-    switch (_identification) {
-      case 'NIN':
-        return (hint: 'Enter your 11-digit NIN', maxLength: 11, numeric: true);
-      case "Driver's License":
-        return (hint: 'e.g. ABC12345D12', maxLength: 12, numeric: false);
-      case "Voter's Card":
-        return (hint: "Enter your 19-character Voter's Card (VIN) number", maxLength: 19, numeric: false);
-      case 'International Passport':
-        return (hint: 'e.g. A12345678', maxLength: 9, numeric: false);
-      default:
-        return null;
+    if (result != null) {
+      setState(() => _maritalStatus = result);
     }
   }
 
@@ -173,31 +160,52 @@ class _SignupTenant2ScreenState extends State<SignupTenant2Screen> {
             borderRadius: 20,
           ),
           const SizedBox(height: 22),
-          LabeledDropdownField(
-            label: 'Means of Identification',
-            value: _identification ?? 'Select your means of identification',
-            labelColor: _role.foreground,
-            onTap: _pickIdentification,
-          ),
-          if (_idNumberFormat case final format?) ...[
-            const SizedBox(height: 14),
-            PillTextField(
-              hint: format.hint,
-              controller: _idNumberController,
-              keyboardType: format.numeric ? TextInputType.number : TextInputType.text,
-              inputFormatters: [
-                if (format.numeric)
-                  FilteringTextInputFormatter.digitsOnly
-                else ...[
-                  FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-                  TextInputFormatter.withFunction(
-                    (oldValue, newValue) => newValue.copyWith(text: newValue.text.toUpperCase()),
+          IdentificationPickerField(labelColor: _role.foreground),
+          const SizedBox(height: 22),
+          Text('Gender', style: AppTextStyles.body(color: _role.foreground, weight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              for (final option in Gender.values) ...[
+                if (option != Gender.values.first) const SizedBox(width: 10),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _gender = option),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: _gender == option ? _role.accent : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        option.label,
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.body(
+                          color: _gender == option ? Colors.white : AppColors.navy,
+                          weight: FontWeight.w600,
+                          size: 13,
+                        ),
+                      ),
+                    ),
                   ),
-                ],
-                LengthLimitingTextInputFormatter(format.maxLength),
+                ),
               ],
-            ),
-          ],
+            ],
+          ),
+          const SizedBox(height: 22),
+          LabeledPillField(
+            label: 'Occupation',
+            labelColor: _role.foreground,
+            controller: _occupationController,
+            hint: 'Enter your occupation',
+          ),
+          const SizedBox(height: 22),
+          LabeledDropdownField(
+            label: 'Marital Status',
+            value: _maritalStatus?.label ?? 'Select your marital status',
+            labelColor: _role.foreground,
+            onTap: _pickMaritalStatus,
+          ),
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),

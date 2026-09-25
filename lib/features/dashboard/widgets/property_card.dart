@@ -6,6 +6,7 @@ import '../../../state/app_state.dart';
 import '../models/property.dart';
 import '../property_detail_screen.dart';
 import 'property_image.dart';
+import 'shortlet_unavailable_countdown.dart';
 
 class PropertyCard extends StatelessWidget {
   const PropertyCard({super.key, required this.property, required this.theme});
@@ -70,6 +71,28 @@ class PropertyCard extends StatelessWidget {
                       }),
                     ),
                   ),
+                  if (property.category == 'Shortlet' && property.shortletUnavailable)
+                    Positioned(
+                      left: 12,
+                      top: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: property.shortletUnavailableUntil != null
+                            ? ShortletUnavailableCountdown(
+                                until: property.shortletUnavailableUntil!,
+                                color: Colors.white,
+                                size: 11,
+                              )
+                            : Text(
+                                'Unavailable',
+                                style: AppTextStyles.body(color: Colors.white, size: 11, weight: FontWeight.w700),
+                              ),
+                      ),
+                    ),
                 ],
               ),
             ),

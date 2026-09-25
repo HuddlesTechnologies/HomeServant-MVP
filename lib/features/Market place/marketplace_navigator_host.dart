@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/dashboard_theme.dart';
-import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import 'marketplace_auth_screen.dart';
 import 'vendor_dashboard_screen.dart';
@@ -32,16 +31,37 @@ class MarketplaceNavigatorHost extends StatefulWidget {
 
 class _MarketplaceNavigatorHostState extends State<MarketplaceNavigatorHost> {
   final _navigatorKey = GlobalKey<NavigatorState>();
+  bool? _startAtVendorDashboard;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveStartRoute();
+  }
+
+  /// A signed-in account that already has a vendor shop (same login/session
+  /// as everywhere else in the app — see AppState.hasVendorProfile)
+  /// shouldn't have to re-authenticate or pick "Become a Vendor" again just
+  /// to reopen the Marketplace; only an account with no session, or one
+  /// with no shop yet, sees the customer/vendor choice screen.
+  Future<void> _resolveStartRoute() async {
+    final appState = context.read<AppState>();
+    if (!appState.isAuthenticated) {
+      setState(() => _startAtVendorDashboard = false);
+      return;
+    }
+    final existing = appState.hasVendorProfile;
+    final hasProfile = existing ?? await appState.checkVendorProfile();
+    if (!mounted) return;
+    setState(() => _startAtVendorDashboard = hasProfile);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final appState = context.read<AppState>();
-    // A vendor who's already signed in (the same JWT session as
-    // everywhere else in the app — see VendorLoginScreen) shouldn't have
-    // to re-authenticate just to reopen the Marketplace; only an account
-    // with no session yet, or one that isn't a vendor, sees the
-    // customer/vendor choice screen.
-    final startAtVendorDashboard = appState.isAuthenticated && appState.role == UserRole.vendor;
+    final startAtVendorDashboard = _startAtVendorDashboard;
+    if (startAtVendorDashboard == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
     return NavigatorPopHandler(
       onPopWithResult: (result) => _navigatorKey.currentState?.maybePop(),
       child: Navigator(

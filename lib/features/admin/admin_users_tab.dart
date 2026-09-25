@@ -11,6 +11,7 @@ import '../../state/app_state.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'admin_user_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
@@ -130,13 +131,13 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              _RoleChip(label: 'All', selected: _roleFilter == null, onTap: () => setState(() { _roleFilter = null; _load(); })),
+              AdminFilterChip(label: 'All', selected: _roleFilter == null, onTap: () => setState(() { _roleFilter = null; _load(); })),
               const SizedBox(width: 8),
-              _RoleChip(label: 'Tenants', selected: _roleFilter == UserRole.tenant, onTap: () => setState(() { _roleFilter = UserRole.tenant; _load(); })),
+              AdminFilterChip(label: 'Tenants', selected: _roleFilter == UserRole.tenant, onTap: () => setState(() { _roleFilter = UserRole.tenant; _load(); })),
               const SizedBox(width: 8),
-              _RoleChip(label: 'Landlords', selected: _roleFilter == UserRole.landlord, onTap: () => setState(() { _roleFilter = UserRole.landlord; _load(); })),
+              AdminFilterChip(label: 'Landlords', selected: _roleFilter == UserRole.landlord, onTap: () => setState(() { _roleFilter = UserRole.landlord; _load(); })),
               const SizedBox(width: 8),
-              _RoleChip(label: 'Vendors', selected: _roleFilter == UserRole.vendor, onTap: () => setState(() { _roleFilter = UserRole.vendor; _load(); })),
+              AdminFilterChip(label: 'Vendors', selected: _roleFilter == UserRole.vendor, onTap: () => setState(() { _roleFilter = UserRole.vendor; _load(); })),
             ],
           ),
         ),
@@ -159,7 +160,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                         borderRadius: BorderRadius.circular(14),
                         child: Container(
                           padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                          decoration: adminCardDecoration,
                           child: Row(
                             children: [
                               Expanded(
@@ -216,27 +217,6 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                 ),
         ),
       ],
-    );
-  }
-}
-
-class _RoleChip extends StatelessWidget {
-  const _RoleChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      backgroundColor: Colors.white,
-      selectedColor: AppColors.navy,
-      labelStyle: AppTextStyles.body(color: selected ? Colors.white : AppColors.navy, size: 12.5, weight: FontWeight.w600),
-      side: BorderSide.none,
     );
   }
 }

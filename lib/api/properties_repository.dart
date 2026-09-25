@@ -36,6 +36,15 @@ class PropertiesRepository {
     });
   }
 
+  /// Partial update (e.g. the messaging toggle, or a full re-edit of the
+  /// listing) — `PATCH /properties/:id`.
+  Future<Property> update(String id, Map<String, dynamic> data) {
+    return _client.call(() async {
+      final response = await _client.dio.patch('/properties/$id', data: data);
+      return Property.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
   Future<void> remove(String id) {
     return _client.call(() async {
       await _client.dio.delete('/properties/$id');

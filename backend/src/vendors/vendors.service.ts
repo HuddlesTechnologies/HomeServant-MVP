@@ -1,11 +1,15 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateVendorProfileDto } from './dto/create-vendor-profile.dto';
 import { UpdateVendorProfileDto } from './dto/update-vendor-profile.dto';
 
 @Injectable()
 export class VendorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly paystack: PaystackService,
+  ) {}
 
   async create(userId: string, dto: CreateVendorProfileDto) {
     const existing = await this.prisma.vendorProfile.findUnique({ where: { userId } });
@@ -21,9 +25,27 @@ export class VendorsService {
     return profile;
   }
 
+  /// Re-resolves the account through Paystack server-side rather than
+  /// trusting a client-supplied account name — exact same pattern as
+  /// UsersService.updateBankDetails. [bankCode]/[accountNumber] only come
+  /// through together (both or neither — see UpdateVendorProfileDto);
+  /// every other field on the DTO (businessName/category/state/etc.)
+  /// updates independently of whether bank details were also sent.
   async update(userId: string, dto: UpdateVendorProfileDto) {
     await this.findMine(userId);
-    return this.prisma.vendorProfile.update({ where: { userId }, data: dto });
+    const { bankCode, accountNumber, ...rest } = dto;
+
+    let bankFields: { bankCode: string; bankName: string | null; accountNumber: string; accountName: string } | undefined;
+    if (bankCode && accountNumber) {
+      const [{ accountName }, banks] = await Promise.all([
+        this.paystack.resolveAccount(accountNumber, bankCode),
+        this.paystack.listBanks(),
+      ]);
+      const bank = banks.find((b) => b.code === bankCode);
+      bankFields = { bankCode, bankName: bank?.name ?? null, accountNumber, accountName };
+    }
+
+    return this.prisma.vendorProfile.update({ where: { userId }, data: { ...rest, ...bankFields } });
   }
 
   /// Used by ProductsService/OrdersService to resolve "the vendor profile

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../api/models/marketplace_api.dart';
+import 'product_thumbnail.dart';
 
 /// Shows the ordered product's own photo — the backend embeds it directly
 /// on the order-item response, no separate catalog lookup needed. Falls
@@ -22,18 +23,13 @@ class OrderItemThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = item.productImageUrl;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: Container(
-        width: size,
-        height: size,
-        color: backgroundColor ?? iconColor.withValues(alpha: 0.12),
-        alignment: Alignment.center,
-        child: imageUrl == null
-            ? Icon(Icons.inventory_2_rounded, color: iconColor, size: size * 0.5)
-            : Image.network(imageUrl, fit: BoxFit.cover, width: size, height: size),
-      ),
+    return ProductThumbnail(
+      imageUrl: item.productImageUrl,
+      icon: Icons.inventory_2_rounded,
+      iconColor: iconColor,
+      backgroundColor: backgroundColor,
+      size: size,
+      borderRadius: borderRadius,
     );
   }
 }

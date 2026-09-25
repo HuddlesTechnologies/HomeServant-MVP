@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../api/api_config.dart';
+import '../api/models/app_notification.dart';
 
 class ChatSocketMessage {
   const ChatSocketMessage({required this.threadId, required this.message});
@@ -21,8 +22,16 @@ class ChatSocketMessage {
 class ChatSocketService {
   io.Socket? _socket;
   final _controller = StreamController<ChatSocketMessage>.broadcast();
+  final _notificationController = StreamController<AppNotification>.broadcast();
 
   Stream<ChatSocketMessage> get onNewMessage => _controller.stream;
+
+  /// Fires the instant a new `Notification` row is created for this user
+  /// anywhere on the backend (chat, admin, payments, reports, …) — the
+  /// global banner overlay is the one thing that listens to this; it
+  /// carries the exact same shape `GET /notifications` already returns per
+  /// row, so [AppNotification.fromApi] parses it unchanged.
+  Stream<AppNotification> get onNotification => _notificationController.stream;
 
   void connect(String accessToken) {
     disconnect();
@@ -47,6 +56,16 @@ class ChatSocketService {
         final message = data['message'];
         if (threadId != null && message is Map) {
           _controller.add(ChatSocketMessage(threadId: threadId, message: Map<String, dynamic>.from(message)));
+        }
+      }
+    });
+    socket.on('notification:new', (data) {
+      if (data is Map) {
+        try {
+          _notificationController.add(AppNotification.fromApi(Map<String, dynamic>.from(data)));
+        } catch (_) {
+          // Malformed/unexpected payload shape — drop it rather than crash
+          // the socket event handler.
         }
       }
     });

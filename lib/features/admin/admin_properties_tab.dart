@@ -7,6 +7,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
@@ -60,6 +61,27 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
     }
   }
 
+  Future<void> _relist(AdminProperty property) async {
+    final confirmed = await showAdminConfirmSheet(
+      context,
+      title: 'Re-list "${property.title}"?',
+      body:
+          "This property is currently occupied and locked from re-listing by its landlord. This override makes "
+          "it listable again — only do this if you've confirmed with the landlord that it's actually available.",
+      actionLabel: 'Re-list',
+      destructive: false,
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.relistProperty(property.id);
+      messenger.showSnackBar(SnackBar(content: Text('${property.title} re-listed')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final properties = _properties;
@@ -87,7 +109,7 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                       final property = properties[index];
                       return Container(
                         padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                        decoration: adminCardDecoration,
                         child: Row(
                           children: [
                             Expanded(
@@ -102,9 +124,29 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                                     '₦${formatWithThousandsSeparator(property.price)} · ${property.landlordName ?? property.landlordEmail ?? 'Unknown landlord'}',
                                     style: AppTextStyles.body(color: AppColors.hintGrey, size: 12),
                                   ),
+                                  if (property.isOccupied) ...[
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        'Occupied — locked from re-listing',
+                                        style: TextStyle(color: Colors.orange, fontSize: 10.5, fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
+                            if (context.canModerate && property.isOccupied)
+                              IconButton(
+                                onPressed: () => _relist(property),
+                                icon: const Icon(Icons.lock_open_rounded, color: Colors.orange),
+                                tooltip: 'Re-list (override occupied lock)',
+                              ),
                             if (context.canModerate)
                               IconButton(
                                 onPressed: () => _remove(property),

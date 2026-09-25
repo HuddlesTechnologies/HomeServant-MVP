@@ -7,8 +7,8 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
+import '../../widgets/labeled_pill_field.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_text_field.dart';
 import '../../widgets/themed_scaffold.dart';
 
 class SignupTenant1Screen extends StatefulWidget {
@@ -93,24 +93,24 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
             style: AppTextStyles.heading(color: _role.foreground, size: 24),
           ),
           const SizedBox(height: 28),
-          _Field(
+          LabeledPillField(
             label: 'Enter your Name',
-            color: _role.foreground,
+            labelColor: _role.foreground,
             controller: _name,
             hint: 'Full name',
           ),
           const SizedBox(height: 18),
-          _Field(
+          LabeledPillField(
             label: 'Phone Number',
-            color: _role.foreground,
+            labelColor: _role.foreground,
             controller: _phone,
             keyboardType: TextInputType.phone,
             hint: 'e.g. 0801 234 5678',
           ),
           const SizedBox(height: 18),
-          _Field(
+          LabeledPillField(
             label: 'Date of Birth',
-            color: _role.foreground,
+            labelColor: _role.foreground,
             controller: _dob,
             hint: 'Tap to select a date',
             readOnly: true,
@@ -118,9 +118,9 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
             trailing: const Icon(Icons.calendar_today_outlined, color: AppColors.navy, size: 18),
           ),
           const SizedBox(height: 18),
-          _Field(
+          LabeledPillField(
             label: 'Referral code (optional)',
-            color: _role.foreground,
+            labelColor: _role.foreground,
             controller: _referral,
             hint: 'HS-XXXXXX',
           ),
@@ -139,50 +139,6 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
           const SizedBox(height: 24),
         ],
       ),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.label,
-    required this.color,
-    required this.controller,
-    this.keyboardType,
-    this.hint = '',
-    this.readOnly = false,
-    this.onTap,
-    this.trailing,
-  });
-
-  final String label;
-  final Color color;
-  final TextEditingController controller;
-  final TextInputType? keyboardType;
-  final String hint;
-  final bool readOnly;
-  final VoidCallback? onTap;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: AppTextStyles.body(color: color, weight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        PillTextField(
-          hint: hint,
-          controller: controller,
-          keyboardType: keyboardType,
-          readOnly: readOnly,
-          onTap: onTap,
-          trailing: trailing,
-        ),
-      ],
     );
   }
 }

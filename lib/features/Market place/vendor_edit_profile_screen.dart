@@ -9,6 +9,7 @@ import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
+import 'vendor_bank_details_screen.dart';
 
 /// Lets the vendor update their shop's public details, logo, and payout
 /// bank account.
@@ -24,9 +25,6 @@ class VendorEditProfileScreen extends StatefulWidget {
 class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
   final _businessName = TextEditingController();
   final _ownerName = TextEditingController();
-  final _bankName = TextEditingController();
-  final _accountNumber = TextEditingController();
-  final _accountName = TextEditingController();
   MarketplaceCategory _category = MarketplaceCategory.other;
   String? _logoUrl;
   PickedUpload? _newLogo;
@@ -49,9 +47,6 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
         _vendor = vendor;
         _businessName.text = vendor.businessName;
         _ownerName.text = appState.fullName;
-        _bankName.text = vendor.bankName ?? '';
-        _accountNumber.text = vendor.accountNumber ?? '';
-        _accountName.text = vendor.accountName ?? '';
         _category = vendor.category;
         _logoUrl = vendor.logoUrl;
         _loading = false;
@@ -65,10 +60,14 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
   void dispose() {
     _businessName.dispose();
     _ownerName.dispose();
-    _bankName.dispose();
-    _accountNumber.dispose();
-    _accountName.dispose();
     super.dispose();
+  }
+
+  Future<void> _openBankDetails() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => VendorBankDetailsScreen(theme: widget.theme)),
+    );
+    _load();
   }
 
   Future<void> _pickLogo() async {
@@ -123,9 +122,6 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
         businessName: newName,
         category: _category,
         logoUrl: logoUrl,
-        bankName: _bankName.text.trim().isEmpty ? null : _bankName.text.trim(),
-        accountNumber: _accountNumber.text.trim().isEmpty ? null : _accountNumber.text.trim(),
-        accountName: _accountName.text.trim().isEmpty ? null : _accountName.text.trim(),
       );
       final newOwnerName = _ownerName.text.trim();
       if (newOwnerName.isNotEmpty && newOwnerName != appState.fullName) {
@@ -231,11 +227,44 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              _Field(theme: theme, label: 'Bank Name', controller: _bankName, hint: 'e.g. GTBank'),
-              const SizedBox(height: 16),
-              _Field(theme: theme, label: 'Account Number', controller: _accountNumber, keyboardType: TextInputType.number, hint: '10-digit account number'),
-              const SizedBox(height: 16),
-              _Field(theme: theme, label: 'Account Name', controller: _accountName, hint: 'Account holder name'),
+              InkWell(
+                onTap: _openBankDetails,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
+                  child: Row(
+                    children: [
+                      Icon(Icons.account_balance_rounded, color: theme.accent, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _vendor!.hasPayoutDetails ? 'Bank Details' : 'Set Up Bank Details',
+                              style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w700, size: 14),
+                            ),
+                            if (_vendor!.hasPayoutDetails)
+                              Text(
+                                '${_vendor!.bankName ?? 'Bank'} · ${_vendor!.accountName ?? _vendor!.accountNumber}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12),
+                              )
+                            else
+                              Text(
+                                'Required before you can list a product',
+                                style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right_rounded, color: theme.onSurface.withValues(alpha: 0.3)),
+                    ],
+                  ),
+                ),
+              ),
               const SizedBox(height: 28),
               PillButton(
                 label: _saving ? 'Saving…' : 'Save Changes',

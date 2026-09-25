@@ -7,10 +7,12 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/payout_required_dialog.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
 import 'models/order_options.dart';
+import 'vendor_bank_details_screen.dart';
 
 const _minImages = 2;
 const _maxImages = 5;
@@ -97,6 +99,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
     final appState = context.read<AppState>();
     try {
       final vendor = await appState.vendors.me();
+      if (!vendor.hasPayoutDetails) {
+        if (!mounted) return;
+        final proceed = await showPayoutRequiredDialog(
+          context,
+          body: 'Please add your Payout Account details in Settings before listing a product. '
+              'Orders are held in escrow and released to your bank account once a buyer confirms receipt.',
+        );
+        if (proceed == true && mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => VendorBankDetailsScreen(theme: widget.theme)),
+          );
+        }
+        return;
+      }
       final imageUrls = <String>[];
       for (final image in _images) {
         imageUrls.add(await appState.uploads.upload(file: image, folder: 'marketplace-products'));

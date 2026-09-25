@@ -126,34 +126,47 @@ class LandlordAvatar extends StatelessWidget {
 /// The green-check / red-cross accept-reject pair shown on every pending
 /// booking row.
 class LandlordAcceptRejectButtons extends StatelessWidget {
-  const LandlordAcceptRejectButtons({super.key, required this.onAccept, required this.onReject});
+  const LandlordAcceptRejectButtons({
+    super.key,
+    required this.onAccept,
+    required this.onReject,
+    this.acceptTooltip,
+    this.rejectTooltip,
+  });
 
   final VoidCallback onAccept;
   final VoidCallback onReject;
+
+  /// Optional tooltip text — used on the Bookings screen so the checkmark
+  /// reads as "Confirm inspection date" rather than a generic accept for a
+  /// non-Shortlet property.
+  final String? acceptTooltip;
+  final String? rejectTooltip;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _CircleIconButton(icon: Icons.check_rounded, color: const Color(0xFF3FBF6A), onTap: onAccept),
+        _CircleIconButton(icon: Icons.check_rounded, color: const Color(0xFF3FBF6A), onTap: onAccept, tooltip: acceptTooltip),
         const SizedBox(width: 8),
-        _CircleIconButton(icon: Icons.close_rounded, color: const Color(0xFFE0554F), onTap: onReject),
+        _CircleIconButton(icon: Icons.close_rounded, color: const Color(0xFFE0554F), onTap: onReject, tooltip: rejectTooltip),
       ],
     );
   }
 }
 
 class _CircleIconButton extends StatelessWidget {
-  const _CircleIconButton({required this.icon, required this.color, required this.onTap});
+  const _CircleIconButton({required this.icon, required this.color, required this.onTap, this.tooltip});
 
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final button = InkWell(
       onTap: onTap,
       customBorder: const CircleBorder(),
       child: Container(
@@ -163,5 +176,6 @@ class _CircleIconButton extends StatelessWidget {
         child: Icon(icon, color: color, size: 16),
       ),
     );
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }

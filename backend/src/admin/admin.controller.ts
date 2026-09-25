@@ -20,6 +20,7 @@ import { RejectVendorDto } from './dto/reject-vendor.dto';
 import { RequestAdminDto } from './dto/request-admin.dto';
 import { SetAdminLevelDto } from './dto/set-admin-level.dto';
 import { SetAdminTwoFactorDto } from './dto/set-admin-two-factor.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 /// Every route here requires an authenticated ADMIN account at minimum
 /// (SUPPORT tier or above); routes that need more than that carry their
@@ -130,6 +131,15 @@ export class AdminController {
     return this.admin.findUserDetail(id);
   }
 
+  /// Support's one new capability — edit a user's basic profile fields.
+  /// Deliberately no `@MinAdminLevel` here: every admin tier (including
+  /// SUPPORT) can call this. Does NOT loosen delete/moderate, which stay
+  /// Moderator+ below.
+  @Patch('users/:id')
+  updateUser(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateUserDto) {
+    return this.admin.updateUser(id, dto, actingAdmin.sub);
+  }
+
   @Patch('users/:id/deactivate')
   async deactivateUser(@Param('id') id: string): Promise<void> {
     await this.admin.deactivateUser(id);
@@ -148,6 +158,11 @@ export class AdminController {
     return this.admin.findVendors(query);
   }
 
+  @Get('vendors/:id')
+  findVendorDetail(@Param('id') id: string) {
+    return this.admin.findVendorDetail(id);
+  }
+
   @Patch('vendors/:id/approve')
   @MinAdminLevel(AdminLevel.MODERATOR)
   approveVendor(@Param('id') id: string) {
@@ -162,14 +177,14 @@ export class AdminController {
 
   @Patch('vendors/:id/suspend')
   @MinAdminLevel(AdminLevel.MODERATOR)
-  suspendVendor(@Param('id') id: string) {
-    return this.admin.suspendVendor(id);
+  suspendVendor(@Param('id') id: string, @Body() dto: DelistReasonDto) {
+    return this.admin.suspendVendor(id, dto.reason);
   }
 
   @Patch('vendors/:id/unsuspend')
   @MinAdminLevel(AdminLevel.MODERATOR)
-  unsuspendVendor(@Param('id') id: string) {
-    return this.admin.unsuspendVendor(id);
+  unsuspendVendor(@Param('id') id: string, @Body() dto: DelistReasonDto) {
+    return this.admin.unsuspendVendor(id, dto.reason);
   }
 
   // --- Properties --------------------------------------------------------
@@ -177,6 +192,12 @@ export class AdminController {
   @Get('properties')
   findProperties(@Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('search') search?: string) {
     return this.admin.findProperties(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined, search);
+  }
+
+  @Patch('properties/:id/relist')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  async relistProperty(@Param('id') id: string): Promise<void> {
+    await this.admin.relistProperty(id);
   }
 
   @Delete('properties/:id')

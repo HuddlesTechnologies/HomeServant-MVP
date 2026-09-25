@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -19,6 +20,9 @@ export class ReportsController {
 
   /// Any authenticated role — eligibility (actually rented/purchased the
   /// target) is enforced in ReportsService.create, not by role.
+  // Moderate throttling: user-generated/spammable but authenticated, so a
+  // looser cap than the unauthenticated auth endpoints is fine.
+  @Throttle({ default: { limit: 20, ttl: 60000 } })
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateReportDto) {
     return this.reports.create(user.sub, dto);

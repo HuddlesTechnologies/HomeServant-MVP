@@ -23,7 +23,7 @@ export class MarketplaceProductsController {
   /// Before `:id` — otherwise "mine" would be parsed as a product id.
   @Get('mine')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.VENDOR)
+  @Roles(UserRole.TENANT, UserRole.VENDOR)
   findMine(@CurrentUser() user: AuthenticatedUser) {
     return this.products.findMine(user.sub);
   }
@@ -35,21 +35,21 @@ export class MarketplaceProductsController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.VENDOR)
+  @Roles(UserRole.TENANT, UserRole.VENDOR)
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateProductDto) {
     return this.products.create(user.sub, dto);
   }
 
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.VENDOR)
+  @Roles(UserRole.TENANT, UserRole.VENDOR)
   update(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.products.update(user.sub, id, dto);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.VENDOR)
+  @Roles(UserRole.TENANT, UserRole.VENDOR)
   remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.products.remove(user.sub, id);
   }

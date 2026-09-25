@@ -12,6 +12,10 @@ class ThreadParticipant {
   );
 }
 
+enum MessageType { text, propertyPreview }
+
+MessageType _messageTypeFromApi(String? value) => value == 'propertyPreview' ? MessageType.propertyPreview : MessageType.text;
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -21,6 +25,11 @@ class ChatMessage {
     required this.body,
     required this.createdAt,
     this.readAt,
+    this.type = MessageType.text,
+    this.previewPropertyTitle,
+    this.previewPropertyImageUrl,
+    this.previewPropertyPrice,
+    this.previewPropertyPriceUnit,
   });
 
   final String id;
@@ -31,6 +40,15 @@ class ChatMessage {
   final DateTime createdAt;
   final DateTime? readAt;
 
+  /// Sending the first message in a thread that has a `propertyId`
+  /// automatically gets `propertyPreview` server-side — the client never
+  /// sets this itself, only renders whatever comes back.
+  final MessageType type;
+  final String? previewPropertyTitle;
+  final String? previewPropertyImageUrl;
+  final int? previewPropertyPrice;
+  final String? previewPropertyPriceUnit;
+
   factory ChatMessage.fromApi(Map<String, dynamic> json) => ChatMessage(
     id: json['id'] as String,
     threadId: json['threadId'] as String,
@@ -39,6 +57,11 @@ class ChatMessage {
     body: json['body'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
     readAt: (json['readAt'] as String?) != null ? DateTime.parse(json['readAt'] as String) : null,
+    type: _messageTypeFromApi(json['type'] as String?),
+    previewPropertyTitle: json['previewPropertyTitle'] as String?,
+    previewPropertyImageUrl: json['previewPropertyImageUrl'] as String?,
+    previewPropertyPrice: json['previewPropertyPrice'] as int?,
+    previewPropertyPriceUnit: json['previewPropertyPriceUnit'] as String?,
   );
 }
 

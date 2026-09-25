@@ -77,6 +77,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(this.threadRoom(threadId)).emit('message:new', { threadId, message });
   }
 
+  /// Pushed to a single user's own room — the generic counterpart to
+  /// [broadcastMessage], used by NotificationsService (the single
+  /// choke-point every notification, from chat/admin/payments/reports,
+  /// already passes through) so any new Notification row shows up
+  /// instantly as an in-app banner without a second realtime channel.
+  emitToUser(userId: string, event: string, payload: unknown): void {
+    this.server.to(this.userRoom(userId)).emit(event, payload);
+  }
+
   private userRoom(userId: string): string {
     return `user:${userId}`;
   }

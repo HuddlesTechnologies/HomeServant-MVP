@@ -8,6 +8,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
 import 'widgets/admin_confirm_sheet.dart';
+import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
@@ -121,7 +122,7 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
           final product = products[index];
           return Container(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+            decoration: adminCardDecoration,
             child: Row(
               children: [
                 Expanded(
@@ -168,7 +169,7 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
           final order = orders[index];
           return Container(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+            decoration: adminCardDecoration,
             child: Row(
               children: [
                 Expanded(

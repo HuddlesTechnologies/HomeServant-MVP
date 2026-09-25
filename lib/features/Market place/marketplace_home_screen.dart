@@ -10,12 +10,12 @@ import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/upload_picker.dart';
 import 'marketplace_messages_screen.dart';
 import 'marketplace_product_detail_screen.dart';
 import 'models/order_options.dart';
 import 'order_history_screen.dart';
 import 'widgets/marketplace_product_card.dart';
+import 'widgets/product_thumbnail.dart';
 
 /// The actual shopping screen a visitor lands on after choosing "Proceed as
 /// a Customer" on [MarketplaceAuthScreen].
@@ -162,22 +162,13 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: SizedBox(
-                                        width: 44,
-                                        height: 44,
-                                        child: product.imageUrls.isNotEmpty
-                                            ? Image(image: imageProviderForPath(product.imageUrls.first), fit: BoxFit.cover)
-                                            : DecoratedBox(
-                                                decoration: BoxDecoration(color: theme.onSurface.withValues(alpha: 0.06)),
-                                                child: Icon(
-                                                  product.category.icon,
-                                                  color: theme.onSurface.withValues(alpha: 0.5),
-                                                  size: 20,
-                                                ),
-                                              ),
-                                      ),
+                                    ProductThumbnail(
+                                      imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : null,
+                                      icon: product.category.icon,
+                                      iconColor: theme.onSurface.withValues(alpha: 0.5),
+                                      backgroundColor: theme.onSurface.withValues(alpha: 0.06),
+                                      size: 44,
+                                      borderRadius: 10,
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(

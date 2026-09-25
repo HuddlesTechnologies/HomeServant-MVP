@@ -6,10 +6,13 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
+import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
+import '../../widgets/payout_required_dialog.dart';
 import '../../widgets/upload_picker.dart';
 import '../dashboard/models/property.dart';
+import 'landlord_bank_details_screen.dart';
 
 const _categories = ['House', 'Shortlet', 'Self-Con', 'Apartment'];
 const _minImages = 2;
@@ -20,8 +23,15 @@ const _maxImages = 6;
 /// Supabase Storage, then creates the listing via `POST /properties` and
 /// adds it to [AppState.landlordProperties], so the new listing actually
 /// shows up in "My Properties" and the Home tab's Properties count.
+///
+/// Also doubles as the property-edit screen when [initial] is set (from
+/// "My Properties") — same form, prefilled, saving via `PATCH
+/// /properties/:id` instead of creating a new listing. Already-hosted
+/// photos are re-used as-is rather than re-uploaded (see [_save]).
 class LandlordAddPropertyScreen extends StatefulWidget {
-  const LandlordAddPropertyScreen({super.key});
+  const LandlordAddPropertyScreen({super.key, this.initial});
+
+  final Property? initial;
 
   @override
   State<LandlordAddPropertyScreen> createState() => _LandlordAddPropertyScreenState();
@@ -35,6 +45,8 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   final _bedrooms = TextEditingController();
   final _bathrooms = TextEditingController();
   final _description = TextEditingController();
+  final _unitAddress = TextEditingController();
+  final _roomNumber = TextEditingController();
 
   String _category = _categories.first;
   String? _state;
@@ -43,6 +55,35 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   String? _videoFileName;
   bool _pickingVideo = false;
   bool _saving = false;
+  int _rentDurationMonths = 12;
+  bool _messagingEnabled = true;
+
+  bool get _isEditing => widget.initial != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initial;
+    if (initial == null) return;
+    _title.text = initial.title;
+    _location.text = initial.location;
+    _price.text = initial.price.toString();
+    _bedrooms.text = initial.bedrooms.toString();
+    _bathrooms.text = initial.bathrooms.toString();
+    _description.text = initial.description;
+    _unitAddress.text = initial.unitAddress ?? '';
+    _roomNumber.text = initial.roomNumber ?? '';
+    _category = initial.category;
+    _state = initial.state;
+    _rentDurationMonths = initial.rentDurationMonths ?? 12;
+    _messagingEnabled = initial.messagingEnabled;
+    _images.addAll([
+      PickedUpload(path: initial.image, fileName: 'cover', isImage: true),
+      for (final url in initial.galleryImages) PickedUpload(path: url, fileName: 'photo', isImage: true),
+    ]);
+    _videoPath = initial.videoPath;
+    _videoFileName = initial.videoPath?.split('/').last;
+  }
 
   @override
   void dispose() {
@@ -52,6 +93,8 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     _bedrooms.dispose();
     _bathrooms.dispose();
     _description.dispose();
+    _unitAddress.dispose();
+    _roomNumber.dispose();
     super.dispose();
   }
 
@@ -84,6 +127,27 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     _videoFileName = null;
   });
 
+  /// Returns true if payout details are already on file, or the landlord
+  /// just set them up from the popup below (in which case the caller
+  /// should still stop this submit attempt and let them tap "Add
+  /// Property" again — [AppState] is refreshed either way). The server
+  /// enforces this for real on `POST /properties`; this is only the
+  /// friendly client-side steer so a submit doesn't sail straight into a
+  /// guaranteed 400.
+  Future<bool> _ensurePayoutDetails() async {
+    final appState = context.read<AppState>();
+    if (appState.accountNumber != null && appState.accountNumber!.isNotEmpty) return true;
+    final proceed = await showPayoutRequiredDialog(
+      context,
+      body: 'Please add your Payout Account details in Settings before listing a property. '
+          'Tenant rent payments are held in escrow and released to your bank account.',
+    );
+    if (proceed == true && mounted) {
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LandlordBankDetailsScreen()));
+    }
+    return false;
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_state == null) {
@@ -94,6 +158,14 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Add at least $_minImages photos')));
       return;
     }
+    if (_category == 'Shortlet' && (_unitAddress.text.trim().isEmpty || _roomNumber.text.trim().isEmpty)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Unit address and room number are required for a Shortlet')));
+      return;
+    }
+    if (!_isEditing && !await _ensurePayoutDetails()) return;
+    if (!mounted) return;
     setState(() => _saving = true);
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
@@ -102,28 +174,62 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     try {
       final imageUrls = <String>[];
       for (final image in _images) {
-        imageUrls.add(await appState.uploads.upload(file: image, folder: 'properties'));
+        // Already-hosted photos (editing an existing listing) are reused
+        // as-is rather than re-uploaded.
+        if (image.path.startsWith('http://') || image.path.startsWith('https://')) {
+          imageUrls.add(image.path);
+        } else {
+          imageUrls.add(await appState.uploads.upload(file: image, folder: 'properties'));
+        }
       }
-      final property = Property(
-        id: '',
-        title: _title.text.trim(),
-        location: _location.text.trim(),
-        state: _state!,
-        rating: 0,
-        image: imageUrls.first,
-        galleryImages: imageUrls.skip(1).toList(),
-        category: _category,
-        price: int.tryParse(_price.text.replaceAll(',', '')) ?? 0,
-        priceUnit: _category == 'Shortlet' ? 'night' : 'year',
-        bedrooms: int.tryParse(_bedrooms.text) ?? 0,
-        bathrooms: int.tryParse(_bathrooms.text) ?? 0,
-        description: _description.text.trim(),
-        landlordName: landlordName,
-        videoPath: _videoPath,
-      );
-      final created = await appState.addLandlordProperty(property);
+      final isShortlet = _category == 'Shortlet';
+      final basis = widget.initial;
+      final property = (basis?.copyWith(
+            title: _title.text.trim(),
+            location: _location.text.trim(),
+            state: _state!,
+            image: imageUrls.first,
+            galleryImages: imageUrls.skip(1).toList(),
+            category: _category,
+            price: int.tryParse(_price.text.replaceAll(',', '')) ?? 0,
+            priceUnit: isShortlet ? 'night' : 'year',
+            bedrooms: int.tryParse(_bedrooms.text) ?? 0,
+            bathrooms: int.tryParse(_bathrooms.text) ?? 0,
+            description: _description.text.trim(),
+            videoPath: _videoPath,
+            rentDurationMonths: isShortlet ? null : _rentDurationMonths,
+            messagingEnabled: _messagingEnabled,
+            unitAddress: isShortlet ? _unitAddress.text.trim() : null,
+            roomNumber: isShortlet ? _roomNumber.text.trim() : null,
+          )) ??
+          Property(
+            id: '',
+            title: _title.text.trim(),
+            location: _location.text.trim(),
+            state: _state!,
+            rating: 0,
+            image: imageUrls.first,
+            galleryImages: imageUrls.skip(1).toList(),
+            category: _category,
+            price: int.tryParse(_price.text.replaceAll(',', '')) ?? 0,
+            priceUnit: isShortlet ? 'night' : 'year',
+            bedrooms: int.tryParse(_bedrooms.text) ?? 0,
+            bathrooms: int.tryParse(_bathrooms.text) ?? 0,
+            description: _description.text.trim(),
+            landlordName: landlordName,
+            videoPath: _videoPath,
+            rentDurationMonths: isShortlet ? null : _rentDurationMonths,
+            messagingEnabled: _messagingEnabled,
+            unitAddress: isShortlet ? _unitAddress.text.trim() : null,
+            roomNumber: isShortlet ? _roomNumber.text.trim() : null,
+          );
+      final saved = _isEditing
+          ? await appState.updateLandlordProperty(property)
+          : await appState.addLandlordProperty(property);
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text('${created.title} added to My Properties')));
+      messenger.showSnackBar(
+        SnackBar(content: Text(_isEditing ? '${saved.title} updated' : '${saved.title} added to My Properties')),
+      );
       navigator.pop();
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -134,14 +240,10 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        backgroundColor: AppColors.offWhite,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: AppColors.navy),
-        title: Text('Add Property', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
-      ),
+    return DashboardPageScaffold(
+      background: AppColors.offWhite,
+      foreground: AppColors.navy,
+      title: _isEditing ? 'Edit Property' : 'Add Property',
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -243,9 +345,24 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                 borderRadius: 20,
                 validator: _required,
               ),
+              const SizedBox(height: 14),
+              if (_category == 'Shortlet') ...[
+                PillTextField(hint: 'Unit address', controller: _unitAddress, validator: _required),
+                const SizedBox(height: 14),
+                PillTextField(hint: 'Room number', controller: _roomNumber, validator: _required),
+              ] else
+                _RentDurationPicker(
+                  months: _rentDurationMonths,
+                  onChanged: (value) => setState(() => _rentDurationMonths = value),
+                ),
+              const SizedBox(height: 18),
+              _MessagingToggle(
+                value: _messagingEnabled,
+                onChanged: (value) => setState(() => _messagingEnabled = value),
+              ),
               const SizedBox(height: 26),
               PillButton(
-                label: _saving ? 'Adding…' : 'Add Property',
+                label: _saving ? (_isEditing ? 'Saving…' : 'Adding…') : (_isEditing ? 'Save Changes' : 'Add Property'),
                 backgroundColor: AppColors.navy,
                 textColor: AppColors.gold,
                 loading: _saving,
@@ -409,6 +526,79 @@ class _StateDropdown extends StatelessWidget {
           ],
           onChanged: onChanged,
         ),
+      ),
+    );
+  }
+}
+
+/// Lease-length picker (6-24 months, steps of 6) — required for every
+/// non-Shortlet category, since a Shortlet has no fixed-term lease at all.
+class _RentDurationPicker extends StatelessWidget {
+  const _RentDurationPicker({required this.months, required this.onChanged});
+
+  final int months;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(20)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Rent duration: $months month${months == 1 ? '' : 's'}',
+            style: AppTextStyles.body(color: AppColors.navy, size: 13.5, weight: FontWeight.w600),
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(activeTrackColor: AppColors.navy, thumbColor: AppColors.navy),
+            child: Slider(
+              value: months.toDouble(),
+              min: 6,
+              max: 24,
+              divisions: 3,
+              label: '$months months',
+              onChanged: (value) => onChanged(value.round()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Per-property replacement for the old device-wide "Allow Tenant
+/// Messages" toggle — calls the new `Property.messagingEnabled` field.
+class _MessagingToggle extends StatelessWidget {
+  const _MessagingToggle({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        children: [
+          const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.navy, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Allow Tenant Messages', style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w600)),
+                Text(
+                  'Off means tenants pay rent directly — no messaging or inspection booking for this listing',
+                  style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(value: value, onChanged: onChanged, activeColor: AppColors.navy),
+        ],
       ),
     );
   }

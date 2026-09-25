@@ -6,6 +6,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/order_status_badge.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'models/order_options.dart';
 import 'widgets/order_item_thumbnail.dart';
@@ -111,16 +112,12 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                       ],
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: _status.color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _status.label,
-                      style: AppTextStyles.body(color: _status.color, size: 11, weight: FontWeight.w700),
-                    ),
+                  OrderStatusBadge(
+                    status: _status,
+                    horizontalPadding: 10,
+                    verticalPadding: 5,
+                    borderRadius: 12,
+                    fontSize: 11,
                   ),
                 ],
               ),

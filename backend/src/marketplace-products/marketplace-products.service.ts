@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { VendorsService } from '../vendors/vendors.service';
@@ -67,8 +67,15 @@ export class MarketplaceProductsService {
     return this.prisma.product.findMany({ where: { vendorId: vendor.id }, orderBy: { createdAt: 'desc' } });
   }
 
+  /// Server-side payout gate: a vendor with no bank account on file can't
+  /// list a product at all, since there'd be nowhere for a buyer's escrowed
+  /// payment to eventually release to. Mirrors the same gate on
+  /// PropertiesService.create.
   async create(userId: string, dto: CreateProductDto) {
     const vendor = await this.vendors.requireOwn(userId);
+    if (!vendor.bankCode || !vendor.accountNumber) {
+      throw new BadRequestException('Please add your Payout Account details in Settings');
+    }
     return this.prisma.product.create({ data: { ...dto, vendorId: vendor.id } });
   }
 

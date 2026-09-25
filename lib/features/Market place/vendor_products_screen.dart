@@ -7,9 +7,9 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import 'add_product_screen.dart';
-import 'vendor_dashboard_screen.dart';
-import 'vendor_profile_screen.dart';
+import 'widgets/product_thumbnail.dart';
 import 'widgets/vendor_bottom_nav.dart';
+import 'widgets/vendor_tab_route.dart';
 
 /// The vendor's own product catalog — list what's currently for sale, add
 /// a new listing, or remove one.
@@ -44,9 +44,7 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
 
   void _onNavTap(int index) {
     if (index == 1) return;
-    final theme = widget.theme;
-    final screen = index == 0 ? VendorDashboardScreen(theme: theme) : VendorProfileScreen(theme: theme);
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => screen));
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => vendorTabRoute(index, widget.theme)));
   }
 
   Future<void> _addProduct() async {
@@ -159,18 +157,13 @@ class _VendorProductTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 56,
-              height: 56,
-              child: product.imageUrls.isNotEmpty
-                  ? Image.network(product.imageUrls.first, fit: BoxFit.cover)
-                  : DecoratedBox(
-                      decoration: BoxDecoration(color: theme.onSurface.withValues(alpha: 0.06)),
-                      child: Icon(Icons.inventory_2_rounded, color: theme.onSurface.withValues(alpha: 0.55), size: 26),
-                    ),
-            ),
+          ProductThumbnail(
+            imageUrl: product.imageUrls.isNotEmpty ? product.imageUrls.first : null,
+            icon: Icons.inventory_2_rounded,
+            iconColor: theme.onSurface.withValues(alpha: 0.55),
+            backgroundColor: theme.onSurface.withValues(alpha: 0.06),
+            size: 56,
+            borderRadius: 12,
           ),
           const SizedBox(width: 14),
           Expanded(

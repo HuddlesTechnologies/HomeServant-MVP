@@ -6,17 +6,15 @@ import 'package:provider/provider.dart';
 import '../features/admin/admin_login_screen.dart';
 import '../features/admin/admin_shell.dart';
 import '../features/auth/forgot_password_screen.dart';
-import '../features/auth/login_landlord_screen.dart';
+import '../features/auth/login_role_screen.dart';
 import '../features/auth/login_screen.dart';
-import '../features/auth/login_tenant_screen.dart';
 import '../features/auth/reset_password_screen.dart';
 import '../features/auth/signup_landlord1_screen.dart';
 import '../features/auth/signup_landlord2_screen.dart';
-import '../features/auth/signup_landlord_screen.dart';
+import '../features/auth/signup_role_screen.dart';
 import '../features/auth/signup_screen.dart';
 import '../features/auth/signup_tenant1_screen.dart';
 import '../features/auth/signup_tenant2_screen.dart';
-import '../features/auth/signup_tenant_screen.dart';
 import '../features/auth/verify_otp_screen.dart';
 import '../features/landlord/landlord_dashboard_screen.dart';
 import '../features/dashboard/tenant_dashboard_screen.dart';
@@ -88,8 +86,18 @@ const _preAuthPaths = {
   '/admin-login',
 };
 
+/// The router's own root Navigator, exposed so widgets that sit outside the
+/// routed page tree — namely NotificationBannerOverlay, mounted in
+/// HomeServantApp's `MaterialApp.builder` alongside SessionExpiredGate/
+/// AppLockGate, above wherever `context.go`/`Navigator.of(context)` would
+/// normally resolve to — can still push a screen (the notifications list)
+/// on tap, the same way an in-page `Navigator.of(context).push` already
+/// does from every dashboard's own NotificationBell.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 GoRouter buildAppRouter(AppState appState) {
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: appState,
     redirect: (context, state) {
@@ -149,7 +157,8 @@ GoRouter buildAppRouter(AppState appState) {
       ),
       GoRoute(
         path: '/login-landlord',
-        builder: (context, state) => LoginLandlordScreen(
+        builder: (context, state) => LoginRoleScreen(
+          role: UserRole.landlord,
           onLoginSuccess: () => _proceedPastTwoFactor(context),
           onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
           onRequiresTwoFactor: () => context.push('/login-2fa'),
@@ -159,7 +168,8 @@ GoRouter buildAppRouter(AppState appState) {
       ),
       GoRoute(
         path: '/login-tenant',
-        builder: (context, state) => LoginTenantScreen(
+        builder: (context, state) => LoginRoleScreen(
+          role: UserRole.tenant,
           onLoginSuccess: () => _proceedPastTwoFactor(context),
           onGoogleSignedIn: () => _proceedAfterGoogleSignIn(context),
           onRequiresTwoFactor: () => context.push('/login-2fa'),
@@ -208,7 +218,8 @@ GoRouter buildAppRouter(AppState appState) {
       ),
       GoRoute(
         path: '/signup-tenant',
-        builder: (context, state) => SignupTenantScreen(
+        builder: (context, state) => SignupRoleScreen(
+          role: UserRole.tenant,
           onContinue: (email) {
             context.read<AppState>().setEmail(email);
             context.push('/verify-otp');
@@ -218,7 +229,8 @@ GoRouter buildAppRouter(AppState appState) {
       ),
       GoRoute(
         path: '/signup-landlord',
-        builder: (context, state) => SignupLandlordScreen(
+        builder: (context, state) => SignupRoleScreen(
+          role: UserRole.landlord,
           onContinue: (email) {
             context.read<AppState>().setEmail(email);
             context.push('/verify-otp');

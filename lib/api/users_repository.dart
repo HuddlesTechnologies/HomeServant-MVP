@@ -9,7 +9,7 @@ class UsersRepository {
   Future<AuthUser> me() {
     return _client.call(() async {
       final response = await _client.dio.get('/users/me');
-      return AuthUser.fromJson(response.data as Map<String, dynamic>);
+      return AuthUser.fromApi(response.data as Map<String, dynamic>);
     });
   }
 
@@ -23,6 +23,9 @@ class UsersRepository {
     String? profilePhotoUrl,
     bool? twoFactorEnabled,
     String? referralCode,
+    Gender? gender,
+    String? occupation,
+    MaritalStatus? maritalStatus,
   }) {
     return _client.call(() async {
       final response = await _client.dio.patch(
@@ -37,9 +40,12 @@ class UsersRepository {
           if (profilePhotoUrl != null) 'profilePhotoUrl': profilePhotoUrl,
           if (twoFactorEnabled != null) 'twoFactorEnabled': twoFactorEnabled,
           if (referralCode != null && referralCode.isNotEmpty) 'referralCode': referralCode,
+          if (gender != null) 'gender': gender.apiValue,
+          if (occupation != null) 'occupation': occupation,
+          if (maritalStatus != null) 'maritalStatus': maritalStatus.apiValue,
         },
       );
-      return AuthUser.fromJson(response.data as Map<String, dynamic>);
+      return AuthUser.fromApi(response.data as Map<String, dynamic>);
     });
   }
 
@@ -52,7 +58,7 @@ class UsersRepository {
         '/users/me/bank-details',
         data: {'bankCode': bankCode, 'accountNumber': accountNumber},
       );
-      return AuthUser.fromJson(response.data as Map<String, dynamic>);
+      return AuthUser.fromApi(response.data as Map<String, dynamic>);
     });
   }
 }

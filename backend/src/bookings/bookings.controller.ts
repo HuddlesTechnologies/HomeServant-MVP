@@ -7,6 +7,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { ProposeInspectionDto } from './dto/propose-inspection.dto';
 import { RespondBookingDto } from './dto/respond-booking.dto';
 
 @Controller('bookings')
@@ -36,5 +37,47 @@ export class BookingsController {
   @Roles(UserRole.LANDLORD)
   respond(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: RespondBookingDto) {
     return this.bookings.respond(id, user.sub, dto.accepted);
+  }
+
+  @Post(':id/pay')
+  @Roles(UserRole.TENANT)
+  pay(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.pay(id, user.sub);
+  }
+
+  @Post(':id/inspection')
+  @Roles(UserRole.TENANT)
+  proposeInspection(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: ProposeInspectionDto) {
+    return this.bookings.proposeInspection(id, user.sub, dto);
+  }
+
+  @Patch(':id/inspection/respond')
+  @Roles(UserRole.LANDLORD)
+  respondToInspection(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: RespondBookingDto) {
+    return this.bookings.respondToInspection(id, user.sub, dto.accepted);
+  }
+
+  @Post(':id/reject')
+  @Roles(UserRole.LANDLORD)
+  reject(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.rejectBooking(id, user.sub);
+  }
+
+  @Post(':id/moved-in')
+  @Roles(UserRole.TENANT)
+  movedIn(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.confirmMovedIn(id, user.sub);
+  }
+
+  @Post(':id/refund')
+  @Roles(UserRole.TENANT)
+  refund(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.refund(id, user.sub);
+  }
+
+  @Post(':id/renew')
+  @Roles(UserRole.TENANT)
+  renew(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.renew(id, user.sub);
   }
 }

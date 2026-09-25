@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, HttpCode, HttpStatus, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -18,35 +19,44 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
+  // Strict throttling below: these are all unauthenticated, brute-forceable
+  // endpoints (credential guessing, OTP guessing, account enumeration) —
+  // 5 requests/min/IP is generous for a genuine user, tight for an attacker.
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('signup')
   signup(@Body() dto: SignupDto) {
     return this.auth.signup(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('verify-signup')
   @HttpCode(HttpStatus.OK)
   verifySignup(@Body() dto: VerifyOtpDto) {
     return this.auth.verifySignupOtp(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto, @Req() req: Request) {
     return this.auth.login(dto, req.ip);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('google')
   @HttpCode(HttpStatus.OK)
   googleAuth(@Body() dto: GoogleAuthDto) {
     return this.auth.googleAuth(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('verify-2fa')
   @HttpCode(HttpStatus.OK)
   verifyTwoFactor(@Body() dto: VerifyOtpDto, @Req() req: Request) {
     return this.auth.verifyLoginOtp(dto, req.ip);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('resend-otp')
   @HttpCode(HttpStatus.OK)
   resendOtp(@Body() dto: ResendOtpDto) {
@@ -65,12 +75,14 @@ export class AuthController {
     await this.auth.logout(dto.refreshToken);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.auth.forgotPassword(dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('reset-password')
   @HttpCode(HttpStatus.NO_CONTENT)
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {

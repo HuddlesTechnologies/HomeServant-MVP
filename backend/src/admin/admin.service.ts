@@ -15,6 +15,7 @@ import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
 import { RequestAdminDto } from './dto/request-admin.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 /// Mirrors AdminLevelGuard's RANK map — declaration order in the Prisma
 /// schema is the rank (SUPPORT < MODERATOR < SUPER_ADMIN). Used here (not
@@ -340,21 +341,106 @@ export class AdminService {
   }
 
   /// Every field on the account (minus [passwordHash]) plus enough of its
-  /// relations to be useful at a glance — full listing/booking/order
-  /// history stays in the dedicated Properties/Marketplace tabs, this is
-  /// just counts. Viewable by any admin tier; only mutating a user is
-  /// tier-gated.
+  /// relations to be useful at a glance: the existing `_count` summary is
+  /// kept as-is, and alongside it the real lists an admin actually wants
+  /// to page through without leaving this screen — a landlord's listings,
+  /// a tenant's rental history, a buyer's marketplace order history (with
+  /// each item's vendor). Viewable by any admin tier; only mutating a user
+  /// is tier-gated.
   async findUserDetail(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },
       include: {
         vendorProfile: { select: { id: true, businessName: true, status: true, isActive: true } },
         _count: { select: { properties: true, bookings: true, marketplaceOrders: true, favorites: true, reviews: true } },
+        properties: {
+          select: { id: true, title: true, price: true, priceUnit: true, isOccupied: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        bookings: {
+          select: {
+            id: true,
+            propertyId: true,
+            status: true,
+            requestedDate: true,
+            createdAt: true,
+            property: { select: { title: true, price: true, priceUnit: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        marketplaceOrders: {
+          select: {
+            id: true,
+            createdAt: true,
+            items: {
+              select: {
+                id: true,
+                productName: true,
+                unitPrice: true,
+                quantity: true,
+                status: true,
+                vendorId: true,
+                vendor: { select: { businessName: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
     if (!user) throw new NotFoundException('User not found');
-    const { passwordHash, ...rest } = user;
-    return rest;
+    const { passwordHash, properties, bookings, marketplaceOrders, ...rest } = user;
+    return {
+      ...rest,
+      properties: user.role === 'LANDLORD' ? properties : [],
+      bookings: bookings.map((b) => ({
+        id: b.id,
+        propertyId: b.propertyId,
+        propertyTitle: b.property.title,
+        price: b.property.price,
+        priceUnit: b.property.priceUnit,
+        status: b.status,
+        requestedDate: b.requestedDate,
+        createdAt: b.createdAt,
+      })),
+      marketplaceOrders: marketplaceOrders.map((o) => ({
+        id: o.id,
+        createdAt: o.createdAt,
+        items: o.items.map((i) => ({
+          id: i.id,
+          productName: i.productName,
+          unitPrice: i.unitPrice,
+          quantity: i.quantity,
+          status: i.status,
+          vendorId: i.vendorId,
+          vendorBusinessName: i.vendor.businessName,
+        })),
+      })),
+    };
+  }
+
+  /// Support's one new capability: edit a user's basic profile fields.
+  /// Deliberately not gated behind `@MinAdminLevel` (see AdminController) —
+  /// every tier can view a user's detail already, and per the ruling this
+  /// is a new *editing* power for the lowest tier, not a loosening of the
+  /// existing delete/moderate gates. Logged like every other admin action
+  /// for auditability, same as ADMIN_PASSWORD_RESET.
+  async updateUser(id: string, dto: UpdateUserDto, actingAdminId: string) {
+    await this.requireUser(id);
+    if (dto.name === undefined && dto.phone === undefined && dto.houseAddress === undefined) {
+      throw new BadRequestException('Provide at least one of name, phone, or houseAddress');
+    }
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { fullName: dto.name } : {}),
+        ...(dto.phone !== undefined ? { phoneNumber: dto.phone } : {}),
+        ...(dto.houseAddress !== undefined ? { houseAddress: dto.houseAddress } : {}),
+      },
+      select: { id: true, email: true, fullName: true, phoneNumber: true, houseAddress: true, role: true },
+    });
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_EDITED, { actorId: actingAdminId, targetId: id });
+    return updated;
   }
 
   /// Admin-triggered — unlike AuthService.deactivate (self-service), this
@@ -446,14 +532,95 @@ export class AdminService {
     return updated;
   }
 
-  async suspendVendor(id: string) {
-    await this.requireVendor(id);
-    return this.prisma.vendorProfile.update({ where: { id }, data: { isActive: false } });
+  /// Vendor profile plus the products they list and every order item
+  /// they've received (joined to the parent order's buyer/createdAt) —
+  /// the vendor-side equivalent of [findUserDetail]. Any admin tier can
+  /// view; only [suspendVendor]/[unsuspendVendor]/[approveVendor]/
+  /// [rejectVendor] stay Moderator+.
+  async findVendorDetail(id: string) {
+    const vendor = await this.prisma.vendorProfile.findUnique({
+      where: { id },
+      include: {
+        user: { select: { email: true } },
+        products: {
+          select: { id: true, name: true, price: true, stock: true, isAvailable: true, category: true },
+          orderBy: { createdAt: 'desc' },
+        },
+        orderItems: {
+          select: {
+            id: true,
+            productName: true,
+            unitPrice: true,
+            quantity: true,
+            status: true,
+            order: { select: { id: true, createdAt: true, buyer: { select: { fullName: true, email: true } } } },
+          },
+        },
+      },
+    });
+    if (!vendor) throw new NotFoundException('Vendor not found');
+    const orders = [...vendor.orderItems].sort((a, b) => b.order.createdAt.getTime() - a.order.createdAt.getTime());
+    return {
+      id: vendor.id,
+      businessName: vendor.businessName,
+      category: vendor.category,
+      state: vendor.state,
+      ownerEmail: vendor.user.email,
+      status: vendor.status,
+      isActive: vendor.isActive,
+      rejectionReason: vendor.rejectionReason,
+      bankCode: vendor.bankCode,
+      bankName: vendor.bankName,
+      accountNumber: vendor.accountNumber,
+      accountName: vendor.accountName,
+      products: vendor.products,
+      orders: orders.map((i) => ({
+        id: i.id,
+        orderId: i.order.id,
+        productName: i.productName,
+        unitPrice: i.unitPrice,
+        quantity: i.quantity,
+        status: i.status,
+        buyerName: i.order.buyer.fullName ?? i.order.buyer.email,
+        createdAt: i.order.createdAt,
+      })),
+    };
   }
 
-  async unsuspendVendor(id: string) {
-    await this.requireVendor(id);
-    return this.prisma.vendorProfile.update({ where: { id }, data: { isActive: true } });
+  async suspendVendor(id: string, reason: string) {
+    const vendor = await this.requireVendor(id);
+    const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { isActive: false } });
+    await this.notifications.create(
+      vendor.userId,
+      NotificationType.VENDOR_SUSPENDED,
+      'Your shop has been suspended',
+      `${vendor.businessName} has been suspended by an admin. Reason: ${reason}`,
+    );
+    await this.mail.send(
+      vendor.user.email,
+      `Your shop "${vendor.businessName}" has been suspended`,
+      `<p>Your shop <strong>${vendor.businessName}</strong> has been suspended from the HomeServant Marketplace by an admin.</p><p>Reason: ${reason}</p>`,
+      `Your shop "${vendor.businessName}" has been suspended from the HomeServant Marketplace by an admin.\n\nReason: ${reason}`,
+    );
+    return updated;
+  }
+
+  async unsuspendVendor(id: string, reason: string) {
+    const vendor = await this.requireVendor(id);
+    const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { isActive: true } });
+    await this.notifications.create(
+      vendor.userId,
+      NotificationType.VENDOR_UNSUSPENDED,
+      'Your shop has been reinstated',
+      `${vendor.businessName} has been reinstated by an admin. ${reason}`,
+    );
+    await this.mail.send(
+      vendor.user.email,
+      `Your shop "${vendor.businessName}" has been reinstated`,
+      `<p>Your shop <strong>${vendor.businessName}</strong> has been reinstated on the HomeServant Marketplace by an admin.</p><p>Note: ${reason}</p>`,
+      `Your shop "${vendor.businessName}" has been reinstated on the HomeServant Marketplace by an admin.\n\nNote: ${reason}`,
+    );
+    return updated;
   }
 
   private async requireVendor(id: string) {
@@ -479,6 +646,25 @@ export class AdminService {
       this.prisma.property.count({ where }),
     ]);
     return { items, total, page, pageSize };
+  }
+
+  /// A landlord can't re-list their own occupied property (a tenant's
+  /// active lease depends on it staying that way — see
+  /// PropertiesService's own delete guard for the same reasoning) — this
+  /// is the moderator/super-admin override for when it's genuinely needed
+  /// sooner than the lease-lifecycle cron would otherwise flip it back.
+  /// Only clears the occupied flag; it does not touch the underlying
+  /// Booking/Payment/TenancyAgreement rows.
+  async relistProperty(id: string): Promise<void> {
+    const property = await this.prisma.property.findUnique({ where: { id }, include: { landlord: { select: { email: true } } } });
+    if (!property) throw new NotFoundException('Property not found');
+    await this.prisma.property.update({ where: { id }, data: { isOccupied: false } });
+    await this.mail.send(
+      property.landlord.email,
+      `"${property.title}" is listed again`,
+      `<p>An admin has re-listed <strong>${property.title}</strong> — it's visible to renters again.</p>`,
+      `An admin has re-listed "${property.title}" — it's visible to renters again.`,
+    );
   }
 
   async removeProperty(id: string, reason: string): Promise<void> {

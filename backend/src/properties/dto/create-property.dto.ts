@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUrl, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUrl, Max, Min, MinLength } from 'class-validator';
 import { PriceUnit, PropertyCategory } from '@prisma/client';
 
 export class CreatePropertyDto {
@@ -48,4 +48,15 @@ export class CreatePropertyDto {
   @ArrayMaxSize(5)
   @IsUrl({}, { each: true })
   galleryUrls?: string[];
+
+  /// Required for every non-Shortlet category at listing time (enforced
+  /// in PropertiesService.create, not here, since the rule depends on
+  /// [category]) — how long a lease runs once a tenant moves in.
+  /// Meaningless for Shortlet, where a stay's length comes from however
+  /// many nights the tenant books instead.
+  @IsOptional()
+  @IsInt()
+  @Min(6)
+  @Max(24)
+  rentDurationMonths?: number;
 }
