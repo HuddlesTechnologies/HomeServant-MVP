@@ -70,19 +70,24 @@ void _proceedAfterGoogleSignIn(BuildContext context) {
 /// Entry/pre-auth screens a returning, already-authenticated user has no
 /// reason to see again — a restored session (see AppState.load) should
 /// drop them straight into their dashboard instead of making them repeat
-/// login/signup. Deliberately excludes mid-flow screens reachable while
-/// briefly "authenticated" but not yet fully onboarded (verify-otp,
-/// signup-*-1/2, login-2fa, app-lock-verify) — redirecting away from
-/// those would break an in-progress signup.
+/// login/signup. Also includes verify-otp and login-2fa: those are pushed
+/// *before* AppState.signup()/login() calls _applyUser (OTP entry has to
+/// happen first), so the app is still unauthenticated while sitting on
+/// them — without listing them here, the redirect guard below bounces the
+/// user straight back to /get-started the instant they land on the OTP
+/// screen. signup-*-1/2 and app-lock-verify aren't included: those are
+/// only reached after verification, once _applyUser has already run.
 const _preAuthPaths = {
   '/',
   '/get-started',
   '/login',
   '/login-landlord',
   '/login-tenant',
+  '/login-2fa',
   '/signup',
   '/signup-landlord',
   '/signup-tenant',
+  '/verify-otp',
   '/admin-login',
 };
 
