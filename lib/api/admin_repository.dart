@@ -71,15 +71,17 @@ class AdminRepository {
     });
   }
 
-  Future<void> deactivateUser(String id) {
+  /// [reason] is required — it's written to the admin activity log.
+  Future<void> deactivateUser(String id, {required String reason}) {
     return _client.call(() async {
-      await _client.dio.patch('/admin/users/$id/deactivate');
+      await _client.dio.patch('/admin/users/$id/deactivate', data: {'reason': reason});
     });
   }
 
-  Future<void> deleteUser(String id) {
+  /// [reason] is required — it's written to the admin activity log.
+  Future<void> deleteUser(String id, {required String reason}) {
     return _client.call(() async {
-      await _client.dio.delete('/admin/users/$id');
+      await _client.dio.delete('/admin/users/$id', data: {'reason': reason});
     });
   }
 

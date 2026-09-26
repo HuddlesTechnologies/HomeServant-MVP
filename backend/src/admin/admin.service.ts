@@ -618,14 +618,20 @@ export class AdminService {
   /// Admin-triggered — unlike AuthService.deactivate (self-service), this
   /// doesn't need the account's own session and skips straight to the
   /// same effect: listings hidden, every session signed out, "your
-  /// account has been deactivated" email sent.
-  async deactivateUser(id: string): Promise<void> {
+  /// account has been deactivated" email sent. Logged with [reason] for
+  /// auditability, same as [updateUser].
+  async deactivateUser(id: string, reason: string, actorId: string): Promise<void> {
     await this.requireUser(id);
     await this.auth.deactivate(id);
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_DEACTIVATED, { actorId, targetId: id, reason });
   }
 
-  async deleteUser(id: string): Promise<void> {
+  /// Logged *before* the delete, not after — [auth.deleteAccount] is a
+  /// real hard delete (see its own doc comment), and the log row's
+  /// targetId FK needs the user to still exist at insert time.
+  async deleteUser(id: string, reason: string, actorId: string): Promise<void> {
     await this.requireUser(id);
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_DELETED, { actorId, targetId: id, reason });
     await this.auth.deleteAccount(id);
   }
 

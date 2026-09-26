@@ -326,6 +326,14 @@ enum ActivityLogType {
   /// An admin marked a support thread resolved — see
   /// ChatService.resolveSupportThread.
   SUPPORT_THREAD_RESOLVED
+  /// An admin deactivated a user's account from the console — see
+  /// AdminService.deactivateUser. [reason] holds why.
+  ADMIN_USER_DEACTIVATED
+  /// An admin permanently deleted a user's account from the console — see
+  /// AdminService.deleteUser. [reason] holds why. Written *before* the
+  /// delete happens so the FK to the (about-to-be-gone) user still
+  /// resolves at insert time.
+  ADMIN_USER_DELETED
 }
 
 /// Site-wide admin audit trail (Activity Log console section) — every
@@ -346,6 +354,10 @@ model ActivityLog {
   /// Best-effort city/country from a free IP-geolocation lookup — absent
   /// if that lookup failed or timed out; never blocks the action itself.
   location  String?
+  /// Free-text reason the acting admin gave, where the action has one
+  /// (e.g. deactivating/deleting a user) — absent for types that don't
+  /// collect one (logins, password resets).
+  reason    String?
   createdAt DateTime        @default(now())
 
   @@index([createdAt])

@@ -4,30 +4,48 @@ import 'package:flutter/material.dart';
 /// dashboard header (tenant, landlord Home, landlord Bookings) — each used
 /// to hand-roll its own `Stack` + `Positioned` red dot.
 ///
-/// Only covers the plain-dot presentation those three shared exactly; the
-/// vendor dashboard's bell shows a numeric unread *count* badge instead of
-/// a dot (via an `IconButton`, for its larger tap target), which is a
-/// different enough shape that folding it in here would trade three real
-/// duplicates for one widget with two visual modes — not a net win, so it
-/// keeps its own implementation.
+/// Covers both the plain-dot presentation those three shared exactly
+/// ([showDot], the default) and a numeric unread-count badge ([count]) for
+/// callers — like the admin console — where a bare dot can't convey "how
+/// many". [count] takes priority when both are provided.
 class NotificationBell extends StatelessWidget {
-  const NotificationBell({super.key, required this.color, this.onTap, this.showDot = true});
+  const NotificationBell({super.key, required this.color, this.onTap, this.showDot = true, this.count});
 
   final Color color;
   final VoidCallback? onTap;
 
   /// Whether the unread dot is shown — callers that track read/unread
   /// state (like the tenant dashboard) pass this through; callers with no
-  /// such state just leave it at the default.
+  /// such state just leave it at the default. Ignored when [count] is set.
   final bool showDot;
+
+  /// Unread count to render as a numeral instead of a plain dot; null or
+  /// <= 0 shows nothing.
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
+    final resolvedCount = count;
     final icon = Stack(
       clipBehavior: Clip.none,
       children: [
         Icon(Icons.notifications_none_rounded, color: color),
-        if (showDot)
+        if (resolvedCount != null && resolvedCount > 0)
+          Positioned(
+            top: -4,
+            right: -6,
+            child: Container(
+              padding: const EdgeInsets.all(3),
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 15, minHeight: 15),
+              child: Text(
+                resolvedCount > 99 ? '99+' : '$resolvedCount',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+              ),
+            ),
+          )
+        else if (resolvedCount == null && showDot)
           Positioned(
             top: -2,
             right: -2,

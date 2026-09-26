@@ -63,16 +63,17 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
   }
 
   Future<void> _deactivate(AdminUser user) async {
-    final confirmed = await showAdminConfirmSheet(
+    final reason = await showAdminReasonSheet(
       context,
       title: 'Deactivate ${user.email}?',
       body: 'Their listings (if any) will be hidden and every session signed out. They can reactivate by logging back in.',
       actionLabel: 'Deactivate',
+      hint: 'Reason (recorded in the admin activity log)',
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppState>().admin.deactivateUser(user.id);
+      await context.read<AppState>().admin.deactivateUser(user.id, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('${user.email} deactivated')));
       _load();
     } on ApiException catch (e) {
@@ -80,10 +81,15 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
     }
   }
 
+  /// Deactivating/deleting can also happen from inside the detail screen
+  /// this pushes to — reload on return so a delete there doesn't leave a
+  /// stale, already-gone user still showing in this list.
   void _openDetail(AdminUser user) {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => AdminUserDetailScreen(userId: user.id)),
-    );
+    ).then((_) {
+      if (mounted) _load();
+    });
   }
 
   Future<void> _message(AdminUser user) async {
@@ -109,17 +115,17 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
   }
 
   Future<void> _delete(AdminUser user) async {
-    final confirmed = await showAdminConfirmSheet(
+    final reason = await showAdminReasonSheet(
       context,
       title: 'Permanently delete ${user.email}?',
       body: "This can't be undone — their account and everything tied to it (listings, bookings, orders, messages) will be deleted.",
       actionLabel: 'Delete',
-      destructive: true,
+      hint: 'Reason (recorded in the admin activity log)',
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppState>().admin.deleteUser(user.id);
+      await context.read<AppState>().admin.deleteUser(user.id, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('${user.email} deleted')));
       _load();
     } on ApiException catch (e) {

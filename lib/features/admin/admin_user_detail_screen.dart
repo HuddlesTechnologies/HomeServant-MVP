@@ -77,16 +77,17 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   }
 
   Future<void> _deactivate(AdminUserDetail user) async {
-    final confirmed = await showAdminConfirmSheet(
+    final reason = await showAdminReasonSheet(
       context,
       title: 'Deactivate ${user.email}?',
       body: 'Their listings (if any) will be hidden and every session signed out. They can reactivate by logging back in.',
       actionLabel: 'Deactivate',
+      hint: 'Reason (recorded in the admin activity log)',
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppState>().admin.deactivateUser(user.id);
+      await context.read<AppState>().admin.deactivateUser(user.id, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('${user.email} deactivated')));
       _load();
     } on ApiException catch (e) {
@@ -220,18 +221,18 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   }
 
   Future<void> _delete(AdminUserDetail user) async {
-    final confirmed = await showAdminConfirmSheet(
+    final reason = await showAdminReasonSheet(
       context,
       title: 'Permanently delete ${user.email}?',
       body: "This can't be undone — their account and everything tied to it (listings, bookings, orders, messages) will be deleted.",
       actionLabel: 'Delete',
-      destructive: true,
+      hint: 'Reason (recorded in the admin activity log)',
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
-      await context.read<AppState>().admin.deleteUser(user.id);
+      await context.read<AppState>().admin.deleteUser(user.id, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('${user.email} deleted')));
       navigator.pop();
     } on ApiException catch (e) {
@@ -535,8 +536,12 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                   if (!user.isDeactivated)
                     OutlinedButton(
                       onPressed: () => _deactivate(user),
-                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                      child: const Text('Deactivate Account'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.navy),
+                        foregroundColor: AppColors.navy,
+                      ),
+                      child: Text('Deactivate Account', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
                     ),
                   if (context.canModerate) ...[
                     const SizedBox(height: 10),

@@ -439,7 +439,7 @@ class _AdminShellState extends State<AdminShell> {
             padding: const EdgeInsets.only(right: 4),
             child: NotificationBell(
               color: Colors.white,
-              showDot: context.watch<AppState>().unreadNotificationCount > 0,
+              count: context.watch<AppState>().unreadNotificationCount,
               onTap: () {
                 context.read<AppState>().markAllNotificationsRead();
                 Navigator.of(context).push(

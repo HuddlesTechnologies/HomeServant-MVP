@@ -16,11 +16,11 @@ export class ActivityLogService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async log(type: ActivityLogType, opts: { actorId?: string; targetId?: string; ip?: string }): Promise<void> {
+  async log(type: ActivityLogType, opts: { actorId?: string; targetId?: string; ip?: string; reason?: string }): Promise<void> {
     try {
       const location = opts.ip ? await this.lookupLocation(opts.ip) : null;
       await this.prisma.activityLog.create({
-        data: { type, actorId: opts.actorId, targetId: opts.targetId, ip: opts.ip, location },
+        data: { type, actorId: opts.actorId, targetId: opts.targetId, ip: opts.ip, location, reason: opts.reason },
       });
     } catch (error) {
       this.logger.error(`Failed to write activity log (${type}): ${(error as Error).message}`);

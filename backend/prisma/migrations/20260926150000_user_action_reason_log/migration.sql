@@ -1,0 +1,6 @@
+-- AlterEnum
+ALTER TYPE "ActivityLogType" ADD VALUE 'ADMIN_USER_DEACTIVATED';
+ALTER TYPE "ActivityLogType" ADD VALUE 'ADMIN_USER_DELETED';
+
+-- AlterTable
+ALTER TABLE "ActivityLog" ADD COLUMN "reason" TEXT;

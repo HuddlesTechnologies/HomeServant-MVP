@@ -171,14 +171,22 @@ export class AdminController {
   }
 
   @Patch('users/:id/deactivate')
-  async deactivateUser(@Param('id') id: string): Promise<void> {
-    await this.admin.deactivateUser(id);
+  async deactivateUser(
+    @CurrentUser() actingAdmin: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: DelistReasonDto,
+  ): Promise<void> {
+    await this.admin.deactivateUser(id, dto.reason, actingAdmin.sub);
   }
 
   @Delete('users/:id')
   @MinAdminLevel(AdminLevel.MODERATOR)
-  async deleteUser(@Param('id') id: string): Promise<void> {
-    await this.admin.deleteUser(id);
+  async deleteUser(
+    @CurrentUser() actingAdmin: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: DelistReasonDto,
+  ): Promise<void> {
+    await this.admin.deleteUser(id, dto.reason, actingAdmin.sub);
   }
 
   // --- Vendors ---------------------------------------------------------
