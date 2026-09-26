@@ -93,8 +93,10 @@ Future<String?> showAdminReasonSheet(
                 controller: controller,
                 maxLines: 3,
                 onChanged: (_) => setSheetState(() {}),
+                style: AppTextStyles.body(color: AppColors.navy, size: 14),
                 decoration: InputDecoration(
                   hintText: hint,
+                  hintStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 14),
                   filled: true,
                   fillColor: AppColors.offWhite,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),

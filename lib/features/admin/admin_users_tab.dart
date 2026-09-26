@@ -8,6 +8,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
+import '../../widgets/upload_picker.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'admin_user_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
@@ -178,22 +179,25 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                           decoration: adminCardDecoration,
                           child: Row(
                             children: [
+                              _UserAvatar(photoUrl: user.profilePhotoUrl),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Row(
+                                    Wrap(
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 6,
+                                      runSpacing: 4,
                                       children: [
                                         Text(
                                           user.fullName?.isNotEmpty == true ? user.fullName! : user.email,
                                           style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
                                         ),
-                                        const SizedBox(width: 8),
                                         _Badge(text: user.role.adminLabel, color: AppColors.navy),
-                                        if (user.isDeactivated) ...[
-                                          const SizedBox(width: 6),
-                                          const _Badge(text: 'Deactivated', color: Colors.redAccent),
-                                        ],
+                                        if (user.isVendor && user.role != UserRole.vendor)
+                                          const _Badge(text: 'Also a Vendor', color: Colors.teal),
+                                        if (user.isDeactivated) const _Badge(text: 'Deactivated', color: Colors.redAccent),
                                       ],
                                     ),
                                     const SizedBox(height: 3),
@@ -248,6 +252,22 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
       child: Text(text, style: AppTextStyles.body(color: color, size: 10.5, weight: FontWeight.w700)),
+    );
+  }
+}
+
+class _UserAvatar extends StatelessWidget {
+  const _UserAvatar({this.photoUrl});
+
+  final String? photoUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: AppColors.offWhite,
+      backgroundImage: photoUrl != null ? imageProviderForPath(photoUrl!) : null,
+      child: photoUrl == null ? const Icon(Icons.person_outline_rounded, color: AppColors.hintGrey, size: 20) : null,
     );
   }
 }

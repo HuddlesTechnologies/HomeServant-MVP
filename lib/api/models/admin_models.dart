@@ -129,9 +129,11 @@ class AdminUser {
     required this.role,
     this.fullName,
     this.phoneNumber,
+    this.profilePhotoUrl,
     this.emailVerifiedAt,
     this.deactivatedAt,
     required this.createdAt,
+    this.isVendor = false,
   });
 
   final String id;
@@ -139,9 +141,16 @@ class AdminUser {
   final UserRole role;
   final String? fullName;
   final String? phoneNumber;
+  final String? profilePhotoUrl;
   final DateTime? emailVerifiedAt;
   final DateTime? deactivatedAt;
   final DateTime createdAt;
+
+  /// True when this account has a VendorProfile row regardless of [role]
+  /// — a vendor keeps their original role (typically TENANT), so this is
+  /// the only way to tell a tenant/landlord "also runs a shop" apart from
+  /// one that doesn't. See AdminService.findUsers.
+  final bool isVendor;
 
   bool get isDeactivated => deactivatedAt != null;
 
@@ -151,9 +160,11 @@ class AdminUser {
     role: UserRoleFromApiValue.fromApiValue(json['role'] as String),
     fullName: json['fullName'] as String?,
     phoneNumber: json['phoneNumber'] as String?,
+    profilePhotoUrl: json['profilePhotoUrl'] as String?,
     emailVerifiedAt: json['emailVerifiedAt'] != null ? DateTime.parse(json['emailVerifiedAt'] as String) : null,
     deactivatedAt: json['deactivatedAt'] != null ? DateTime.parse(json['deactivatedAt'] as String) : null,
     createdAt: DateTime.parse(json['createdAt'] as String),
+    isVendor: json['vendorProfile'] != null,
   );
 }
 
@@ -428,6 +439,7 @@ class AdminVendor {
     this.ownerEmail,
     this.ownerName,
     this.ownerPhone,
+    this.logoUrl,
     required this.createdAt,
   });
 
@@ -447,6 +459,7 @@ class AdminVendor {
   final String? ownerEmail;
   final String? ownerName;
   final String? ownerPhone;
+  final String? logoUrl;
   final DateTime createdAt;
 
   bool get isSuspended => suspendedAt != null;
@@ -466,6 +479,7 @@ class AdminVendor {
       ownerEmail: user?['email'] as String?,
       ownerName: user?['fullName'] as String?,
       ownerPhone: user?['phoneNumber'] as String?,
+      logoUrl: json['logoUrl'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }
@@ -612,6 +626,7 @@ class AdminProperty {
     required this.title,
     required this.location,
     required this.price,
+    this.imageUrl,
     this.landlordName,
     this.landlordEmail,
     this.isOccupied = false,
@@ -622,6 +637,7 @@ class AdminProperty {
   final String title;
   final String location;
   final int price;
+  final String? imageUrl;
   final String? landlordName;
   final String? landlordEmail;
 
@@ -638,6 +654,7 @@ class AdminProperty {
       title: json['title'] as String,
       location: json['location'] as String,
       price: json['price'] as int,
+      imageUrl: json['imageUrl'] as String?,
       landlordName: landlord?['fullName'] as String?,
       landlordEmail: landlord?['email'] as String?,
       isOccupied: json['isOccupied'] as bool? ?? false,
@@ -779,6 +796,84 @@ class ActivityLogEntry {
     ip: json['ip'] as String?,
     location: json['location'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
+  );
+}
+
+enum ActivityFeedType {
+  userSignup,
+  propertyListed,
+  vendorApplication,
+  marketplaceOrder,
+  reportFiled;
+
+  static ActivityFeedType fromApi(String value) => switch (value) {
+    'USER_SIGNUP' => ActivityFeedType.userSignup,
+    'PROPERTY_LISTED' => ActivityFeedType.propertyListed,
+    'VENDOR_APPLICATION' => ActivityFeedType.vendorApplication,
+    'MARKETPLACE_ORDER' => ActivityFeedType.marketplaceOrder,
+    _ => ActivityFeedType.reportFiled,
+  };
+}
+
+/// One entry in the dashboard's "what's happening on the platform" feed —
+/// GET /admin/activity-feed, see AdminService.activityFeed. Unlike
+/// [ActivityLogEntry] (admin-only login/password audit trail), this
+/// surfaces real user-facing activity: signups, new listings, vendor
+/// applications, orders, reports — merged from each table's own
+/// `createdAt` rather than a dedicated write-on-every-action log.
+class ActivityFeedItem {
+  const ActivityFeedItem({
+    required this.type,
+    required this.createdAt,
+    this.actor,
+    this.role,
+    this.propertyTitle,
+    this.businessName,
+    this.vendorStatus,
+    this.itemCount,
+    this.reportReason,
+    this.reportTargetType,
+  });
+
+  final ActivityFeedType type;
+  final DateTime createdAt;
+  final ActivityLogPersonRef? actor;
+  final String? role;
+  final String? propertyTitle;
+  final String? businessName;
+  final String? vendorStatus;
+  final int? itemCount;
+  final String? reportReason;
+  final String? reportTargetType;
+
+  String get _actorName => actor?.displayName ?? 'Someone';
+
+  /// One-line human-readable summary for the dashboard feed row.
+  String get summary => switch (type) {
+    ActivityFeedType.userSignup => '$_actorName signed up${role != null ? ' as ${_roleLabel(role!)}' : ''}',
+    ActivityFeedType.propertyListed => '$_actorName listed "${propertyTitle ?? 'a property'}"',
+    ActivityFeedType.vendorApplication => '$_actorName applied to sell as "${businessName ?? 'a vendor'}"',
+    ActivityFeedType.marketplaceOrder => '$_actorName placed an order (${itemCount ?? 0} item${itemCount == 1 ? '' : 's'})',
+    ActivityFeedType.reportFiled => '$_actorName filed a report${reportReason != null ? ': $reportReason' : ''}',
+  };
+
+  static String _roleLabel(String apiRole) => switch (apiRole) {
+    'LANDLORD' => 'a landlord',
+    'VENDOR' => 'a vendor',
+    _ => 'a tenant',
+  };
+
+  factory ActivityFeedItem.fromApi(Map<String, dynamic> json) => ActivityFeedItem(
+    type: ActivityFeedType.fromApi(json['type'] as String),
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    actor: json['actor'] != null ? ActivityLogPersonRef.fromApi(json['actor'] as Map<String, dynamic>) : null,
+    role: json['role'] as String?,
+    propertyTitle: json['propertyTitle'] as String?,
+    businessName: json['businessName'] as String?,
+    vendorStatus: json['vendorStatus'] as String?,
+    itemCount: json['itemCount'] as int?,
+    reportReason: json['reportReason'] as String?,
+    reportTargetType: json['reportTargetType'] as String?,
   );
 }
 

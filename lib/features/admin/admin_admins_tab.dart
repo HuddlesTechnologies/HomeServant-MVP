@@ -97,12 +97,23 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                 style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5),
               ),
               const SizedBox(height: 16),
-              TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Full name')),
+              TextField(
+                controller: nameController,
+                style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                decoration: InputDecoration(
+                  labelText: 'Full name',
+                  labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
+                ),
+              ),
               const SizedBox(height: 12),
               TextField(
                 controller: emailController,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email'),
+                style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
+                ),
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<AdminLevel>(

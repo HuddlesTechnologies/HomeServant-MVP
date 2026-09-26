@@ -14,6 +14,16 @@ class AdminRepository {
     });
   }
 
+  /// The dashboard's "Recent Activity" feed — merged, most-recent-first
+  /// signups/listings/vendor applications/orders/reports. Distinct from
+  /// [findActivityLog], which is only the admin-console audit trail.
+  Future<List<ActivityFeedItem>> activityFeed({int limit = 20}) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/activity-feed', queryParameters: {'limit': limit});
+      return (response.data as List).cast<Map<String, dynamic>>().map(ActivityFeedItem.fromApi).toList();
+    });
+  }
+
   Future<AdminPage<AdminUser>> findUsers({String? role, String? search, int page = 1, bool deactivatedOnly = false}) {
     return _client.call(() async {
       final response = await _client.dio.get(

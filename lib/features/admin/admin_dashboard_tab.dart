@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/models/admin_models.dart';
+import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
@@ -35,6 +36,7 @@ class AdminDashboardTab extends StatefulWidget {
 class _AdminDashboardTabState extends State<AdminDashboardTab> {
   AdminStats? _stats;
   String? _error;
+  List<ActivityFeedItem>? _activity;
 
   @override
   void initState() {
@@ -43,8 +45,9 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
   }
 
   Future<void> _load() async {
+    final admin = context.read<AppState>().admin;
     try {
-      final stats = await context.read<AppState>().admin.stats();
+      final stats = await admin.stats();
       if (!mounted) return;
       setState(() {
         _stats = stats;
@@ -53,6 +56,15 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = "Couldn't load platform stats.");
+    }
+    try {
+      final activity = await admin.activityFeed();
+      if (!mounted) return;
+      setState(() => _activity = activity);
+    } catch (_) {
+      // Best-effort — the stat tiles above are the dashboard's core job;
+      // a failed feed load just leaves that section showing its own
+      // "couldn't load" state rather than blocking the whole screen.
     }
   }
 
@@ -125,20 +137,90 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
     ];
     return RefreshIndicator(
       onRefresh: _load,
-      child: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        // 220px still meant only 2 (huge) columns on a phone-width
-        // viewport — this app is mobile-first, so the previous fix only
-        // ever helped on a genuinely wide desktop window. A much smaller
-        // cap forces 3+ compact tiles per row even on a narrow screen.
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 130,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 1.0,
-        ),
-        itemCount: cards.length,
-        itemBuilder: (context, index) => cards[index],
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.all(16),
+            // 220px still meant only 2 (huge) columns on a phone-width
+            // viewport — this app is mobile-first, so the previous fix only
+            // ever helped on a genuinely wide desktop window. A much smaller
+            // cap forces 3+ compact tiles per row even on a narrow screen.
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 130,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 1.0,
+              ),
+              delegate: SliverChildBuilderDelegate((context, index) => cards[index], childCount: cards.length),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            sliver: SliverToBoxAdapter(child: _ActivityFeedSection(items: _activity)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "What's happening on the platform" — recent signups, listings, vendor
+/// applications, orders, and reports, merged and sorted by time. See
+/// AdminRepository.activityFeed / AdminService.activityFeed.
+class _ActivityFeedSection extends StatelessWidget {
+  const _ActivityFeedSection({required this.items});
+
+  final List<ActivityFeedItem>? items;
+
+  IconData _iconFor(ActivityFeedType type) => switch (type) {
+    ActivityFeedType.userSignup => Icons.person_add_alt_1_rounded,
+    ActivityFeedType.propertyListed => Icons.apartment_rounded,
+    ActivityFeedType.vendorApplication => Icons.storefront_outlined,
+    ActivityFeedType.marketplaceOrder => Icons.shopping_bag_outlined,
+    ActivityFeedType.reportFiled => Icons.flag_outlined,
+  };
+
+  Color _colorFor(ActivityFeedType type) => type == ActivityFeedType.reportFiled ? Colors.redAccent : AppColors.navy;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = this.items;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Recent Activity', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 15)),
+          const SizedBox(height: 12),
+          if (items == null)
+            const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)))
+          else if (items.isEmpty)
+            Text('No recent activity', style: AppTextStyles.body(color: AppColors.hintGrey, size: 13))
+          else
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const Divider(height: 18),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(_iconFor(items[i].type), color: _colorFor(items[i].type), size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      items[i].summary,
+                      style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    formatRelativeTime(items[i].createdAt),
+                    style: AppTextStyles.body(color: AppColors.hintGrey, size: 11),
+                  ),
+                ],
+              ),
+            ],
+        ],
       ),
     );
   }

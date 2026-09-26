@@ -86,8 +86,10 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
             TextField(
               controller: reasonController,
               maxLines: 3,
+              style: AppTextStyles.body(color: AppColors.navy, size: 14),
               decoration: InputDecoration(
                 hintText: 'Reason (optional)',
+                hintStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 14),
                 filled: true,
                 fillColor: AppColors.offWhite,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),

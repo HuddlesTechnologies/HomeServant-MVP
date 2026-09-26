@@ -9,6 +9,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
+import '../../widgets/upload_picker.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
@@ -116,8 +117,10 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: nameController,
+                style: AppTextStyles.body(color: AppColors.navy, size: 14),
                 decoration: InputDecoration(
                   labelText: 'Full name',
+                  labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
                   filled: true,
                   fillColor: AppColors.offWhite,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
@@ -127,8 +130,10 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               TextField(
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
+                style: AppTextStyles.body(color: AppColors.navy, size: 14),
                 decoration: InputDecoration(
                   labelText: 'Phone number',
+                  labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
                   filled: true,
                   fillColor: AppColors.offWhite,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
@@ -138,8 +143,10 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               TextField(
                 controller: addressController,
                 maxLines: 2,
+                style: AppTextStyles.body(color: AppColors.navy, size: 14),
                 decoration: InputDecoration(
                   labelText: 'House address',
+                  labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
                   filled: true,
                   fillColor: AppColors.offWhite,
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
@@ -188,6 +195,24 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
         houseAddress: addressController.text.trim(),
       );
       messenger.showSnackBar(const SnackBar(content: Text('Profile updated')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _removeProperty(AdminUserProperty property) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Remove "${property.title}"?',
+      body: "This can't be undone — the listing and any bookings/reviews on it will be permanently deleted. The landlord is emailed the reason you give below.",
+      actionLabel: 'Remove',
+    );
+    if (reason == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.removeProperty(property.id, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text('${property.title} removed')));
       _load();
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -253,18 +278,34 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            CircleAvatar(
+                              radius: 22,
+                              backgroundColor: AppColors.offWhite,
+                              backgroundImage: user.profilePhotoUrl != null ? imageProviderForPath(user.profilePhotoUrl!) : null,
+                              child: user.profilePhotoUrl == null
+                                  ? const Icon(Icons.person_outline_rounded, color: AppColors.hintGrey)
+                                  : null,
+                            ),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 user.fullName?.isNotEmpty == true ? user.fullName! : '(No name set)',
                                 style: AppTextStyles.heading(color: AppColors.navy, size: 18),
                               ),
                             ),
-                            _Badge(text: user.role.adminLabel, color: AppColors.navy),
-                            if (user.isDeactivated) ...[
-                              const SizedBox(width: 6),
-                              const _Badge(text: 'Deactivated', color: Colors.redAccent),
-                            ],
+                            Wrap(
+                              alignment: WrapAlignment.end,
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                _Badge(text: user.role.adminLabel, color: AppColors.navy),
+                                if (user.role != UserRole.vendor && user.vendorBusinessName != null)
+                                  const _Badge(text: 'Also a Vendor', color: Colors.teal),
+                                if (user.isDeactivated) const _Badge(text: 'Deactivated', color: Colors.redAccent),
+                              ],
+                            ),
                           ],
                         ),
                         const SizedBox(height: 14),
@@ -372,6 +413,15 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                                     '₦${formatWithThousandsSeparator(property.price)}/${property.priceUnit.toLowerCase()}',
                                     style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 13),
                                   ),
+                                  if (context.canModerate)
+                                    IconButton(
+                                      onPressed: () => _removeProperty(property),
+                                      icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                      tooltip: 'Remove listing',
+                                      constraints: const BoxConstraints(),
+                                      padding: const EdgeInsets.only(left: 8),
+                                      visualDensity: VisualDensity.compact,
+                                    ),
                                 ],
                               ),
                             ),

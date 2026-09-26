@@ -48,6 +48,11 @@ export class AdminController {
     return this.admin.stats();
   }
 
+  @Get('activity-feed')
+  activityFeed(@Query('limit') limit?: string) {
+    return this.admin.activityFeed(limit ? Number(limit) : undefined);
+  }
+
   // --- Admin management (SUPER_ADMIN only) --------------------------------
 
   @Get('admins')

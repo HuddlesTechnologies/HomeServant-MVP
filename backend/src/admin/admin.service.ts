@@ -327,6 +327,100 @@ export class AdminService {
     return this.prisma.vendorProfile.count({ where: { status: 'PENDING' } });
   }
 
+  // --- Activity feed -------------------------------------------------------
+
+  /// "What's happening on the platform right now" for the dashboard —
+  /// distinct from [findActivityLog], which only ever records admin
+  /// console actions (login/password events) and nothing a regular user
+  /// does. Rather than adding a new write path at every place a signup/
+  /// listing/application/order/report is created, this just reads the
+  /// most recent rows each of those tables already has (they all have
+  /// their own `createdAt`) and merges them by time — real business
+  /// activity, no schema change or extra instrumentation needed.
+  async activityFeed(limit = 20) {
+    const perTypeTake = Math.min(Math.max(limit, 1), 20);
+    const [signups, properties, vendorApplications, orders, reports] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { role: { not: 'ADMIN' } },
+        select: { id: true, email: true, fullName: true, role: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: perTypeTake,
+      }),
+      this.prisma.property.findMany({
+        select: { id: true, title: true, createdAt: true, landlord: { select: { id: true, email: true, fullName: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: perTypeTake,
+      }),
+      this.prisma.vendorProfile.findMany({
+        select: {
+          id: true,
+          businessName: true,
+          status: true,
+          createdAt: true,
+          user: { select: { id: true, email: true, fullName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: perTypeTake,
+      }),
+      this.prisma.marketplaceOrder.findMany({
+        select: {
+          id: true,
+          createdAt: true,
+          buyer: { select: { id: true, email: true, fullName: true } },
+          _count: { select: { items: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: perTypeTake,
+      }),
+      this.prisma.report.findMany({
+        select: {
+          id: true,
+          reason: true,
+          targetType: true,
+          createdAt: true,
+          reporter: { select: { id: true, email: true, fullName: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: perTypeTake,
+      }),
+    ]);
+
+    type FeedItem = {
+      type: 'USER_SIGNUP' | 'PROPERTY_LISTED' | 'VENDOR_APPLICATION' | 'MARKETPLACE_ORDER' | 'REPORT_FILED';
+      createdAt: Date;
+      actor: { id: string; email: string; fullName: string | null } | null;
+      role?: string;
+      propertyTitle?: string;
+      businessName?: string;
+      vendorStatus?: string;
+      itemCount?: number;
+      reportReason?: string;
+      reportTargetType?: string;
+    };
+
+    const items: FeedItem[] = [
+      ...signups.map((u) => ({ type: 'USER_SIGNUP' as const, createdAt: u.createdAt, actor: u, role: u.role })),
+      ...properties.map((p) => ({ type: 'PROPERTY_LISTED' as const, createdAt: p.createdAt, actor: p.landlord, propertyTitle: p.title })),
+      ...vendorApplications.map((v) => ({
+        type: 'VENDOR_APPLICATION' as const,
+        createdAt: v.createdAt,
+        actor: v.user,
+        businessName: v.businessName,
+        vendorStatus: v.status,
+      })),
+      ...orders.map((o) => ({ type: 'MARKETPLACE_ORDER' as const, createdAt: o.createdAt, actor: o.buyer, itemCount: o._count.items })),
+      ...reports.map((r) => ({
+        type: 'REPORT_FILED' as const,
+        createdAt: r.createdAt,
+        actor: r.reporter,
+        reportReason: r.reason,
+        reportTargetType: r.targetType,
+      })),
+    ];
+
+    return items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, limit);
+  }
+
   // --- Users ---------------------------------------------------------------
 
   async findUsers(query: QueryUsersDto) {
@@ -356,9 +450,15 @@ export class AdminService {
           fullName: true,
           role: true,
           phoneNumber: true,
+          profilePhotoUrl: true,
           emailVerifiedAt: true,
           deactivatedAt: true,
           createdAt: true,
+          // Lets the console badge a non-vendor role (typically TENANT)
+          // that's *also* running a shop — see the role=='VENDOR' filter
+          // above for why VendorProfile, not User.role, is the source of
+          // truth for "is this person a vendor".
+          vendorProfile: { select: { id: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,

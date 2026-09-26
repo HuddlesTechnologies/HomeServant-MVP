@@ -8,6 +8,7 @@ import '../../api/models/vendor.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
+import '../../widgets/upload_picker.dart';
 import 'admin_vendor_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_filter_chip.dart';
@@ -107,8 +108,10 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
             TextField(
               controller: reasonController,
               maxLines: 3,
+              style: AppTextStyles.body(color: AppColors.navy, size: 14),
               decoration: InputDecoration(
                 hintText: 'Reason (optional)',
+                hintStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 14),
                 filled: true,
                 fillColor: AppColors.offWhite,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
@@ -235,7 +238,24 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: Container(
+                                    width: 40,
+                                    height: 40,
+                                    color: AppColors.offWhite,
+                                    child: vendor.logoUrl != null
+                                        ? Image(
+                                            image: imageProviderForPath(vendor.logoUrl!),
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, _, _) => const Icon(Icons.storefront_outlined, color: AppColors.hintGrey),
+                                          )
+                                        : const Icon(Icons.storefront_outlined, color: AppColors.hintGrey),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(vendor.businessName, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 15)),
                                 ),

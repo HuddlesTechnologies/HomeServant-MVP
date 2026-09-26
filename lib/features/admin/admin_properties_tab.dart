@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
+import '../../widgets/upload_picker.dart';
 import 'admin_property_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_filter_chip.dart';
@@ -121,7 +122,24 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                         padding: const EdgeInsets.all(14),
                         decoration: adminCardDecoration,
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                width: 56,
+                                height: 56,
+                                color: AppColors.offWhite,
+                                child: property.imageUrl != null
+                                    ? Image(
+                                        image: imageProviderForPath(property.imageUrl!),
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => const Icon(Icons.home_work_outlined, color: AppColors.hintGrey),
+                                      )
+                                    : const Icon(Icons.home_work_outlined, color: AppColors.hintGrey),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
