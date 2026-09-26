@@ -740,13 +740,21 @@ class _PropertyPreviewBubble extends StatelessWidget {
     final imageUrl = message.previewPropertyImageUrl;
     final price = message.previewPropertyPrice;
     final priceUnit = message.previewPropertyPriceUnit;
+    // Opaque accent/onAccent for fromMe, surface/onSurface otherwise — the
+    // same paired convention the plain-text bubble above uses. A
+    // translucent accent tint (as this used to be) is only guaranteed to
+    // stay light against a light theme.background; in Midnight,
+    // theme.background is dark navy, so a low-alpha tint over it stays
+    // dark and theme.onSurface (always navy) text on it is unreadable.
+    final bubbleColor = message.fromMe ? theme.accent : theme.surface;
+    final onBubbleColor = message.fromMe ? theme.onAccent : theme.onSurface;
     return Container(
       constraints: const BoxConstraints(maxWidth: 260),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: message.fromMe ? theme.accent.withValues(alpha: 0.12) : theme.surface,
+        color: bubbleColor,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: theme.accent.withValues(alpha: 0.25)),
+        border: Border.all(color: onBubbleColor.withValues(alpha: 0.25)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -762,18 +770,18 @@ class _PropertyPreviewBubble extends StatelessWidget {
                   message.previewPropertyTitle ?? 'Property',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body(color: theme.onSurface, size: 14, weight: FontWeight.w700),
+                  style: AppTextStyles.body(color: onBubbleColor, size: 14, weight: FontWeight.w700),
                 ),
                 if (price != null) ...[
                   const SizedBox(height: 4),
                   Text(
                     '₦${formatNaira(price)}${priceUnit != null ? '/${priceUnit.toLowerCase()}' : ''}',
-                    style: AppTextStyles.body(color: theme.accent, size: 13, weight: FontWeight.w700),
+                    style: AppTextStyles.body(color: message.fromMe ? theme.onAccent : theme.accent, size: 13, weight: FontWeight.w700),
                   ),
                 ],
                 if (message.text.isNotEmpty) ...[
                   const SizedBox(height: 6),
-                  Text(message.text, style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.8), size: 13)),
+                  Text(message.text, style: AppTextStyles.body(color: onBubbleColor.withValues(alpha: 0.8), size: 13)),
                 ],
               ],
             ),
@@ -796,11 +804,18 @@ class _ImageMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = message.attachmentUrl;
+    // Opaque accent/onAccent for fromMe, surface/onSurface otherwise —
+    // matches the plain-text bubble and _PropertyPreviewBubble above. A
+    // translucent accent tint over theme.background stays dark in Midnight
+    // (background is navy there), so onSurface (always navy) text on it
+    // used to be unreadable for outgoing messages.
+    final bubbleColor = message.fromMe ? theme.accent : theme.surface;
+    final onBubbleColor = message.fromMe ? theme.onAccent : theme.onSurface;
     return Container(
       constraints: const BoxConstraints(maxWidth: 220),
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: message.fromMe ? theme.accent.withValues(alpha: 0.12) : theme.surface,
+        color: bubbleColor,
         borderRadius: BorderRadius.circular(18),
       ),
       clipBehavior: Clip.antiAlias,
@@ -817,13 +832,7 @@ class _ImageMessageBubble extends StatelessWidget {
           if (message.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-              // Both bubble backgrounds are light regardless of [fromMe]
-              // (a low-alpha accent tint or theme.surface, never
-              // full-strength accent) — onSurface is the pair that's
-              // guaranteed to contrast against a light surface in every
-              // theme; onAccent is calibrated for full-strength accent
-              // and would be wrong (e.g. white-on-near-white) here.
-              child: Text(message.text, style: AppTextStyles.body(color: theme.onSurface, size: 14)),
+              child: Text(message.text, style: AppTextStyles.body(color: onBubbleColor, size: 14)),
             ),
         ],
       ),

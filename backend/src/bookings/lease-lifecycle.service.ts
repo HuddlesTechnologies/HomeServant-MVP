@@ -6,9 +6,15 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-/// Checked in this order (largest first) — a booking gets whichever
-/// threshold its current day-count has just crossed, not all of them.
-const REMINDER_THRESHOLDS_DAYS = [30, 15, 0] as const;
+/// Checked in ascending order — Array.find returns the first (smallest)
+/// threshold a booking's day-count has dropped to or below, so a booking
+/// gets whichever specific threshold it just crossed, not always the
+/// largest one it still qualifies for. (A descending order here is a bug:
+/// `daysLeft <= 30` matches before `daysLeft <= 15` or `<= 0` ever get a
+/// chance to, for every daysLeft from 30 down to 0, so the 15/0-day
+/// reminders would never fire — every lease would just get the 30-day
+/// reminder once and nothing after.)
+const REMINDER_THRESHOLDS_DAYS = [0, 15, 30] as const;
 
 /// Runs once a day (mirrors AccountCleanupService's own @Cron pattern) and
 /// does two unrelated-but-adjacent things to every MOVED_IN lease:

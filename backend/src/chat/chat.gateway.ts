@@ -12,6 +12,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { PrismaService } from '../prisma/prisma.service';
 import { PresenceService } from './presence.service';
 
 /// Same allow-list `main.ts` builds from CORS_ORIGINS for the REST API —
@@ -43,6 +44,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly presence: PresenceService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -54,6 +56,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const payload = await this.jwt.verifyAsync<JwtPayload>(token, { secret: this.config.getOrThrow('JWT_ACCESS_SECRET') });
       client.data.userId = payload.sub;
+      client.data.role = payload.role;
       await client.join(this.userRoom(payload.sub));
       // Lets [broadcastToAdmins] reach every connected admin at once — used
       // for events with no single-user room to target yet, like a brand-new
@@ -76,11 +79,28 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /// letting a future enhancement (e.g. "typing…" or read receipts) target
   /// just that thread's room — unused for now beyond acking the join so
   /// the client knows the socket is live.
+  ///
+  /// Mirrors ChatService.assertParticipant's membership check (a real
+  /// ThreadParticipant row, or an admin on a support thread) — without it,
+  /// any authenticated socket could join an arbitrary thread id it merely
+  /// guessed or came across and silently receive every message
+  /// [broadcastMessage] emits into that thread's room, regardless of
+  /// whether it's actually a participant.
   @SubscribeMessage('thread:join')
-  onJoinThread(@ConnectedSocket() client: Socket, @MessageBody() threadId: string): void {
-    if (typeof threadId === 'string') {
-      client.join(this.threadRoom(threadId));
+  async onJoinThread(@ConnectedSocket() client: Socket, @MessageBody() threadId: string): Promise<void> {
+    if (typeof threadId !== 'string') return;
+    const userId = client.data.userId as string | undefined;
+    if (!userId) return;
+
+    const membership = await this.prisma.threadParticipant.findUnique({ where: { threadId_userId: { threadId, userId } } });
+    if (!membership) {
+      const role = client.data.role as string | undefined;
+      if (role !== 'ADMIN') return;
+      const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { isSupport: true } });
+      if (!thread?.isSupport) return;
     }
+
+    client.join(this.threadRoom(threadId));
   }
 
   /// Pushed to every participant's personal room except [senderId] right

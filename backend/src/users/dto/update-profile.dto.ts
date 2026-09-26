@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsPhoneNumber, IsString, IsUrl } from 'class-validator';
+import { IsBoolean, IsDateString, IsEnum, IsOptional, IsPhoneNumber, IsString, IsUrl, ValidateIf } from 'class-validator';
 import { Gender, MaritalStatus } from '@prisma/client';
 
 export class UpdateProfileDto {
@@ -14,7 +14,12 @@ export class UpdateProfileDto {
   @IsString()
   fullName?: string;
 
+  /// An empty string is a deliberate "clear this field" signal (see
+  /// UsersService.updateProfile, which maps it to `null`) rather than a
+  /// validation failure — @IsPhoneNumber alone would reject '', so it's
+  /// skipped for exactly that one value via @ValidateIf.
   @IsOptional()
+  @ValidateIf((o: UpdateProfileDto) => o.phoneNumber !== '')
   @IsPhoneNumber('NG')
   phoneNumber?: string;
 

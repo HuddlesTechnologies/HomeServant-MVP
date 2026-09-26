@@ -681,7 +681,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                     ),
                     const SizedBox(height: 10),
                   ],
-                  if (!user.isDeactivated)
+                  if (context.canModerate && !user.isDeactivated)
                     OutlinedButton(
                       onPressed: () => _deactivate(user),
                       style: OutlinedButton.styleFrom(

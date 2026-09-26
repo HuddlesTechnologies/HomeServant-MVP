@@ -33,6 +33,17 @@ class AppTheme {
   /// computes its own `onPrimary`/`onSurface` rather than honoring the
   /// app's hardcoded navy/white pairing — this pins the dialog to the same
   /// explicit navy-on-white convention every other widget in the app uses.
+  ///
+  /// Every color is set directly on [DatePickerThemeData] rather than left
+  /// to infer from a `colorScheme` override — an earlier version of this
+  /// only overrode `colorScheme`, which (verified with an actual rendered
+  /// golden image, not just reading the framework source) still left the
+  /// header's help text/date headline and the entry-mode-toggle icon
+  /// rendering in a washed-out blue-grey instead of navy, well under
+  /// accessible contrast against the dialog's white background. Explicit
+  /// beats inferred: every role a user can actually see text/icons in is
+  /// named here, so there's nothing left for a fallback chain to get
+  /// wrong.
   static Widget datePickerBuilder(BuildContext context, Widget? child) {
     return Theme(
       data: Theme.of(context).copyWith(
@@ -41,6 +52,37 @@ class AppTheme {
           onPrimary: AppColors.white,
           surface: AppColors.white,
           onSurface: AppColors.navy,
+        ),
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: AppColors.white,
+          headerBackgroundColor: AppColors.white,
+          headerForegroundColor: AppColors.navy,
+          headerHeadlineStyle: AppTextStyles.heading(color: AppColors.navy, size: 32),
+          headerHelpStyle: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w600),
+          weekdayStyle: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w600),
+          dayStyle: AppTextStyles.body(color: AppColors.navy, size: 14),
+          yearStyle: AppTextStyles.body(color: AppColors.navy, size: 14),
+          dayForegroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.white : AppColors.navy,
+          ),
+          dayBackgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.navy : null,
+          ),
+          todayForegroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.white : AppColors.navy,
+          ),
+          todayBackgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.navy : null,
+          ),
+          todayBorder: const BorderSide(color: AppColors.navy),
+          yearForegroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.white : AppColors.navy,
+          ),
+          yearBackgroundColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected) ? AppColors.navy : null,
+          ),
+          cancelButtonStyle: TextButton.styleFrom(foregroundColor: AppColors.navy),
+          confirmButtonStyle: TextButton.styleFrom(foregroundColor: AppColors.navy),
         ),
       ),
       child: child!,

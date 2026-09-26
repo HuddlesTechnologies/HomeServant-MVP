@@ -84,6 +84,7 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
         onReactivate: () => _login(reactivate: true),
       );
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -106,6 +107,7 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
         onReactivate: () => _loginWithGoogle(reactivate: true),
       );
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _googleSubmitting = false);

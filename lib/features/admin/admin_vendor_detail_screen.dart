@@ -67,62 +67,16 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
   }
 
   Future<void> _reject(AdminVendorDetail vendor) async {
-    final reasonController = TextEditingController();
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 24 + MediaQuery.of(context).viewInsets.bottom),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Reject ${vendor.businessName}?', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
-            const SizedBox(height: 8),
-            Text('An email will be sent to the vendor with your reason.', style: AppTextStyles.body(color: AppColors.hintGrey, size: 13)),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              style: AppTextStyles.body(color: AppColors.navy, size: 14),
-              decoration: InputDecoration(
-                hintText: 'Reason (optional)',
-                hintStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 14),
-                filled: true,
-                fillColor: AppColors.offWhite,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(vertical: 14)),
-                    child: const Text('Reject', style: TextStyle(color: Colors.white)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Reject ${vendor.businessName}?',
+      body: 'An email will be sent to the vendor with your reason.',
+      actionLabel: 'Reject',
     );
-    if (confirmed != true || !mounted) return;
+    if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await context.read<AppState>().admin.rejectVendor(vendor.id, reason: reasonController.text.trim());
+      await context.read<AppState>().admin.rejectVendor(vendor.id, reason: reason);
       messenger.showSnackBar(SnackBar(content: Text('${vendor.businessName} rejected')));
       _load();
     } on ApiException catch (e) {

@@ -79,6 +79,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       TextInput.finishAutofillContext();
       widget.onReset();
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);

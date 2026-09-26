@@ -178,19 +178,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           folder: 'profile-photos',
         );
       }
-      // Blank fields must become null, not '' — the backend's phone-number
-      // validator rejects an empty string, so if the phone or address was
-      // never filled in, echoing it back as '' failed validation and
-      // blocked the whole save (including the field actually being
-      // edited, e.g. the name).
+      // An empty string is sent as-is, not converted to null — the
+      // backend now treats '' as an explicit "clear this field" signal
+      // (see UpdateProfileDto/UsersService.updateProfile) and accepts it
+      // even for phoneNumber's normally-strict format validator. Sending
+      // null here instead would just omit the field from the request
+      // entirely, silently leaving the old value in place server-side
+      // despite the screen reporting "Profile updated".
       await appState.completeProfile(
         fullName: _fullName.text.trim(),
-        phoneNumber: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
-        houseAddress: _address.text.trim().isEmpty ? null : _address.text.trim(),
+        phoneNumber: _phone.text.trim(),
+        houseAddress: _address.text.trim(),
         dateOfBirth: _dateOfBirth,
         profilePhotoUrl: photoUrl,
         gender: _genderValue,
-        occupation: _occupation.text.trim().isEmpty ? null : _occupation.text.trim(),
+        occupation: _occupation.text.trim(),
         maritalStatus: _maritalStatusValue,
       );
       if (!mounted) return;
@@ -478,7 +480,14 @@ class _EditableField extends StatelessWidget {
                 validator: validator,
                 trailing: extraTrailing,
                 fillColor: editable ? AppColors.white : const Color(0xFFEDEDED),
-                textColor: editable ? AppColors.navy : AppColors.hintGrey,
+                // AppColors.hintGrey (#7A7F8C) is calibrated for AppColors.white
+                // fields, not this disabled-state's #EDEDED fill — against
+                // that darker grey it drops to ~3.5:1 contrast, under the
+                // 4.5:1 WCAG AA floor for body text, reading as washed-out/
+                // near-invisible. This muted navy verifies to ~5.4:1 against
+                // the same #EDEDED, staying legible while still reading as
+                // "locked" rather than full-strength editable-state navy.
+                textColor: editable ? AppColors.navy : AppColors.navy.withValues(alpha: 0.7),
               ),
             ),
             const SizedBox(width: 10),

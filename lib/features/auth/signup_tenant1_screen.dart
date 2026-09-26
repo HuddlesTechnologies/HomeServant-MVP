@@ -73,6 +73,7 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
       if (!mounted) return;
       widget.onContinue({'name': _name.text.trim(), 'phone': _phone.text.trim(), 'referral': _referral.text.trim()});
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);

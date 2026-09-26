@@ -75,6 +75,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
       TextInput.finishAutofillContext();
       widget.onContinue(email);
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -97,6 +98,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
         onReactivate: () => _continueWithGoogle(reactivate: true),
       );
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _googleSubmitting = false);

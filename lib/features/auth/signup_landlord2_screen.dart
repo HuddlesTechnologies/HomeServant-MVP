@@ -72,6 +72,7 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
       if (!mounted) return;
       widget.onFinish();
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);

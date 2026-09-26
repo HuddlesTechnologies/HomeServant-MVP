@@ -173,6 +173,7 @@ export class AdminController {
   }
 
   @Patch('users/:id/deactivate')
+  @MinAdminLevel(AdminLevel.MODERATOR)
   async deactivateUser(
     @CurrentUser() actingAdmin: AuthenticatedUser,
     @Param('id') id: string,

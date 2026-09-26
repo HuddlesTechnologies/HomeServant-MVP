@@ -148,6 +148,7 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bank details saved')));
       Navigator.of(context).pop();
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _saving = false);

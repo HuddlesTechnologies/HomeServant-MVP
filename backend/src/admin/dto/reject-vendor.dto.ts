@@ -1,7 +1,7 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsString, MinLength } from 'class-validator';
 
 export class RejectVendorDto {
-  @IsOptional()
   @IsString()
-  reason?: string;
+  @MinLength(10, { message: 'Give a bit more detail (at least 10 characters) — this is emailed to the vendor' })
+  reason!: string;
 }

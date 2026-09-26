@@ -623,11 +623,14 @@ export class AdminService {
     return updated;
   }
 
-  /// Admin-triggered — unlike AuthService.deactivate (self-service), this
-  /// doesn't need the account's own session and skips straight to the
-  /// same effect: listings hidden, every session signed out, "your
-  /// account has been deactivated" email sent. Logged with [reason] for
-  /// auditability, same as [updateUser].
+  /// Moderator+ (see AdminController) — unlike [updateUser]'s harmless
+  /// profile-field edits, this is a materially disruptive action (hides
+  /// listings, revokes every session, sends a "your account has been
+  /// deactivated" email), so it's gated the same as [deleteUser] rather
+  /// than left open to every tier. Admin-triggered — unlike
+  /// AuthService.deactivate (self-service), this doesn't need the
+  /// account's own session and skips straight to the same effect. Logged
+  /// with [reason] for auditability.
   async deactivateUser(id: string, reason: string, actorId: string): Promise<void> {
     await this.requireUser(id);
     await this.auth.deactivate(id, reason);
@@ -795,26 +798,22 @@ export class AdminService {
 
   async rejectVendor(id: string, dto: RejectVendorDto) {
     const vendor = await this.requireVendor(id);
-    if (vendor.status === 'REJECTED' && vendor.rejectionReason === (dto.reason ?? null)) return vendor;
+    if (vendor.status === 'REJECTED' && vendor.rejectionReason === dto.reason) return vendor;
     const updated = await this.prisma.vendorProfile.update({
       where: { id },
-      data: { status: 'REJECTED', rejectionReason: dto.reason ?? null },
+      data: { status: 'REJECTED', rejectionReason: dto.reason },
     });
     await this.notifications.create(
       vendor.userId,
       NotificationType.VENDOR_REJECTED,
       'Your vendor application',
-      `Your application for ${vendor.businessName} wasn't approved${dto.reason ? `: ${dto.reason}` : '.'} You can update your shop details for another review.`,
+      `Your application for ${vendor.businessName} wasn't approved: ${dto.reason} You can update your shop details for another review.`,
     );
     await this.mail.send(
       vendor.user.email,
       'Your HomeServant vendor application',
-      `<p>Thanks for applying to sell on HomeServant. After review, <strong>${vendor.businessName}</strong> hasn't been approved${
-        dto.reason ? `: ${dto.reason}` : '.'
-      }</p><p>You can update your shop details and this will be reviewed again.</p>`,
-      `Thanks for applying to sell on HomeServant. After review, ${vendor.businessName} hasn't been approved${
-        dto.reason ? `: ${dto.reason}` : '.'
-      }\n\nYou can update your shop details and this will be reviewed again.`,
+      `<p>Thanks for applying to sell on HomeServant. After review, <strong>${vendor.businessName}</strong> hasn't been approved: ${dto.reason}</p><p>You can update your shop details and this will be reviewed again.</p>`,
+      `Thanks for applying to sell on HomeServant. After review, ${vendor.businessName} hasn't been approved: ${dto.reason}\n\nYou can update your shop details and this will be reviewed again.`,
     );
     this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
     return updated;

@@ -27,17 +27,29 @@ export class AccountCleanupService {
         id: true,
         vendorProfile: { select: { orderItems: { select: { id: true }, take: 1 } } },
         bookings: { select: { id: true }, where: { status: { in: ['ACCEPTED', 'PAID', 'MOVED_IN'] } }, take: 1 },
+        // A landlord's own properties, not just their bookings as a tenant
+        // — Property.landlord and Booking.property both cascade-delete, so
+        // purging a landlord's account would otherwise silently take out
+        // every property they own and, with it, any *other* tenant's
+        // active lease on those properties.
+        properties: {
+          select: { id: true },
+          where: { bookings: { some: { status: { in: ['ACCEPTED', 'PAID', 'MOVED_IN'] } } } },
+          take: 1,
+        },
       },
     });
 
     // A vendor with any order-item history cascades that history away for
     // OTHER buyers if purged (MarketplaceOrderItem.vendor is onDelete:
-    // Cascade) — and a tenant with an active/paid/moved-in lease has a
-    // real tenancy depending on their account existing. Neither should be
-    // silently auto-deleted; both need an admin's explicit hand via the
-    // console instead.
+    // Cascade) — a tenant with an active/paid/moved-in lease has a real
+    // tenancy depending on their account existing — and a landlord with a
+    // property under an active lease has some *other* tenant's tenancy
+    // depending on their account existing. None of these should be
+    // silently auto-deleted; all three need an admin's explicit hand via
+    // the console instead.
     const ids = candidates
-      .filter((u) => (u.vendorProfile?.orderItems.length ?? 0) === 0 && u.bookings.length === 0)
+      .filter((u) => (u.vendorProfile?.orderItems.length ?? 0) === 0 && u.bookings.length === 0 && u.properties.length === 0)
       .map((u) => u.id);
     const skipped = candidates.length - ids.length;
 

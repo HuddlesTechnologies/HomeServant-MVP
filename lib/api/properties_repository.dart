@@ -6,19 +6,34 @@ class PropertiesRepository {
 
   final ApiClient _client;
 
+  /// Fetches every matching property, following `total` across as many
+  /// 100-item pages as it takes — a single fixed `pageSize: 100` with no
+  /// follow-up used to silently drop the 101st+ result once a filtered
+  /// view (the browse feed, a landlord's own listings) grew past that.
   Future<List<Property>> findMany({String? state, String? category, String? landlordId}) {
     return _client.call(() async {
-      final response = await _client.dio.get(
-        '/properties',
-        queryParameters: {
-          if (state != null) 'state': state,
-          if (category != null) 'category': Property.categoryApiValue(category),
-          if (landlordId != null) 'landlordId': landlordId,
-          'pageSize': 100,
-        },
-      );
-      final items = (response.data['items'] as List).cast<Map<String, dynamic>>();
-      return items.map(Property.fromApi).toList();
+      const pageSize = 100;
+      final all = <Property>[];
+      var page = 1;
+      while (true) {
+        final response = await _client.dio.get(
+          '/properties',
+          queryParameters: {
+            if (state != null) 'state': state,
+            if (category != null) 'category': Property.categoryApiValue(category),
+            if (landlordId != null) 'landlordId': landlordId,
+            'page': page,
+            'pageSize': pageSize,
+          },
+        );
+        final data = response.data as Map<String, dynamic>;
+        final items = (data['items'] as List).cast<Map<String, dynamic>>();
+        all.addAll(items.map(Property.fromApi));
+        final total = data['total'] as int? ?? all.length;
+        if (items.isEmpty || all.length >= total) break;
+        page++;
+      }
+      return all;
     });
   }
 

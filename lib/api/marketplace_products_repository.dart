@@ -8,19 +8,33 @@ class MarketplaceProductsRepository {
 
   final ApiClient _client;
 
+  /// Fetches every matching product, following `total` across as many
+  /// 100-item pages as it takes — see PropertiesRepository.findMany's
+  /// identical doc comment for why a single fixed `pageSize` isn't enough.
   Future<List<MarketplaceProductApi>> findMany({MarketplaceCategory? category, String? search, String? vendorId}) {
     return _client.call(() async {
-      final response = await _client.dio.get(
-        '/marketplace/products',
-        queryParameters: {
-          if (category != null) 'category': category.apiValue,
-          if (search != null && search.isNotEmpty) 'search': search,
-          if (vendorId != null) 'vendorId': vendorId,
-          'pageSize': 100,
-        },
-      );
-      final items = (response.data['items'] as List).cast<Map<String, dynamic>>();
-      return items.map(MarketplaceProductApi.fromApi).toList();
+      const pageSize = 100;
+      final all = <MarketplaceProductApi>[];
+      var page = 1;
+      while (true) {
+        final response = await _client.dio.get(
+          '/marketplace/products',
+          queryParameters: {
+            if (category != null) 'category': category.apiValue,
+            if (search != null && search.isNotEmpty) 'search': search,
+            if (vendorId != null) 'vendorId': vendorId,
+            'page': page,
+            'pageSize': pageSize,
+          },
+        );
+        final data = response.data as Map<String, dynamic>;
+        final items = (data['items'] as List).cast<Map<String, dynamic>>();
+        all.addAll(items.map(MarketplaceProductApi.fromApi));
+        final total = data['total'] as int? ?? all.length;
+        if (items.isEmpty || all.length >= total) break;
+        page++;
+      }
+      return all;
     });
   }
 

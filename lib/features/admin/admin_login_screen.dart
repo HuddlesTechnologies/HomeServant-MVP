@@ -78,6 +78,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
           setState(() => _error = 'This account is deactivated. Contact another admin to reactivate it.');
       }
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);

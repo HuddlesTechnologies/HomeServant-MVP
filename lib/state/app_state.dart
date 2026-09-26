@@ -211,11 +211,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> verifySignupOtp(String code) async {
-    final user = await _authRepo.verifySignup(email: email, code: code);
+  /// Shared tail end of every flow that ends in a freshly-authenticated
+  /// session (signup verification, login, Google sign-in, 2FA
+  /// verification) — applies the narrow auth response, then fetches the
+  /// full profile and initial app data. Kept as one helper (rather than
+  /// copy-pasted per call site) specifically so this ordering can't drift
+  /// between call sites — a version of this exact sequence firing
+  /// notifyListeners() (inside [_applyUser]) before [refreshProfile]
+  /// resolves was the root cause of a router race that stranded returning
+  /// users on a dead-end profile-completion screen every login.
+  Future<void> _completeAuthentication(AuthUser user) async {
     _applyUser(user);
     await refreshProfile();
     await _loadInitialData();
+  }
+
+  Future<void> verifySignupOtp(String code) async {
+    final user = await _authRepo.verifySignup(email: email, code: code);
+    await _completeAuthentication(user);
   }
 
   /// [requiresReactivation]: the account is deactivated — show a confirm
@@ -235,9 +248,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return LoginOutcome.requiresTwoFactor;
     }
-    _applyUser(result.user!);
-    await refreshProfile();
-    await _loadInitialData();
+    await _completeAuthentication(result.user!);
     return LoginOutcome.success;
   }
 
@@ -262,17 +273,13 @@ class AppState extends ChangeNotifier {
       return LoginOutcome.requiresReactivation;
     }
     _pendingGoogleIdToken = null;
-    _applyUser(result.user!);
-    await refreshProfile();
-    await _loadInitialData();
+    await _completeAuthentication(result.user!);
     return LoginOutcome.success;
   }
 
   Future<void> verifyLoginTwoFactor(String code) async {
     final user = await _authRepo.verifyLoginTwoFactor(email: email, code: code);
-    _applyUser(user);
-    await refreshProfile();
-    await _loadInitialData();
+    await _completeAuthentication(user);
   }
 
   Future<void> changePassword({required String currentPassword, required String newPassword}) async {
@@ -386,17 +393,24 @@ class AppState extends ChangeNotifier {
     userId = user.id;
     email = user.email;
     role = user.role;
-    if (user.fullName != null) fullName = user.fullName!;
-    if (user.phoneNumber != null) phoneNumber = user.phoneNumber!;
-    if (user.profilePhotoUrl != null) profilePhotoPath = user.profilePhotoUrl;
-    // Both absent from the narrower login/signup response shape (see
-    // AuthUser's doc comment) — only ever present once the full profile's
-    // been fetched, so a null here means "not fetched yet", not "cleared".
-    if (user.houseAddress != null) houseAddress = user.houseAddress!;
-    if (user.dateOfBirth != null) dateOfBirth = user.dateOfBirth;
-    if (user.gender != null) gender = user.gender;
-    if (user.occupation != null) occupation = user.occupation;
-    if (user.maritalStatus != null) maritalStatus = user.maritalStatus;
+    // Each field applies when the incoming value is non-null (the normal
+    // case), OR when this is confirmed to be a full-profile response (see
+    // AuthUser.hasFullProfile) — in which case a null is authoritative
+    // ("actually cleared"), not just "absent from this narrower shape",
+    // and must overwrite whatever was set locally before. Without the
+    // second half of that condition, a field intentionally cleared via
+    // [completeProfile] (e.g. blanking a phone number) would come back
+    // null from the server but the old value would win by default,
+    // leaving the UI showing stale data despite the clear having actually
+    // succeeded.
+    if (user.fullName != null || user.hasFullProfile) fullName = user.fullName ?? '';
+    if (user.phoneNumber != null || user.hasFullProfile) phoneNumber = user.phoneNumber ?? '';
+    if (user.profilePhotoUrl != null || user.hasFullProfile) profilePhotoPath = user.profilePhotoUrl;
+    if (user.houseAddress != null || user.hasFullProfile) houseAddress = user.houseAddress ?? '';
+    if (user.dateOfBirth != null || user.hasFullProfile) dateOfBirth = user.dateOfBirth;
+    if (user.gender != null || user.hasFullProfile) gender = user.gender;
+    if (user.occupation != null || user.hasFullProfile) occupation = user.occupation;
+    if (user.maritalStatus != null || user.hasFullProfile) maritalStatus = user.maritalStatus;
     twoFactorEnabled = user.twoFactorEnabled;
     mustChangePassword = user.mustChangePassword;
     bankCode = user.bankCode;
@@ -654,15 +668,28 @@ class AppState extends ChangeNotifier {
   Future<void> toggleFavorite(String propertyId) async {
     if (userId == null) return;
     final wasFavorited = isFavorite(propertyId);
+    // The "add" branch can only build the optimistic entry from the cached
+    // browse list ([properties]) — if the property being favorited isn't
+    // in it (viewed via its own detail fetch instead, a different filter
+    // was last loaded, or it's past that list's page-size cap), there's
+    // nothing to optimistically render, so this falls through to
+    // [loadFavorites] below instead of silently leaving the heart looking
+    // unfavorited despite the toggle having actually succeeded.
+    var appliedOptimistically = false;
     if (wasFavorited) {
       _favorites = _favorites.where((p) => p.id != propertyId).toList();
+      appliedOptimistically = true;
     } else {
       final match = properties.where((p) => p.id == propertyId);
-      if (match.isNotEmpty) _favorites = [..._favorites, match.first];
+      if (match.isNotEmpty) {
+        _favorites = [..._favorites, match.first];
+        appliedOptimistically = true;
+      }
     }
     notifyListeners();
     try {
       await _favoritesRepo.toggle(propertyId);
+      if (!appliedOptimistically) await loadFavorites();
     } catch (_) {
       await loadFavorites();
     }

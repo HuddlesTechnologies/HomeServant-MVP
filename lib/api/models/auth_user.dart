@@ -23,6 +23,7 @@ class AuthUser {
     this.gender,
     this.occupation,
     this.maritalStatus,
+    this.hasFullProfile = false,
   });
 
   final String id;
@@ -47,6 +48,19 @@ class AuthUser {
   final Gender? gender;
   final String? occupation;
   final MaritalStatus? maritalStatus;
+
+  /// True for a `GET /users/me`/`PATCH /users/me`/`PATCH /users/me/bank-
+  /// details` response (all select the full `profileSelect` shape, always
+  /// including a `houseAddress` key even when its value is null) — false
+  /// for the narrower login/signup/2FA/Google-auth response, which omits
+  /// the key entirely. Lets [AppState._applyUser] tell "not fetched yet"
+  /// (narrow response, null means unknown) apart from "actually cleared"
+  /// (full response, null means the field was genuinely unset/blanked) —
+  /// without this, a field intentionally cleared via [AppState.
+  /// completeProfile] (e.g. blanking a phone number) would come back null
+  /// from the server but never actually apply locally, since the old
+  /// non-null value would otherwise win by default.
+  final bool hasFullProfile;
 
   /// True for an admin account still signed in with the one-time
   /// temporary password from its invite email — the console blocks entry
@@ -86,6 +100,7 @@ class AuthUser {
     gender: _genderFromApi(json['gender'] as String?),
     occupation: json['occupation'] as String?,
     maritalStatus: _maritalStatusFromApi(json['maritalStatus'] as String?),
+    hasFullProfile: json.containsKey('houseAddress'),
   );
 }
 

@@ -141,9 +141,11 @@ class AdminRepository {
     });
   }
 
-  Future<void> rejectVendor(String id, {String? reason}) {
+  /// [reason] is required — it's emailed to the vendor and recorded
+  /// server-side, same as every other reason-gated moderation action.
+  Future<void> rejectVendor(String id, {required String reason}) {
     return _client.call(() async {
-      await _client.dio.patch('/admin/vendors/$id/reject', data: {if (reason != null && reason.isNotEmpty) 'reason': reason});
+      await _client.dio.patch('/admin/vendors/$id/reject', data: {'reason': reason});
     });
   }
 

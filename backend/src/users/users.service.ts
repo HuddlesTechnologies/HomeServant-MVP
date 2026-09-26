@@ -72,10 +72,19 @@ export class UsersService {
     }
 
     const { referralCode: _incomingReferralCode, ...profileFields } = dto;
+    // An empty string on any of these three means "clear this field", not
+    // "set it to the literal empty string" — normalized to `null` here so
+    // it actually clears in the DB (a bare `''` would otherwise stick
+    // around as a distinct non-null value from every other "not set"
+    // field). A genuinely omitted field stays `undefined`, which Prisma
+    // leaves untouched.
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
         ...profileFields,
+        phoneNumber: dto.phoneNumber !== undefined ? (dto.phoneNumber.trim() === '' ? null : dto.phoneNumber) : undefined,
+        houseAddress: dto.houseAddress !== undefined ? (dto.houseAddress.trim() === '' ? null : dto.houseAddress) : undefined,
+        occupation: dto.occupation !== undefined ? (dto.occupation.trim() === '' ? null : dto.occupation) : undefined,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
         referredById,
       },
