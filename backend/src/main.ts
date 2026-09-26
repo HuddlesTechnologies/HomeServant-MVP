@@ -2,6 +2,7 @@ import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
+import compression from 'compression';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -15,6 +16,7 @@ async function bootstrap() {
   // other route is unaffected; it just also gets a rawBody it ignores.
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.use(helmet());
+  app.use(compression());
   const config = app.get(ConfigService);
   // Render sits in front of this container as a reverse proxy — without
   // this, `req.ip` is the proxy's own address for every request, which

@@ -23,7 +23,11 @@ if (hasReleaseSigning) {
 android {
     namespace = "com.example.homeservant"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // Pinned above flutter.ndkVersion: several plugins (audioplayers,
+    // device_info_plus, file_picker, google_sign_in, printing,
+    // video_player, etc.) require NDK 27; the NDK is backward compatible
+    // so building all native deps against the newer one is safe.
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -59,6 +63,9 @@ android {
     buildTypes {
         release {
             signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }
