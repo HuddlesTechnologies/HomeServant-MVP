@@ -26,9 +26,19 @@ class ThreadParticipant {
   );
 }
 
-enum MessageType { text, propertyPreview }
+enum MessageType { text, propertyPreview, image }
 
-MessageType _messageTypeFromApi(String? value) => value == 'propertyPreview' ? MessageType.propertyPreview : MessageType.text;
+// The backend returns Prisma's raw MessageType enum member (TEXT /
+// PROPERTY_PREVIEW / IMAGE) verbatim in JSON — nothing camelCases it — so
+// this has to match that exact casing. This previously compared against
+// 'propertyPreview'/lowerCamelCase, which never matched anything the API
+// actually sends: property-preview messages silently never rendered as
+// their special card, always falling back to a plain text bubble instead.
+MessageType _messageTypeFromApi(String? value) => switch (value) {
+  'PROPERTY_PREVIEW' => MessageType.propertyPreview,
+  'IMAGE' => MessageType.image,
+  _ => MessageType.text,
+};
 
 class ChatMessage {
   const ChatMessage({
@@ -40,6 +50,7 @@ class ChatMessage {
     required this.createdAt,
     this.readAt,
     this.type = MessageType.text,
+    this.attachmentUrl,
     this.previewPropertyTitle,
     this.previewPropertyImageUrl,
     this.previewPropertyPrice,
@@ -58,6 +69,10 @@ class ChatMessage {
   /// automatically gets `propertyPreview` server-side — the client never
   /// sets this itself, only renders whatever comes back.
   final MessageType type;
+
+  /// Set only when [type] is [MessageType.image] — see backend
+  /// Message.attachmentUrl.
+  final String? attachmentUrl;
   final String? previewPropertyTitle;
   final String? previewPropertyImageUrl;
   final int? previewPropertyPrice;
@@ -72,6 +87,7 @@ class ChatMessage {
     createdAt: DateTime.parse(json['createdAt'] as String),
     readAt: (json['readAt'] as String?) != null ? DateTime.parse(json['readAt'] as String) : null,
     type: _messageTypeFromApi(json['type'] as String?),
+    attachmentUrl: json['attachmentUrl'] as String?,
     previewPropertyTitle: json['previewPropertyTitle'] as String?,
     previewPropertyImageUrl: json['previewPropertyImageUrl'] as String?,
     previewPropertyPrice: json['previewPropertyPrice'] as int?,

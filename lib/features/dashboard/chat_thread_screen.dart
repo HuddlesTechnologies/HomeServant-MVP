@@ -14,9 +14,11 @@ import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_text_field.dart';
+import '../../widgets/upload_picker.dart';
 import '../Market place/models/order_options.dart';
 import '../admin/chat_transcript_pdf.dart';
 import 'models/property.dart';
+import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
 
 class ChatMessage {
@@ -24,6 +26,7 @@ class ChatMessage {
     required this.text,
     required this.fromMe,
     this.type = MessageType.text,
+    this.attachmentUrl,
     this.previewPropertyTitle,
     this.previewPropertyImageUrl,
     this.previewPropertyPrice,
@@ -34,6 +37,10 @@ class ChatMessage {
   final String text;
   final bool fromMe;
   final MessageType type;
+
+  /// Set only when [type] is [MessageType.image] — see backend
+  /// Message.attachmentUrl.
+  final String? attachmentUrl;
   final String? previewPropertyTitle;
   final String? previewPropertyImageUrl;
   final int? previewPropertyPrice;
@@ -142,6 +149,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   String? _recipientDetailError;
   bool _exportingPdf = false;
   bool _resolvingOrTransferring = false;
+  bool _sendingImage = false;
 
   @override
   void initState() {
@@ -180,12 +188,24 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final senderId = event.message['senderId'] as String?;
     final body = event.message['body'] as String?;
     if (senderId == null || body == null || senderId == appState.userId) return;
+    // The raw type string here is Prisma's enum member as-is (TEXT /
+    // PROPERTY_PREVIEW / IMAGE) — this previously compared against
+    // 'propertyPreview', which the backend never actually sends, so a
+    // live-pushed property-preview message silently never rendered as its
+    // card (see ChatMessage._messageTypeFromApi's doc comment for the same
+    // fix on the initial-load path).
+    final type = switch (event.message['type']) {
+      'PROPERTY_PREVIEW' => MessageType.propertyPreview,
+      'IMAGE' => MessageType.image,
+      _ => MessageType.text,
+    };
     setState(
       () => _messages.add(
         ChatMessage(
           text: body,
           fromMe: false,
-          type: event.message['type'] == 'propertyPreview' ? MessageType.propertyPreview : MessageType.text,
+          type: type,
+          attachmentUrl: event.message['attachmentUrl'] as String?,
           previewPropertyTitle: event.message['previewPropertyTitle'] as String?,
           previewPropertyImageUrl: event.message['previewPropertyImageUrl'] as String?,
           previewPropertyPrice: event.message['previewPropertyPrice'] as int?,
@@ -212,6 +232,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 text: m.body,
                 fromMe: m.senderId == appState.userId,
                 type: m.type,
+                attachmentUrl: m.attachmentUrl,
                 previewPropertyTitle: m.previewPropertyTitle,
                 previewPropertyImageUrl: m.previewPropertyImageUrl,
                 previewPropertyPrice: m.previewPropertyPrice,
@@ -333,6 +354,38 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't send — try again.")));
+    }
+  }
+
+  /// Uploads through the same generic signed-upload flow every other image
+  /// in this app uses (folder: 'chat'), then sends it as an IMAGE message.
+  /// Unlike [_send], there's no optimistic local echo before the network
+  /// call — the upload itself already takes a moment, so the bubble only
+  /// appears once it's actually sent, with [_sendingImage] disabling the
+  /// attach button meanwhile instead of showing a placeholder that could
+  /// end up wrong if the upload fails.
+  Future<void> _pickAndSendImage() async {
+    if (_sendingImage) return;
+    final threadId = widget.threadId;
+    if (threadId == null) return;
+    final picked = await pickUpload(context);
+    if (picked == null || !mounted) return;
+    if (!picked.isImage) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Only photos can be sent in chat.')));
+      return;
+    }
+    setState(() => _sendingImage = true);
+    try {
+      final appState = context.read<AppState>();
+      final url = await appState.uploads.upload(file: picked, folder: 'chat');
+      await appState.chat.send(threadId, '', attachmentUrl: url);
+      if (!mounted) return;
+      setState(() => _messages.add(ChatMessage(text: '', fromMe: true, type: MessageType.image, attachmentUrl: url)));
+      _scrollToBottom();
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't send photo — try again.")));
+    } finally {
+      if (mounted) setState(() => _sendingImage = false);
     }
   }
 
@@ -494,6 +547,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                         alignment: message.fromMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: _PropertyPreviewBubble(theme: theme, message: message),
                       );
+                    } else if (message.type == MessageType.image) {
+                      bubble = Align(
+                        alignment: message.fromMe ? Alignment.centerRight : Alignment.centerLeft,
+                        child: _ImageMessageBubble(theme: theme, message: message),
+                      );
                     } else {
                       bubble = Align(
                         alignment:
@@ -568,6 +626,17 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Row(
                     children: [
+                      IconButton(
+                        onPressed: _sendingImage ? null : _pickAndSendImage,
+                        icon: _sendingImage
+                            ? SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: theme.foreground),
+                              )
+                            : Icon(Icons.add_photo_alternate_outlined, color: theme.foreground),
+                        tooltip: 'Send a photo',
+                      ),
                       Expanded(
                         child: PillTextField(
                           hint: 'Type a message',
@@ -693,6 +762,53 @@ class _PropertyPreviewBubble extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A photo message, with an optional caption underneath — tapping opens it
+/// full-screen (reusing [PropertyGalleryScreen]'s pinch-to-zoom viewer with
+/// a single-image list, rather than a second one-off full-screen widget).
+class _ImageMessageBubble extends StatelessWidget {
+  const _ImageMessageBubble({required this.theme, required this.message});
+
+  final DashboardTheme theme;
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = message.attachmentUrl;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 220),
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: message.fromMe ? theme.accent.withValues(alpha: 0.12) : theme.surface,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (url != null)
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => PropertyGalleryScreen(images: [url], initialIndex: 0, title: 'Photo')),
+              ),
+              child: PropertyImage(path: url, height: 180, width: double.infinity, fit: BoxFit.cover),
+            ),
+          if (message.text.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              // Both bubble backgrounds are light regardless of [fromMe]
+              // (a low-alpha accent tint or theme.surface, never
+              // full-strength accent) — onSurface is the pair that's
+              // guaranteed to contrast against a light surface in every
+              // theme; onAccent is calibrated for full-strength accent
+              // and would be wrong (e.g. white-on-near-white) here.
+              child: Text(message.text, style: AppTextStyles.body(color: theme.onSurface, size: 14)),
+            ),
         ],
       ),
     );

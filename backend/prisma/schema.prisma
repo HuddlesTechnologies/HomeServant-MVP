@@ -654,6 +654,9 @@ enum MessageType {
   /// accurate even if the listing's price changes or the listing is
   /// later removed.
   PROPERTY_PREVIEW
+  /// A message that's a photo (with an optional caption in `body`) rather
+  /// than plain text — see Message.attachmentUrl.
+  IMAGE
 }
 
 /// Persisted through this API (so history survives even if a client never
@@ -672,6 +675,10 @@ model Message {
   sender                   User?       @relation(fields: [senderId], references: [id], onDelete: SetNull)
   type                     MessageType @default(TEXT)
   body                     String
+  /// Set only when [type] is IMAGE — a Supabase Storage public URL,
+  /// checked at send time by StorageService.assertIsOwnImage the same way
+  /// every other client-supplied image URL in this app is.
+  attachmentUrl            String?
   previewPropertyTitle     String?
   previewPropertyImageUrl  String?
   previewPropertyPrice     Int?

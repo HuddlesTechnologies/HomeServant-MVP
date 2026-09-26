@@ -85,9 +85,12 @@ class ChatRepository {
     });
   }
 
-  Future<ChatMessage> send(String threadId, String body) {
+  Future<ChatMessage> send(String threadId, String body, {String? attachmentUrl}) {
     return _client.call(() async {
-      final response = await _client.dio.post('/threads/$threadId/messages', data: {'body': body});
+      final response = await _client.dio.post(
+        '/threads/$threadId/messages',
+        data: {if (body.isNotEmpty) 'body': body, if (attachmentUrl != null) 'attachmentUrl': attachmentUrl},
+      );
       return ChatMessage.fromApi(response.data as Map<String, dynamic>);
     });
   }

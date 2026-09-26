@@ -390,7 +390,9 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
                         if (thread.lastMessage != null) ...[
                           const SizedBox(height: 2),
                           Text(
-                            thread.lastMessage!.body,
+                            thread.lastMessage!.type == MessageType.image && thread.lastMessage!.body.isEmpty
+                                ? '📷 Photo'
+                                : thread.lastMessage!.body,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5),

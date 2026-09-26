@@ -50,7 +50,10 @@ Future<pw.Document> buildChatTranscriptPdf({
                   style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold, color: navy),
                 ),
                 pw.SizedBox(height: 2),
-                pw.Text(message.text, style: const pw.TextStyle(fontSize: 10.5)),
+                pw.Text(
+                  message.attachmentUrl != null && message.text.isEmpty ? '[Photo]' : message.text,
+                  style: const pw.TextStyle(fontSize: 10.5),
+                ),
               ],
             ),
           ),

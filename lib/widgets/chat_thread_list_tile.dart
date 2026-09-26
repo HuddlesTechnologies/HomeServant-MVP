@@ -1,6 +1,15 @@
 import 'package:flutter/material.dart';
 import '../api/models/chat.dart';
 
+/// A plain-text preview for the list row — an image message with no
+/// caption would otherwise show as a blank line (or fall through to "No
+/// messages yet", which is wrong once a real message exists).
+String _lastMessagePreview(ChatMessage? lastMessage) {
+  if (lastMessage == null) return 'No messages yet';
+  if (lastMessage.type == MessageType.image && lastMessage.body.isEmpty) return '📷 Photo';
+  return lastMessage.body;
+}
+
 /// One row in a conversation list: avatar, other participant's name, last
 /// message preview, and an optional time/unread indicator — shared by the
 /// tenant and landlord Messages screens, which each used to define this
@@ -96,7 +105,7 @@ class ChatThreadListTile extends StatelessWidget {
                 Text(thread.otherParticipantName, overflow: TextOverflow.ellipsis, style: nameStyle),
               SizedBox(height: nameMessageSpacing),
               Text(
-                thread.lastMessage?.body ?? 'No messages yet',
+                _lastMessagePreview(thread.lastMessage),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: messageStyle,

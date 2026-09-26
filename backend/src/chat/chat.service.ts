@@ -1,9 +1,10 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ActivityLogType, NotificationType, Prisma, UserRole } from '@prisma/client';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ActivityLogType, MessageType, NotificationType, Prisma, UserRole } from '@prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { ChatGateway } from './chat.gateway';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
@@ -21,6 +22,7 @@ export class ChatService {
     private readonly presence: PresenceService,
     private readonly gateway: ChatGateway,
     private readonly activityLog: ActivityLogService,
+    private readonly storage: StorageService,
   ) {}
 
   /// Reuses an existing thread between the same two people about the same
@@ -294,9 +296,26 @@ export class ChatService {
 
   async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
     await this.assertParticipant(threadId, userId, senderRole);
+    const body = dto.body?.trim() ?? '';
+    if (!body && !dto.attachmentUrl) {
+      throw new BadRequestException('A message needs either text or an image');
+    }
+    if (dto.attachmentUrl) {
+      await this.storage.assertIsOwnImage(dto.attachmentUrl);
+    }
+    // Falls back to a fixed label rather than the (possibly empty) body —
+    // an image sent with no caption would otherwise show as a blank
+    // notification/support-queue preview.
+    const previewText = body || '📷 Photo';
     const [message] = await this.prisma.$transaction([
       this.prisma.message.create({
-        data: { threadId, senderId: userId, body: dto.body },
+        data: {
+          threadId,
+          senderId: userId,
+          body,
+          type: dto.attachmentUrl ? MessageType.IMAGE : MessageType.TEXT,
+          attachmentUrl: dto.attachmentUrl,
+        },
         include: { sender: { select: { id: true, fullName: true } } },
       }),
       this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } }),
@@ -327,7 +346,7 @@ export class ChatService {
           p.userId,
           NotificationType.NEW_MESSAGE,
           `New message from ${senderName}`,
-          dto.body.length > 140 ? `${dto.body.slice(0, 140)}…` : dto.body,
+          previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText,
         ),
       ),
     );
@@ -345,7 +364,7 @@ export class ChatService {
             admin.id,
             NotificationType.NEW_MESSAGE,
             'New support conversation',
-            `${senderName}: ${dto.body.length > 140 ? `${dto.body.slice(0, 140)}…` : dto.body}`,
+            `${senderName}: ${previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText}`,
           ),
         ),
       );
