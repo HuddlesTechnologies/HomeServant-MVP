@@ -119,13 +119,28 @@ Future<String?> showAdminReasonSheet(
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: controller.text.trim().length >= 10 ? () => Navigator.of(context).pop(controller.text.trim()) : null,
+                      onPressed: controller.text.trim().length >= 10
+                          ? () => Navigator.of(context).pop(controller.text.trim())
+                          : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.redAccent,
+                        // A disabled ElevatedButton otherwise falls back to
+                        // Material 3's own near-white disabled background,
+                        // but the label's white text is fixed regardless of
+                        // state — invisible for as long as the button sits
+                        // disabled, which is its starting state every time
+                        // this sheet opens (before 10 characters are typed).
+                        disabledBackgroundColor: Colors.redAccent.withValues(alpha: 0.35),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                       ),
-                      child: Text(actionLabel, style: AppTextStyles.button(color: Colors.white, size: 14)),
+                      child: Text(
+                        actionLabel,
+                        style: AppTextStyles.button(
+                          color: Colors.white.withValues(alpha: controller.text.trim().length >= 10 ? 1 : 0.7),
+                          size: 14,
+                        ),
+                      ),
                     ),
                   ),
                 ],

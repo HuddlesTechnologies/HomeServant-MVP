@@ -295,7 +295,10 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                                   Expanded(
                                     child: ElevatedButton(
                                       onPressed: _approvingIds.contains(vendor.id) ? null : () => _approve(vendor),
-                                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.navy,
+                                        disabledBackgroundColor: AppColors.navy,
+                                      ),
                                       child: _approvingIds.contains(vendor.id)
                                           ? const SizedBox(
                                               width: 16,

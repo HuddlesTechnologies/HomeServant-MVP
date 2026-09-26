@@ -329,7 +329,11 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                           Expanded(
                             child: ElevatedButton(
                               onPressed: _approving ? null : () => _approve(vendor),
-                              style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, padding: const EdgeInsets.symmetric(vertical: 14)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.navy,
+                                disabledBackgroundColor: AppColors.navy,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
                               child: _approving
                                   ? const SizedBox(
                                       width: 16,

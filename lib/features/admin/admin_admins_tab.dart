@@ -375,8 +375,22 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: code.length == 4 ? () => Navigator.of(context).pop(true) : null,
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, padding: const EdgeInsets.symmetric(vertical: 14)),
-                      child: const Text('Create Admin', style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.navy,
+                        // Without this, a disabled ElevatedButton falls back
+                        // to Material 3's own near-white disabled background
+                        // — but the label below is a hardcoded white Text,
+                        // which doesn't participate in that state at all, so
+                        // it stayed white-on-white the entire time this
+                        // button sits disabled (i.e. before the 4-digit code
+                        // is fully typed, its normal starting state).
+                        disabledBackgroundColor: AppColors.navy.withValues(alpha: 0.35),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: Text(
+                        'Create Admin',
+                        style: TextStyle(color: Colors.white.withValues(alpha: code.length == 4 ? 1 : 0.7)),
+                      ),
                     ),
                   ),
                 ],
@@ -464,8 +478,17 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: code.length == 4 ? () => Navigator.of(context).pop(true) : null,
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, padding: const EdgeInsets.symmetric(vertical: 14)),
-                  child: const Text('Reset Password', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    // See the "Create Admin" button above — same disabled-
+                    // background gap.
+                    disabledBackgroundColor: AppColors.navy.withValues(alpha: 0.35),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: Text(
+                    'Reset Password',
+                    style: TextStyle(color: Colors.white.withValues(alpha: code.length == 4 ? 1 : 0.7)),
+                  ),
                 ),
               ),
             ],
