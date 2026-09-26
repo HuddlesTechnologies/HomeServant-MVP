@@ -157,6 +157,11 @@ class AppState extends ChangeNotifier {
   /// from their invite email — see AuthUser.mustChangePassword.
   bool mustChangePassword = false;
 
+  /// Whether this tenant/landlord has ever finished the signup wizard —
+  /// see AuthUser.profileCompleted. The single source of truth for the
+  /// router's "finish setting up your account" redirect.
+  bool profileCompleted = true;
+
   /// This user's own invite code, shown on "Invite Friends" — always
   /// real, from the server (see [_applyUser]); the backend assigns one
   /// lazily on first `GET /users/me` if an account predates this field.
@@ -413,6 +418,7 @@ class AppState extends ChangeNotifier {
     if (user.maritalStatus != null || user.hasFullProfile) maritalStatus = user.maritalStatus;
     twoFactorEnabled = user.twoFactorEnabled;
     mustChangePassword = user.mustChangePassword;
+    profileCompleted = user.profileCompleted;
     bankCode = user.bankCode;
     bankName = user.bankName;
     accountNumber = user.accountNumber;
@@ -437,6 +443,7 @@ class AppState extends ChangeNotifier {
     profilePhotoPath = null;
     twoFactorEnabled = false;
     mustChangePassword = false;
+    profileCompleted = true;
     bankCode = null;
     bankName = null;
     accountNumber = null;

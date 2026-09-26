@@ -24,6 +24,7 @@ class AuthUser {
     this.occupation,
     this.maritalStatus,
     this.hasFullProfile = false,
+    this.profileCompleted = true,
   });
 
   final String id;
@@ -61,6 +62,15 @@ class AuthUser {
   /// from the server but never actually apply locally, since the old
   /// non-null value would otherwise win by default.
   final bool hasFullProfile;
+
+  /// Server-owned "has finished the signup wizard" latch (backend
+  /// `User.profileCompletedAt`) — present on every response shape,
+  /// including the narrow login/signup/2FA/Google one, so it's known the
+  /// instant a session starts rather than after a follow-up profile fetch.
+  /// The router's profile-completion redirect keys off this alone. Treated
+  /// as true when the key is missing entirely (a backend that predates
+  /// the field), so a real account is never trapped in the wizard.
+  final bool profileCompleted;
 
   /// True for an admin account still signed in with the one-time
   /// temporary password from its invite email — the console blocks entry
@@ -101,6 +111,7 @@ class AuthUser {
     occupation: json['occupation'] as String?,
     maritalStatus: _maritalStatusFromApi(json['maritalStatus'] as String?),
     hasFullProfile: json.containsKey('houseAddress'),
+    profileCompleted: !json.containsKey('profileCompletedAt') || json['profileCompletedAt'] != null,
   );
 }
 
