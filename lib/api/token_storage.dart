@@ -10,6 +10,7 @@ class TokenStorage {
 
   static const _accessKey = 'hs_access_token';
   static const _refreshKey = 'hs_refresh_token';
+  static const _appLockPinKey = 'hs_app_lock_pin';
 
   Future<String?> readAccessToken() => _storage.read(key: _accessKey);
   Future<String?> readRefreshToken() => _storage.read(key: _refreshKey);
@@ -23,4 +24,12 @@ class TokenStorage {
     await _storage.delete(key: _accessKey);
     await _storage.delete(key: _refreshKey);
   }
+
+  /// The device app-lock PIN — kept here rather than in AppState's
+  /// SharedPreferences blob for the same reason the tokens above are:
+  /// SharedPreferences is a plaintext file/XML on disk, recoverable via
+  /// `adb backup` or root access, which would defeat the app-lock entirely.
+  Future<String?> readAppLockPin() => _storage.read(key: _appLockPinKey);
+  Future<void> saveAppLockPin(String pin) => _storage.write(key: _appLockPinKey, value: pin);
+  Future<void> clearAppLockPin() => _storage.delete(key: _appLockPinKey);
 }

@@ -37,6 +37,16 @@ class _HomeServantAppState extends State<HomeServantApp> {
         title: 'Home Servant',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light,
+        // Every screen hardcodes AppColors.* directly rather than reading
+        // Theme.of(context).colorScheme (58 files and counting, none
+        // theme-aware) — wiring up a darkTheme here without that groundwork
+        // would only flip the handful of Material-default surfaces
+        // (dialogs, default text) to dark while every custom screen stayed
+        // hardcoded light, which reads as broken, not as dark mode. Pinning
+        // this explicitly documents that as a deliberate scope decision
+        // rather than an oversight; a real dark mode needs that refactor
+        // done first.
+        themeMode: ThemeMode.light,
         routerConfig: _router,
         builder: (context, child) =>
             SessionExpiredGate(child: AppLockGate(child: NotificationBannerOverlay(child: child!))),

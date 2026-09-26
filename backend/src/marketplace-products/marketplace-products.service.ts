@@ -23,7 +23,7 @@ export class MarketplaceProductsService {
   async findMany(query: QueryProductsDto) {
     const where: Prisma.ProductWhereInput = {
       isAvailable: true,
-      vendor: { isActive: true, status: 'APPROVED' },
+      vendor: { isActive: true, suspendedAt: null, status: 'APPROVED' },
       category: query.category,
       vendorId: query.vendorId,
       ...(query.search

@@ -13,6 +13,12 @@ import {
 import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 
+/// Same allow-list `main.ts` builds from CORS_ORIGINS for the REST API —
+/// duplicated here because `@WebSocketGateway`'s options are evaluated at
+/// class-decoration time, before Nest's DI (and ConfigService) exist, so
+/// this can't just inject ConfigService the way a normal provider would.
+const socketCorsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:8765').split(',').map((o) => o.trim());
+
 /// Real-time delivery for chat — previously a thread's messages only ever
 /// loaded once, when the screen opened, with no polling and no push, so a
 /// message sent by the other party while you were already looking at the
@@ -25,7 +31,7 @@ import { JwtPayload } from '../auth/strategies/jwt.strategy';
 /// (called by ChatController right after ChatService persists a message)
 /// emits into the *other* participants' rooms, not the sender's own, so a
 /// message never bounces back to whoever just sent it.
-@WebSocketGateway({ cors: true })
+@WebSocketGateway({ cors: { origin: socketCorsOrigins, credentials: true } })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;

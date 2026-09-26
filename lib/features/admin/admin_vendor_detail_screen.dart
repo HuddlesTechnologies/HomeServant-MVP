@@ -126,16 +126,16 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
   Future<void> _toggleSuspend(AdminVendorDetail vendor) async {
     final reason = await showAdminReasonSheet(
       context,
-      title: vendor.isActive ? 'Suspend ${vendor.businessName}?' : 'Unsuspend ${vendor.businessName}?',
-      body: vendor.isActive
+      title: !vendor.isSuspended ? 'Suspend ${vendor.businessName}?' : 'Unsuspend ${vendor.businessName}?',
+      body: !vendor.isSuspended
           ? 'Their products will be hidden from the Marketplace until unsuspended. An email will be sent to the vendor with your reason.'
           : 'Their products will become visible in the Marketplace again. An email will be sent to the vendor with your reason.',
-      actionLabel: vendor.isActive ? 'Suspend' : 'Unsuspend',
+      actionLabel: !vendor.isSuspended ? 'Suspend' : 'Unsuspend',
     );
     if (reason == null || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      if (vendor.isActive) {
+      if (!vendor.isSuspended) {
         await context.read<AppState>().admin.suspendVendor(vendor.id, reason: reason);
       } else {
         await context.read<AppState>().admin.unsuspendVendor(vendor.id, reason: reason);
@@ -175,7 +175,7 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                               child: Text(vendor.businessName, style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
                             ),
                             _Badge(text: vendor.status.label, color: AppColors.navy),
-                            if (!vendor.isActive) ...[
+                            if (vendor.isSuspended) ...[
                               const SizedBox(width: 6),
                               const _Badge(text: 'Suspended', color: Colors.redAccent),
                             ],
@@ -327,11 +327,11 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                         onPressed: () => _toggleSuspend(vendor),
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size.fromHeight(48),
-                          side: BorderSide(color: vendor.isActive ? Colors.redAccent : AppColors.navy),
+                          side: BorderSide(color: !vendor.isSuspended ? Colors.redAccent : AppColors.navy),
                         ),
                         child: Text(
-                          vendor.isActive ? 'Suspend' : 'Unsuspend',
-                          style: TextStyle(color: vendor.isActive ? Colors.redAccent : AppColors.navy),
+                          !vendor.isSuspended ? 'Suspend' : 'Unsuspend',
+                          style: TextStyle(color: !vendor.isSuspended ? Colors.redAccent : AppColors.navy),
                         ),
                       ),
                   ],

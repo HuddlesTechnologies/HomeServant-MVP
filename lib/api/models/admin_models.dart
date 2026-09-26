@@ -400,6 +400,7 @@ class AdminVendor {
     required this.state,
     required this.status,
     required this.isActive,
+    this.suspendedAt,
     this.rejectionReason,
     this.ownerEmail,
     this.ownerName,
@@ -414,11 +415,18 @@ class AdminVendor {
   final String state;
   final VendorApplicationStatus status;
   final bool isActive;
+
+  /// Set by an admin (suspendVendor/unsuspendVendor) — distinct from
+  /// [isActive], which is the vendor's own "Deactivate Shop" toggle. Use
+  /// this, not [isActive], to drive the admin Suspend/Unsuspend UI.
+  final DateTime? suspendedAt;
   final String? rejectionReason;
   final String? ownerEmail;
   final String? ownerName;
   final String? ownerPhone;
   final DateTime createdAt;
+
+  bool get isSuspended => suspendedAt != null;
 
   factory AdminVendor.fromApi(Map<String, dynamic> json) {
     final user = json['user'] as Map<String, dynamic>?;
@@ -430,6 +438,7 @@ class AdminVendor {
       state: json['state'] as String,
       status: VendorApplicationStatus.fromApi(json['status'] as String),
       isActive: json['isActive'] as bool? ?? true,
+      suspendedAt: json['suspendedAt'] != null ? DateTime.parse(json['suspendedAt'] as String) : null,
       rejectionReason: json['rejectionReason'] as String?,
       ownerEmail: user?['email'] as String?,
       ownerName: user?['fullName'] as String?,
@@ -514,6 +523,7 @@ class AdminVendorDetail {
     this.ownerEmail,
     required this.status,
     required this.isActive,
+    this.suspendedAt,
     this.rejectionReason,
     this.bankCode,
     this.bankName,
@@ -530,6 +540,11 @@ class AdminVendorDetail {
   final String? ownerEmail;
   final VendorApplicationStatus status;
   final bool isActive;
+
+  /// Set by an admin (suspendVendor/unsuspendVendor) — distinct from
+  /// [isActive], which is the vendor's own "Deactivate Shop" toggle. Use
+  /// this, not [isActive], to drive the admin Suspend/Unsuspend UI.
+  final DateTime? suspendedAt;
   final String? rejectionReason;
 
   /// The vendor's payout account, same shape as [VendorProfile]'s own
@@ -544,6 +559,8 @@ class AdminVendorDetail {
   final List<AdminVendorProduct> products;
   final List<AdminVendorOrder> orders;
 
+  bool get isSuspended => suspendedAt != null;
+
   factory AdminVendorDetail.fromApi(Map<String, dynamic> json) => AdminVendorDetail(
     id: json['id'] as String,
     businessName: json['businessName'] as String,
@@ -552,6 +569,7 @@ class AdminVendorDetail {
     ownerEmail: json['ownerEmail'] as String?,
     status: VendorApplicationStatus.fromApi(json['status'] as String),
     isActive: json['isActive'] as bool? ?? true,
+    suspendedAt: json['suspendedAt'] != null ? DateTime.parse(json['suspendedAt'] as String) : null,
     rejectionReason: json['rejectionReason'] as String?,
     bankCode: json['bankCode'] as String?,
     bankName: json['bankName'] as String?,

@@ -1,6 +1,7 @@
 import { Body, Controller, Headers, NotFoundException, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
+import { timingSafeEqual } from 'crypto';
 import { AdminService } from './admin.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 
@@ -28,11 +29,22 @@ export class AdminBootstrapController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('bootstrap')
   bootstrap(@Headers('x-admin-bootstrap-secret') secret: string | undefined, @Body() dto: CreateAdminDto) {
-    if (!secret || secret !== this.config.getOrThrow<string>('ADMIN_BOOTSTRAP_SECRET')) {
+    if (!secret || !this.isValidSecret(secret)) {
       // Same response whether the secret is missing or wrong — no
       // "close, but no" hint.
       throw new NotFoundException();
     }
     return this.admin.bootstrapFirstAdmin(dto);
+  }
+
+  /// Same timingSafeEqual pattern as PaystackService.verifyWebhookSignature
+  /// — plain `!==` would let an attacker recover ADMIN_BOOTSTRAP_SECRET
+  /// byte-by-byte via response-time measurements on this unauthenticated
+  /// route.
+  private isValidSecret(secret: string): boolean {
+    const expected = Buffer.from(this.config.getOrThrow<string>('ADMIN_BOOTSTRAP_SECRET'), 'utf8');
+    const given = Buffer.from(secret, 'utf8');
+    if (expected.length !== given.length) return false;
+    return timingSafeEqual(expected, given);
   }
 }

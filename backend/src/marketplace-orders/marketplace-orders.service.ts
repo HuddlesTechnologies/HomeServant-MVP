@@ -50,13 +50,13 @@ export class MarketplaceOrdersService {
     const productIds = dto.items.map((i) => i.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
-      include: { vendor: { select: { id: true, isActive: true } } },
+      include: { vendor: { select: { id: true, isActive: true, suspendedAt: true } } },
     });
     const byId = new Map(products.map((p) => [p.id, p]));
 
     for (const item of dto.items) {
       const product = byId.get(item.productId);
-      if (!product || !product.isAvailable || !product.vendor.isActive) {
+      if (!product || !product.isAvailable || !product.vendor.isActive || product.vendor.suspendedAt) {
         throw new NotFoundException(`Product ${item.productId} is no longer available`);
       }
       if (!product.fulfillmentOptions.includes(item.fulfillment)) {

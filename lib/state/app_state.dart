@@ -39,9 +39,10 @@ enum LoginOutcome { success, requiresTwoFactor, requiresReactivation }
 /// Owns the app's session (real, backed by the HomeServant API) plus a
 /// handful of device-local preferences (theme, notification toggles, app
 /// lock) that have no server home. Session data is never persisted to
-/// [SharedPreferences] — only the access/refresh tokens are (in the
-/// platform keychain, see [TokenStorage]); everything else about the
-/// signed-in user is re-fetched from the API on launch via [load].
+/// [SharedPreferences] — the access/refresh tokens and the app-lock PIN
+/// live in the platform keychain instead (see [TokenStorage]); everything
+/// else about the signed-in user is re-fetched from the API on launch via
+/// [load].
 class AppState extends ChangeNotifier {
   AppState() {
     _apiClient = ApiClient(_tokens)..onSessionExpired = _handleSessionExpired;
@@ -410,6 +411,7 @@ class AppState extends ChangeNotifier {
     bannerAutoDismiss = true;
     appLockEnabled = false;
     appLockPin = null;
+    unawaited(_tokens.clearAppLockPin());
     dashboardTheme = DashboardTheme.classic;
     notifyListeners();
     AppIconService.apply(dashboardTheme);
@@ -788,12 +790,14 @@ class AppState extends ChangeNotifier {
   void enableAppLock(String pin) {
     appLockEnabled = true;
     appLockPin = pin;
+    unawaited(_tokens.saveAppLockPin(pin));
     notifyListeners();
   }
 
   void disableAppLock() {
     appLockEnabled = false;
     appLockPin = null;
+    unawaited(_tokens.clearAppLockPin());
     notifyListeners();
   }
 
@@ -825,7 +829,9 @@ class AppState extends ChangeNotifier {
     'promotionalNotifications': promotionalNotifications,
     'bannerAutoDismiss': bannerAutoDismiss,
     'appLockEnabled': appLockEnabled,
-    'appLockPin': appLockPin,
+    // appLockPin is deliberately excluded — it lives in TokenStorage
+    // (secure storage), not this plaintext SharedPreferences blob. See
+    // [load]/[enableAppLock]/[disableAppLock].
   };
 
   void _fromJson(Map<String, dynamic> json) {
@@ -840,7 +846,7 @@ class AppState extends ChangeNotifier {
     promotionalNotifications = json['promotionalNotifications'] as bool? ?? false;
     bannerAutoDismiss = json['bannerAutoDismiss'] as bool? ?? true;
     appLockEnabled = json['appLockEnabled'] as bool? ?? false;
-    appLockPin = json['appLockPin'] as String?;
+    // appLockPin is restored separately from secure storage — see [load].
   }
 
   Future<void> _save() async {
@@ -854,11 +860,33 @@ class AppState extends ChangeNotifier {
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
+    Map<String, dynamic>? decoded;
     if (raw != null) {
       try {
-        _fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        decoded = jsonDecode(raw) as Map<String, dynamic>;
+        _fromJson(decoded);
       } catch (_) {
         // Corrupt/incompatible saved state — ignore it and keep defaults.
+      }
+    }
+
+    if (appLockEnabled) {
+      appLockPin = await _tokens.readAppLockPin();
+      // One-time migration for installs saved before the PIN moved to
+      // secure storage: a legacy plaintext copy may still be in this JSON
+      // blob. Adopt it into secure storage once; the field is no longer
+      // written by [_toJson], so it naturally drops out of the file on the
+      // next save. If neither source has a PIN, app lock can't be honored,
+      // so turn it back off rather than locking the user out with nothing
+      // to check against.
+      if (appLockPin == null) {
+        final legacyPin = decoded?['appLockPin'] as String?;
+        if (legacyPin != null) {
+          appLockPin = legacyPin;
+          unawaited(_tokens.saveAppLockPin(legacyPin));
+        } else {
+          appLockEnabled = false;
+        }
       }
     }
 

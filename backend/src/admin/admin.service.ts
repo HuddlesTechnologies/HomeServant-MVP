@@ -568,6 +568,7 @@ export class AdminService {
       ownerEmail: vendor.user.email,
       status: vendor.status,
       isActive: vendor.isActive,
+      suspendedAt: vendor.suspendedAt,
       rejectionReason: vendor.rejectionReason,
       bankCode: vendor.bankCode,
       bankName: vendor.bankName,
@@ -589,7 +590,7 @@ export class AdminService {
 
   async suspendVendor(id: string, reason: string) {
     const vendor = await this.requireVendor(id);
-    const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { isActive: false } });
+    const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { suspendedAt: new Date() } });
     await this.notifications.create(
       vendor.userId,
       NotificationType.VENDOR_SUSPENDED,
@@ -607,7 +608,7 @@ export class AdminService {
 
   async unsuspendVendor(id: string, reason: string) {
     const vendor = await this.requireVendor(id);
-    const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { isActive: true } });
+    const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { suspendedAt: null } });
     await this.notifications.create(
       vendor.userId,
       NotificationType.VENDOR_UNSUSPENDED,

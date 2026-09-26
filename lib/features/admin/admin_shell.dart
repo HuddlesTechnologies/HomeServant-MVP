@@ -174,32 +174,73 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 
-  static const _baseTabs = [
+  // Only 4 destinations sit in the persistent bottom nav (the 5th slot is
+  // "More") — Apple's HIG caps a tab bar at 5 items and folds the rest into
+  // a "More" tab (exactly what UIKit's UITabBarController does on its own
+  // past 5 children); everything past that count reads as clutter and
+  // starts pushing labels to truncate on smaller phones. These four are the
+  // areas most likely to need a quick check-in; Properties, Marketplace,
+  // Messages, and (conditionally) Admins move into the "More" sheet below.
+  static const _primaryTabs = [
     AdminDashboardTab(),
     AdminUsersTab(),
     AdminVendorsTab(),
-    AdminPropertiesTab(),
-    AdminMarketplaceTab(),
     AdminReportsTab(),
-    AdminMessagesTab(),
   ];
 
   /// Not `static const` like the old list — the Reports destination's icon
   /// carries a live open-reports-count badge (`_openReportsCount`), so this
   /// has to be rebuilt from instance state rather than fixed at compile time.
-  List<NavigationDestination> get _baseDestinations => [
+  List<NavigationDestination> get _primaryDestinations => [
     const NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
     const NavigationDestination(icon: Icon(Icons.people_outline_rounded), selectedIcon: Icon(Icons.people_rounded), label: 'Users'),
     const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Vendors'),
-    const NavigationDestination(icon: Icon(Icons.home_work_outlined), selectedIcon: Icon(Icons.home_work_rounded), label: 'Properties'),
-    const NavigationDestination(icon: Icon(Icons.shopping_bag_outlined), selectedIcon: Icon(Icons.shopping_bag_rounded), label: 'Marketplace'),
     NavigationDestination(
       icon: _badgedIcon(Icons.flag_outlined, _openReportsCount),
       selectedIcon: _badgedIcon(Icons.flag_rounded, _openReportsCount),
       label: 'Reports',
     ),
-    const NavigationDestination(icon: Icon(Icons.forum_outlined), selectedIcon: Icon(Icons.forum_rounded), label: 'Messages'),
   ];
+
+  /// One entry per screen folded into the "More" tab — pushed on top of the
+  /// shell via Navigator rather than kept in the IndexedStack, same as a
+  /// native "More" list pushing into its own detail screens.
+  List<_MoreItem> _moreItems(bool canSeeAdmins) => [
+    const _MoreItem(icon: Icons.home_work_outlined, label: 'Properties', builder: AdminPropertiesTab.new),
+    const _MoreItem(icon: Icons.shopping_bag_outlined, label: 'Marketplace', builder: AdminMarketplaceTab.new),
+    const _MoreItem(icon: Icons.forum_outlined, label: 'Messages', builder: AdminMessagesTab.new),
+    if (canSeeAdmins) const _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', builder: AdminAdminsTab.new),
+  ];
+
+  void _openMoreSheet(BuildContext context, bool canSeeAdmins) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+              child: Text('More', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+            ),
+            for (final item in _moreItems(canSeeAdmins))
+              ListTile(
+                leading: Icon(item.icon, color: AppColors.navy),
+                title: Text(item.label, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 
   /// Numeric unread/open-count badge matching the style the vendor
   /// dashboard's bell already uses (`VendorDashboardScreen`'s
@@ -238,28 +279,17 @@ class _AdminShellState extends State<AdminShell> {
   @override
   Widget build(BuildContext context) {
     final canSeeAdmins = context.watch<AppState>().adminLevel?.atLeastModerator ?? false;
-    final tabs = canSeeAdmins ? [..._baseTabs, const AdminAdminsTab()] : _baseTabs;
-    final destinations = canSeeAdmins
-        ? [
-            ..._baseDestinations,
-            const NavigationDestination(
-              icon: Icon(Icons.admin_panel_settings_outlined),
-              selectedIcon: Icon(Icons.admin_panel_settings_rounded),
-              label: 'Admins',
-            ),
-          ]
-        : _baseDestinations;
-    final index = _index >= tabs.length ? 0 : _index;
+    final index = _index >= _primaryTabs.length ? 0 : _index;
 
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _resetIdleTimer(),
       onPointerSignal: (_) => _resetIdleTimer(),
-      child: _buildScaffold(context, tabs, destinations, index),
+      child: _buildScaffold(context, canSeeAdmins, index),
     );
   }
 
-  Widget _buildScaffold(BuildContext context, List<Widget> tabs, List<NavigationDestination> destinations, int index) {
+  Widget _buildScaffold(BuildContext context, bool canSeeAdmins, int index) {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
@@ -293,14 +323,52 @@ class _AdminShellState extends State<AdminShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: index, children: tabs),
+      body: IndexedStack(index: index, children: _primaryTabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (value) => setState(() => _index = value),
+        onDestinationSelected: (value) {
+          if (value == _primaryTabs.length) {
+            _openMoreSheet(context, canSeeAdmins);
+            return;
+          }
+          setState(() => _index = value);
+        },
         backgroundColor: Colors.white,
         indicatorColor: AppColors.navy.withValues(alpha: 0.1),
-        destinations: destinations,
+        destinations: [
+          ..._primaryDestinations,
+          const NavigationDestination(icon: Icon(Icons.more_horiz_rounded), selectedIcon: Icon(Icons.more_horiz_rounded), label: 'More'),
+        ],
       ),
+    );
+  }
+}
+
+/// One screen folded into the admin console's "More" tab.
+class _MoreItem {
+  const _MoreItem({required this.icon, required this.label, required this.builder});
+
+  final IconData icon;
+  final String label;
+  final Widget Function() builder;
+}
+
+class _MoreScreen extends StatelessWidget {
+  const _MoreScreen({required this.item});
+
+  final _MoreItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.offWhite,
+      appBar: AppBar(
+        backgroundColor: AppColors.navy,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(item.label, style: AppTextStyles.heading(color: Colors.white, size: 18)),
+      ),
+      body: item.builder(),
     );
   }
 }

@@ -695,10 +695,15 @@ model VendorProfile {
   bankName      String?
   accountNumber String?
   accountName   String?
-  /// Self-service pause ("Deactivate Shop") and admin suspension both use
-  /// this — distinct from [status] below, which is the one-time
-  /// onboarding moderation gate.
+  /// Vendor's own "Deactivate Shop" toggle — distinct from [status] below
+  /// (the one-time onboarding moderation gate) and from [suspendedAt]
+  /// (admin moderation). A shop is visible only when both this is true
+  /// AND [suspendedAt] is null — see MarketplaceProductsService.findMany.
   isActive      Boolean             @default(true)
+  /// Set by an admin via suspendVendor/cleared via unsuspendVendor. Kept
+  /// separate from [isActive] so a suspended vendor can't undo the
+  /// suspension themselves through the self-service toggle.
+  suspendedAt   DateTime?
   /// New vendors start PENDING and aren't shown in the public product
   /// feed (see MarketplaceProductsService.findMany) until an admin
   /// approves them. Existing vendors from before this field was added

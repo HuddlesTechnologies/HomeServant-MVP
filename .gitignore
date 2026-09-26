@@ -4,6 +4,7 @@
 *.pyc
 *.swp
 .DS_Store
+vercel-debug.txt
 .buildlog/
 .history
 .svn/
