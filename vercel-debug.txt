@@ -1,0 +1,1579 @@
+Domain to test (e.g. example.com): 
+┌───────────────────────────────────────
+├─────── Fetching IP Addresses
+│
+│ homeservant.online IP range: 76.76.21.21, 76.76.21.9, 76.76.21.22, 76.76.21.241, 76.76.21.164, 76.76.21.142, 76.76.21.61, 76.76.21.93, 76.76.21.123, 76.76.21.98, 76.223.126.88, 66.33.60.33, 66.33.60.65, 66.33.60.129, 66.33.60.193, 66.33.60.34, 66.33.60.66, 66.33.60.130, 66.33.60.194, 66.33.60.35, 66.33.60.67
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── STARTING
+│
+│ Domain to test: homeservant.online 
+│ Timestamp (UTC): Sat Sep 26 00:17:55 UTC 2026
+│ Timestamp (Local): Sat Sep 26 01:17:55 WAT 2026
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── IP Information 
+
+{
+  "ip": "102.89.83.231",
+  "city": "Lagos",
+  "region": "Lagos",
+  "country": "NG",
+  "loc": "6.4541,3.3947",
+  "org": "AS29465 MTN NIGERIA Communication limited",
+  "timezone": "Africa/Lagos",
+  "readme": "https://ipinfo.io/missingauth"
+}
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.21 
+Checking headers via 76.76.21.21
+* Connecting to hostname: 76.76.21.21
+*   Trying 76.76.21.21:443...
+* Connection timed out after 3009 milliseconds
+* Closing connection
+
+Checking ping to 76.76.21.21
+PING 76.76.21.21 (76.76.21.21): 56 data bytes
+Request timeout for icmp_seq 0
+Request timeout for icmp_seq 1
+Request timeout for icmp_seq 2
+
+--- 76.76.21.21 ping statistics ---
+4 packets transmitted, 0 packets received, 100.0% packet loss
+
+Checking tracert to 76.76.21.21
+ 1  192.168.0.1 (192.168.0.1)  56.544 ms  6.571 ms  8.929 ms
+ 2  10.9.165.1 (10.9.165.1)  28.930 ms  28.386 ms  34.209 ms
+ 3  10.9.232.121 (10.9.232.121)  26.995 ms  25.949 ms  32.921 ms
+ 4  * * *
+ 5  * * *
+ 6  * * *
+ 7  * * *
+ 8  * * *
+ 9  * * *
+10  * * *
+11  * * *
+12  * * *
+13  * * *
+14  * * *
+15  * * *
+16  * * *
+17  * * *
+18  * * *
+19  * * *
+20  * * *
+21  * * *
+22  * * *
+23  * * *
+24  * * *
+25  * * *
+26  * * *
+27  * * *
+28  * * *
+29  * * *
+30  * * *
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.9 
+Checking headers via 76.76.21.9
+* Connecting to hostname: 76.76.21.9
+*   Trying 76.76.21.9:443...
+* Connected to 76.76.21.9 (76.76.21.9) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 0
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:19:37 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: MISS
+< x-vercel-id: cpt1::5cdq4-1790381977645-5e47fbd35340
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.9 left intact
+
+Checking ping to 76.76.21.9
+PING 76.76.21.9 (76.76.21.9): 56 data bytes
+64 bytes from 76.76.21.9: icmp_seq=0 ttl=243 time=85.247 ms
+64 bytes from 76.76.21.9: icmp_seq=1 ttl=243 time=87.914 ms
+64 bytes from 76.76.21.9: icmp_seq=2 ttl=243 time=84.182 ms
+64 bytes from 76.76.21.9: icmp_seq=3 ttl=243 time=170.793 ms
+
+--- 76.76.21.9 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 84.182/107.034/170.793/36.836 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.22 
+Checking headers via 76.76.21.22
+* Connecting to hostname: 76.76.21.22
+*   Trying 76.76.21.22:443...
+* Connected to 76.76.21.22 (76.76.21.22) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 3
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:19:41 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::qsw5z-1790381981452-898cdb03c041
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.22 left intact
+
+Checking ping to 76.76.21.22
+PING 76.76.21.22 (76.76.21.22): 56 data bytes
+64 bytes from 76.76.21.22: icmp_seq=0 ttl=243 time=54.625 ms
+64 bytes from 76.76.21.22: icmp_seq=1 ttl=243 time=108.766 ms
+64 bytes from 76.76.21.22: icmp_seq=2 ttl=243 time=45.055 ms
+64 bytes from 76.76.21.22: icmp_seq=3 ttl=243 time=82.350 ms
+
+--- 76.76.21.22 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 45.055/72.699/108.766/24.924 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.241 
+Checking headers via 76.76.21.241
+* Connecting to hostname: 76.76.21.241
+*   Trying 76.76.21.241:443...
+* Connected to 76.76.21.241 (76.76.21.241) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 6
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:19:44 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::4bnbk-1790381984878-7529896b725a
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.241 left intact
+
+Checking ping to 76.76.21.241
+PING 76.76.21.241 (76.76.21.241): 56 data bytes
+64 bytes from 76.76.21.241: icmp_seq=0 ttl=242 time=29.360 ms
+64 bytes from 76.76.21.241: icmp_seq=1 ttl=242 time=34.985 ms
+64 bytes from 76.76.21.241: icmp_seq=2 ttl=242 time=58.270 ms
+64 bytes from 76.76.21.241: icmp_seq=3 ttl=242 time=83.530 ms
+
+--- 76.76.21.241 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 29.360/51.536/83.530/21.417 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.164 
+Checking headers via 76.76.21.164
+* Connecting to hostname: 76.76.21.164
+*   Trying 76.76.21.164:443...
+* Connected to 76.76.21.164 (76.76.21.164) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 10
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:19:48 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::c49hp-1790381988535-9ec0cfb2c6aa
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.164 left intact
+
+Checking ping to 76.76.21.164
+PING 76.76.21.164 (76.76.21.164): 56 data bytes
+64 bytes from 76.76.21.164: icmp_seq=0 ttl=242 time=32.375 ms
+64 bytes from 76.76.21.164: icmp_seq=1 ttl=242 time=61.138 ms
+64 bytes from 76.76.21.164: icmp_seq=2 ttl=242 time=36.047 ms
+64 bytes from 76.76.21.164: icmp_seq=3 ttl=242 time=82.702 ms
+
+--- 76.76.21.164 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 32.375/53.066/82.702/20.379 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.142 
+Checking headers via 76.76.21.142
+* Connecting to hostname: 76.76.21.142
+*   Trying 76.76.21.142:443...
+* Connected to 76.76.21.142 (76.76.21.142) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 14
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:19:52 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::kt7k8-1790381992300-22ed7f7eb02f
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.142 left intact
+
+Checking ping to 76.76.21.142
+PING 76.76.21.142 (76.76.21.142): 56 data bytes
+64 bytes from 76.76.21.142: icmp_seq=0 ttl=243 time=27.220 ms
+64 bytes from 76.76.21.142: icmp_seq=1 ttl=243 time=580.960 ms
+64 bytes from 76.76.21.142: icmp_seq=2 ttl=243 time=42.291 ms
+64 bytes from 76.76.21.142: icmp_seq=3 ttl=243 time=66.481 ms
+
+--- 76.76.21.142 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 27.220/179.238/580.960/232.357 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.61 
+Checking headers via 76.76.21.61
+* Connecting to hostname: 76.76.21.61
+*   Trying 76.76.21.61:443...
+* Connected to 76.76.21.61 (76.76.21.61) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 17
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:19:55 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::4ld54-1790381995858-2953fdb13a66
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.61 left intact
+
+Checking ping to 76.76.21.61
+PING 76.76.21.61 (76.76.21.61): 56 data bytes
+64 bytes from 76.76.21.61: icmp_seq=0 ttl=243 time=48.690 ms
+64 bytes from 76.76.21.61: icmp_seq=1 ttl=243 time=48.307 ms
+64 bytes from 76.76.21.61: icmp_seq=2 ttl=243 time=35.007 ms
+64 bytes from 76.76.21.61: icmp_seq=3 ttl=243 time=61.792 ms
+
+--- 76.76.21.61 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 35.007/48.449/61.792/9.471 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.93 
+Checking headers via 76.76.21.93
+* Connecting to hostname: 76.76.21.93
+*   Trying 76.76.21.93:443...
+* Connection timed out after 3006 milliseconds
+* Closing connection
+
+Checking ping to 76.76.21.93
+PING 76.76.21.93 (76.76.21.93): 56 data bytes
+Request timeout for icmp_seq 0
+Request timeout for icmp_seq 1
+Request timeout for icmp_seq 2
+
+--- 76.76.21.93 ping statistics ---
+4 packets transmitted, 0 packets received, 100.0% packet loss
+
+Checking tracert to 76.76.21.93
+ 1  192.168.0.1 (192.168.0.1)  522.905 ms  7.045 ms  6.628 ms
+ 2  10.9.165.2 (10.9.165.2)  27.277 ms  30.705 ms  26.427 ms
+ 3  10.9.232.125 (10.9.232.125)  34.010 ms  38.016 ms  243.368 ms
+ 4  * * *
+ 5  * * *
+ 6  * * *
+ 7  * * *
+ 8  * * *
+ 9  * * *
+10  * * *
+11  * * *
+12  * * *
+13  * * *
+14  * * *
+15  * * *
+16  * * *
+17  * * *
+18  * * *
+19  * * *
+20  * * *
+21  * * *
+22  * * *
+23  * * *
+24  * * *
+25  * * *
+26  * * *
+27  * * *
+28  * * *
+29  * * *
+30  * * *
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.123 
+Checking headers via 76.76.21.123
+* Connecting to hostname: 76.76.21.123
+*   Trying 76.76.21.123:443...
+* Connected to 76.76.21.123 (76.76.21.123) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 121
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:21:39 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::vpdcp-1790382099118-c841a3c047f6
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.123 left intact
+
+Checking ping to 76.76.21.123
+PING 76.76.21.123 (76.76.21.123): 56 data bytes
+64 bytes from 76.76.21.123: icmp_seq=0 ttl=242 time=80.590 ms
+64 bytes from 76.76.21.123: icmp_seq=1 ttl=242 time=85.583 ms
+64 bytes from 76.76.21.123: icmp_seq=2 ttl=242 time=92.742 ms
+64 bytes from 76.76.21.123: icmp_seq=3 ttl=242 time=84.841 ms
+
+--- 76.76.21.123 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 80.590/85.939/92.742/4.365 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.76.21.98 
+Checking headers via 76.76.21.98
+* Connecting to hostname: 76.76.21.98
+*   Trying 76.76.21.98:443...
+* Connected to 76.76.21.98 (76.76.21.98) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 124
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:21:42 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::vj5s9-1790382102542-35dec99d99ec
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.76.21.98 left intact
+
+Checking ping to 76.76.21.98
+PING 76.76.21.98 (76.76.21.98): 56 data bytes
+64 bytes from 76.76.21.98: icmp_seq=0 ttl=242 time=35.546 ms
+64 bytes from 76.76.21.98: icmp_seq=1 ttl=242 time=84.836 ms
+64 bytes from 76.76.21.98: icmp_seq=2 ttl=242 time=85.929 ms
+64 bytes from 76.76.21.98: icmp_seq=3 ttl=242 time=31.048 ms
+
+--- 76.76.21.98 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 31.048/59.340/85.929/26.094 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 76.223.126.88 
+Checking headers via 76.223.126.88
+* Connecting to hostname: 76.223.126.88
+*   Trying 76.223.126.88:443...
+* Connected to 76.223.126.88 (76.223.126.88) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 128
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:21:45 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::vj5s9-1790382105937-4b7194be5c75
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 76.223.126.88 left intact
+
+Checking ping to 76.223.126.88
+PING 76.223.126.88 (76.223.126.88): 56 data bytes
+64 bytes from 76.223.126.88: icmp_seq=0 ttl=243 time=50.623 ms
+64 bytes from 76.223.126.88: icmp_seq=1 ttl=243 time=36.359 ms
+64 bytes from 76.223.126.88: icmp_seq=2 ttl=243 time=37.052 ms
+64 bytes from 76.223.126.88: icmp_seq=3 ttl=243 time=32.121 ms
+
+--- 76.223.126.88 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 32.121/39.039/50.623/6.949 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.33 
+Checking headers via 66.33.60.33
+* Connecting to hostname: 66.33.60.33
+*   Trying 66.33.60.33:443...
+* Connection timed out after 3002 milliseconds
+* Closing connection
+
+Checking ping to 66.33.60.33
+PING 66.33.60.33 (66.33.60.33): 56 data bytes
+64 bytes from 66.33.60.33: icmp_seq=0 ttl=243 time=97.079 ms
+64 bytes from 66.33.60.33: icmp_seq=1 ttl=243 time=51.858 ms
+64 bytes from 66.33.60.33: icmp_seq=2 ttl=243 time=46.991 ms
+64 bytes from 66.33.60.33: icmp_seq=3 ttl=243 time=30.965 ms
+
+--- 66.33.60.33 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 30.965/56.723/97.079/24.548 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.65 
+Checking headers via 66.33.60.65
+* Connecting to hostname: 66.33.60.65
+*   Trying 66.33.60.65:443...
+* Connected to 66.33.60.65 (66.33.60.65) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 137
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:21:55 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::jqk4j-1790382115617-ea35e5e32727
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.65 left intact
+
+Checking ping to 66.33.60.65
+PING 66.33.60.65 (66.33.60.65): 56 data bytes
+64 bytes from 66.33.60.65: icmp_seq=0 ttl=242 time=34.612 ms
+64 bytes from 66.33.60.65: icmp_seq=1 ttl=242 time=39.805 ms
+64 bytes from 66.33.60.65: icmp_seq=2 ttl=242 time=28.883 ms
+64 bytes from 66.33.60.65: icmp_seq=3 ttl=242 time=56.981 ms
+
+--- 66.33.60.65 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 28.883/40.070/56.981/10.500 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.129 
+Checking headers via 66.33.60.129
+* Connecting to hostname: 66.33.60.129
+*   Trying 66.33.60.129:443...
+* Connected to 66.33.60.129 (66.33.60.129) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 141
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:21:59 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::c49hp-1790382119032-f73289212e2d
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.129 left intact
+
+Checking ping to 66.33.60.129
+PING 66.33.60.129 (66.33.60.129): 56 data bytes
+64 bytes from 66.33.60.129: icmp_seq=0 ttl=242 time=119.917 ms
+64 bytes from 66.33.60.129: icmp_seq=1 ttl=242 time=166.830 ms
+64 bytes from 66.33.60.129: icmp_seq=2 ttl=242 time=213.072 ms
+64 bytes from 66.33.60.129: icmp_seq=3 ttl=242 time=31.968 ms
+
+--- 66.33.60.129 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 31.968/132.947/213.072/66.960 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.193 
+Checking headers via 66.33.60.193
+* Connecting to hostname: 66.33.60.193
+*   Trying 66.33.60.193:443...
+* Connected to 66.33.60.193 (66.33.60.193) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 144
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:22:02 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::fc4fp-1790382122504-c2b901a614aa
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.193 left intact
+
+Checking ping to 66.33.60.193
+PING 66.33.60.193 (66.33.60.193): 56 data bytes
+64 bytes from 66.33.60.193: icmp_seq=0 ttl=243 time=33.141 ms
+64 bytes from 66.33.60.193: icmp_seq=1 ttl=243 time=34.702 ms
+64 bytes from 66.33.60.193: icmp_seq=2 ttl=243 time=43.370 ms
+64 bytes from 66.33.60.193: icmp_seq=3 ttl=243 time=48.619 ms
+
+--- 66.33.60.193 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 33.141/39.958/48.619/6.339 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.34 
+Checking headers via 66.33.60.34
+* Connecting to hostname: 66.33.60.34
+*   Trying 66.33.60.34:443...
+* Connected to 66.33.60.34 (66.33.60.34) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 148
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:22:06 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::kt7k8-1790382126119-37d28f9dbb26
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.34 left intact
+
+Checking ping to 66.33.60.34
+PING 66.33.60.34 (66.33.60.34): 56 data bytes
+64 bytes from 66.33.60.34: icmp_seq=0 ttl=243 time=35.863 ms
+64 bytes from 66.33.60.34: icmp_seq=1 ttl=243 time=149.655 ms
+64 bytes from 66.33.60.34: icmp_seq=2 ttl=243 time=39.885 ms
+64 bytes from 66.33.60.34: icmp_seq=3 ttl=243 time=41.421 ms
+
+--- 66.33.60.34 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 35.863/66.706/149.655/47.934 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.66 
+Checking headers via 66.33.60.66
+* Connecting to hostname: 66.33.60.66
+*   Trying 66.33.60.66:443...
+* Connected to 66.33.60.66 (66.33.60.66) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 151
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:22:09 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::pmblj-1790382129502-ac22e91c3c42
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.66 left intact
+
+Checking ping to 66.33.60.66
+PING 66.33.60.66 (66.33.60.66): 56 data bytes
+64 bytes from 66.33.60.66: icmp_seq=0 ttl=242 time=123.701 ms
+64 bytes from 66.33.60.66: icmp_seq=1 ttl=242 time=86.805 ms
+Request timeout for icmp_seq 2
+64 bytes from 66.33.60.66: icmp_seq=3 ttl=242 time=95.260 ms
+
+--- 66.33.60.66 ping statistics ---
+4 packets transmitted, 3 packets received, 25.0% packet loss
+round-trip min/avg/max/stddev = 86.805/101.922/123.701/15.782 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.130 
+Checking headers via 66.33.60.130
+* Connecting to hostname: 66.33.60.130
+*   Trying 66.33.60.130:443...
+* Connected to 66.33.60.130 (66.33.60.130) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 157
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:22:15 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::jqk4j-1790382135032-692b5728e211
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.130 left intact
+
+Checking ping to 66.33.60.130
+PING 66.33.60.130 (66.33.60.130): 56 data bytes
+64 bytes from 66.33.60.130: icmp_seq=0 ttl=242 time=82.622 ms
+Request timeout for icmp_seq 1
+64 bytes from 66.33.60.130: icmp_seq=2 ttl=242 time=49.478 ms
+
+--- 66.33.60.130 ping statistics ---
+4 packets transmitted, 2 packets received, 50.0% packet loss
+round-trip min/avg/max/stddev = 49.478/66.050/82.622/16.572 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.194 
+Checking headers via 66.33.60.194
+* Connecting to hostname: 66.33.60.194
+*   Trying 66.33.60.194:443...
+* Connected to 66.33.60.194 (66.33.60.194) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 162
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:22:20 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::qsw5z-1790382140413-f6755f2fff8d
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.194 left intact
+
+Checking ping to 66.33.60.194
+PING 66.33.60.194 (66.33.60.194): 56 data bytes
+64 bytes from 66.33.60.194: icmp_seq=0 ttl=243 time=46.063 ms
+64 bytes from 66.33.60.194: icmp_seq=1 ttl=243 time=41.495 ms
+64 bytes from 66.33.60.194: icmp_seq=2 ttl=243 time=40.069 ms
+64 bytes from 66.33.60.194: icmp_seq=3 ttl=243 time=372.552 ms
+
+--- 66.33.60.194 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 40.069/125.045/372.552/142.916 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.35 
+Checking headers via 66.33.60.35
+* Connecting to hostname: 66.33.60.35
+*   Trying 66.33.60.35:443...
+* Connected to 66.33.60.35 (66.33.60.35) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 166
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:22:24 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::4bnbk-1790382144352-ef5e2b49c9a9
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.35 left intact
+
+Checking ping to 66.33.60.35
+PING 66.33.60.35 (66.33.60.35): 56 data bytes
+64 bytes from 66.33.60.35: icmp_seq=0 ttl=242 time=37.280 ms
+64 bytes from 66.33.60.35: icmp_seq=1 ttl=242 time=44.402 ms
+64 bytes from 66.33.60.35: icmp_seq=2 ttl=242 time=47.045 ms
+64 bytes from 66.33.60.35: icmp_seq=3 ttl=242 time=45.118 ms
+
+--- 66.33.60.35 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 37.280/43.461/47.045/3.697 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Testing 66.33.60.67 
+Checking headers via 66.33.60.67
+* Connecting to hostname: 66.33.60.67
+*   Trying 66.33.60.67:443...
+* Connected to 66.33.60.67 (66.33.60.67) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [323 bytes data]
+* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [4079 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [264 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-AES128-GCM-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=homeservant.online
+*  start date: Sep 23 09:55:15 2026 GMT
+*  expire date: Dec 22 09:55:14 2026 GMT
+*  issuer: C=US; O=Let's Encrypt; CN=YR2
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://homeservant.online/
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: homeservant.online]
+* [HTTP/2] [1] [:path: /]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET / HTTP/2
+> Host: homeservant.online
+> User-Agent: curl/8.7.1
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/2 200 
+< accept-ranges: bytes
+< access-control-allow-origin: *
+< age: 170
+< cache-control: public, max-age=0, must-revalidate
+< content-disposition: inline
+< content-type: text/html; charset=utf-8
+< date: Sat, 26 Sep 2026 00:22:27 GMT
+< etag: "10e190afbee5743e3436cb2a6c3846e3"
+< last-modified: Sat, 26 Sep 2026 00:19:37 GMT
+< server: Vercel
+< strict-transport-security: max-age=63072000
+< x-vercel-cache: HIT
+< x-vercel-id: cpt1::4ld54-1790382147947-7be0dbcc2148
+< content-length: 1469
+< 
+{ [1469 bytes data]
+* Connection #0 to host 66.33.60.67 left intact
+
+Checking ping to 66.33.60.67
+PING 66.33.60.67 (66.33.60.67): 56 data bytes
+64 bytes from 66.33.60.67: icmp_seq=0 ttl=243 time=72.235 ms
+64 bytes from 66.33.60.67: icmp_seq=1 ttl=243 time=26.911 ms
+64 bytes from 66.33.60.67: icmp_seq=2 ttl=243 time=41.027 ms
+64 bytes from 66.33.60.67: icmp_seq=3 ttl=243 time=40.149 ms
+
+--- 66.33.60.67 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 26.911/45.081/72.235/16.645 ms
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── dig homeservant.online 
+
+
+; <<>> DiG 9.10.6 <<>> homeservant.online
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 60113
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 4096
+;; QUESTION SECTION:
+;homeservant.online.		IN	A
+
+;; ANSWER SECTION:
+homeservant.online.	1698	IN	A	76.76.21.21
+
+;; Query time: 6 msec
+;; SERVER: 192.168.0.1#53(192.168.0.1)
+;; WHEN: Sat Sep 26 01:22:30 WAT 2026
+;; MSG SIZE  rcvd: 63
+
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── dig homeservant.online via 8.8.8.8
+
+
+; <<>> DiG 9.10.6 <<>> homeservant.online @8.8.8.8
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 38386
+;; flags: qr rd ra; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 512
+;; QUESTION SECTION:
+;homeservant.online.		IN	A
+
+;; ANSWER SECTION:
+homeservant.online.	1799	IN	A	76.76.21.21
+
+;; Query time: 145 msec
+;; SERVER: 8.8.8.8#53(8.8.8.8)
+;; WHEN: Sat Sep 26 01:22:31 WAT 2026
+;; MSG SIZE  rcvd: 63
+
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── dig homeservant.online via trace
+
+
+; <<>> DiG 9.10.6 <<>> homeservant.online +trace
+;; global options: +cmd
+.			427162	IN	NS	f.root-servers.net.
+.			427162	IN	NS	d.root-servers.net.
+.			427162	IN	NS	j.root-servers.net.
+.			427162	IN	NS	b.root-servers.net.
+.			427162	IN	NS	c.root-servers.net.
+.			427162	IN	NS	l.root-servers.net.
+.			427162	IN	NS	k.root-servers.net.
+.			427162	IN	NS	e.root-servers.net.
+.			427162	IN	NS	i.root-servers.net.
+.			427162	IN	NS	a.root-servers.net.
+.			427162	IN	NS	m.root-servers.net.
+.			427162	IN	NS	h.root-servers.net.
+.			427162	IN	NS	g.root-servers.net.
+.			427162	IN	RRSIG	NS 8 0 518400 20261008210000 20260925200000 57780 . G0Xrdp7z5CS5xpdEJ024AhmpfDlPUJqgxfyzbFzYZGCMqGDQg19gm6jX 8CvLm9Q9QMFIVK2qjQRD+HQCr+EX5RL6y4XlhoanEuBttjmlo1KUtF2i dpe1149vGns9FGAdNfqJUZVW4F3XGL2LpBptykTLgQrAtToI2yxpvo2C LB/xOSQopAQCpipRG6NDlZZOmigqPMgUMfXfIWIy/grTADg0Ohkb9YsD sPYQKrirYtPoe4UGbKjqCmog1t7nWLYcxx2U+JE1PU76qaUux8ARrs7J vnQAHLSBDxDVbjw+LYTf3EbeqmbhbUdSXX0794dyM1+MHmVd5dqFj0od cEuefw==
+;; Received 525 bytes from 192.168.0.1#53(192.168.0.1) in 249 ms
+
+online.			172800	IN	NS	ns10.trs-dns.info.
+online.			172800	IN	NS	ns10.trs-dns.org.
+online.			172800	IN	NS	ns01.trs-dns.com.
+online.			172800	IN	NS	ns01.trs-dns.net.
+online.			86400	IN	DS	30961 13 2 9292C8B10406684B2E89209014BF4E14AC8D277EF5B6FC36122B0B58 78ACD47E
+online.			86400	IN	RRSIG	DS 8 1 86400 20261008210000 20260925200000 57780 . knId7ZA4z+zYSevG/xsqOmSvgx9x3lFrfa9m0Skww5UOas/UzQdwTUFE FWRcBQsrsa+iOPzyv//VugMheMNwCwHjo+YME4JhSutph8oVSBETA28/ ypqBp7XpSnkTPdGUokX2fqmFXu8XLA2aEFV7UbjWeSbYP5cnHxxBrPP8 gU9jsxPEUWiKmtOvfKfOuPIY/v8zvnt5uNYqfOBg7+f/NOa3+r7DUPV5 Bl/nbw31yb8bTsMbn430BfNahRfYotKSnvQ3rR0h1sPunl8kxGySDpqf pfTRmv5wOpPTDTAgqaZJ0AZWXsRDHX2s7yRfd8FXiVhevBFbQCALMaNs OZGLCQ==
+;; Received 679 bytes from 192.112.36.4#53(g.root-servers.net) in 242 ms
+
+homeservant.online.	900	IN	NS	dns1.registrar-servers.com.
+homeservant.online.	900	IN	NS	dns2.registrar-servers.com.
+1RIBNBJB5KOKE6VEKOTIVTQ00V2EQSDJ.online. 300 IN	NSEC3 1 1 0 - 1RICI4P6VDH543P4MVS1QUDB86B7UNES  NS SOA RRSIG DNSKEY NSEC3PARAM
+1RIBNBJB5KOKE6VEKOTIVTQ00V2EQSDJ.online. 300 IN	RRSIG NSEC3 13 2 300 20261013000236 20260914065856 34647 online. hea0b8sIMxR7BhRT2efYiiO9RraJsVJvSS4N+gqUlcv9KdIH/Qfn92Or z8eREvJYRbO6o2WJ1/gNEvnB2XC3FA==
+EOEL8LU1SFHLFCAPLTSPO0D54UO7FFC7.online. 300 IN	NSEC3 1 1 0 - EOF4FREBCIJ2NQ0TR6PEQ1AKO1HNERBA  NS DS RRSIG
+EOEL8LU1SFHLFCAPLTSPO0D54UO7FFC7.online. 300 IN	RRSIG NSEC3 13 2 300 20261015224554 20260917142354 34647 online. o0sKN7TQfDwmSHSsUBR0PbIMMT0OL43tRFlcGmaGK1z1bVjpUxaDro6D p4nRTK8hHFCsUaYwG3hanJgGM1PinA==
+;; Received 469 bytes from 64.96.2.1#53(ns01.trs-dns.net) in 510 ms
+
+homeservant.online.	1799	IN	A	76.76.21.21
+homeservant.online.	1800	IN	NS	dns1.registrar-servers.com.
+homeservant.online.	1800	IN	NS	dns2.registrar-servers.com.
+;; Received 122 bytes from 156.154.132.200#53(dns1.registrar-servers.com) in 178 ms
+
+└───────────────────────────────────────
+
+┌───────────────────────────────────────
+├─────── Output of homeservant.online
+
