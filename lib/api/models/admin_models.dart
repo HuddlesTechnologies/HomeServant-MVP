@@ -323,6 +323,7 @@ class AdminUserProperty {
     required this.priceUnit,
     required this.isOccupied,
     required this.createdAt,
+    this.imageUrl,
   });
 
   final String id;
@@ -332,6 +333,7 @@ class AdminUserProperty {
   final String priceUnit;
   final bool isOccupied;
   final DateTime createdAt;
+  final String? imageUrl;
 
   factory AdminUserProperty.fromApi(Map<String, dynamic> json) => AdminUserProperty(
     id: json['id'] as String,
@@ -341,6 +343,7 @@ class AdminUserProperty {
     priceUnit: json['priceUnit'] as String,
     isOccupied: json['isOccupied'] as bool? ?? false,
     createdAt: DateTime.parse(json['createdAt'] as String),
+    imageUrl: json['imageUrl'] as String?,
   );
 }
 

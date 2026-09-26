@@ -485,6 +485,23 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: property.imageUrl != null
+                                        ? Image(
+                                            image: imageProviderForPath(property.imageUrl!),
+                                            width: 48,
+                                            height: 48,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Container(
+                                            width: 48,
+                                            height: 48,
+                                            color: AppColors.offWhite,
+                                            child: const Icon(Icons.home_outlined, color: AppColors.hintGrey, size: 20),
+                                          ),
+                                  ),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,

@@ -533,7 +533,7 @@ export class AdminService {
         vendorProfile: { select: { id: true, businessName: true, status: true, isActive: true } },
         _count: { select: { properties: true, bookings: true, marketplaceOrders: true, favorites: true, reviews: true } },
         properties: {
-          select: { id: true, listingNumber: true, title: true, price: true, priceUnit: true, isOccupied: true, createdAt: true },
+          select: { id: true, listingNumber: true, title: true, price: true, priceUnit: true, isOccupied: true, imageUrl: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         },
         bookings: {
