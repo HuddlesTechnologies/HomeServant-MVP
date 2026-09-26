@@ -96,25 +96,41 @@ const _preAuthPaths = {
 /// send an *already*-authenticated returning user (see Guard B below)
 /// straight to their dashboard instead of re-showing a login/signup form.
 ///
-/// Deliberately excludes verify-otp, login-2fa, signup-landlord and
-/// signup-tenant. Those four become "authenticated" mid-flow — the
-/// instant OTP verification or Google sign-in succeeds, AppState's
+/// Deliberately excludes verify-otp, login-2fa, login-landlord,
+/// login-tenant, signup-landlord and signup-tenant. Those six become
+/// "authenticated" mid-flow — the instant OTP verification, a plain
+/// email/password login, or Google sign-in succeeds, AppState's
 /// _applyUser sets userId and calls notifyListeners() synchronously,
 /// which is this router's refreshListenable, so `redirect` re-runs
-/// immediately, while state.matchedLocation is still one of those four
+/// immediately, while state.matchedLocation is still one of those six
 /// routes (refreshProfile()/_loadInitialData() are still in flight and
-/// the screen's own onVerified/onGoogleSignedIn callback hasn't run yet).
-/// If those four stayed in this bounce set, Guard B would win that race
-/// and dump the user straight on /dashboard, preempting the screen's own
-/// "go to the next step" navigation — e.g. skipping the profile-
-/// completion screens after signup OTP, or skipping the App Lock PIN gate
-/// after 2FA login.
+/// the screen's own onLoginSuccess/onVerified/onGoogleSignedIn callback
+/// hasn't run yet — for login-landlord/login-tenant specifically, that
+/// callback is what calls _proceedPastTwoFactor to go to /dashboard once
+/// refreshProfile() has actually populated gender/occupation/marital
+/// status). If these six stayed in this bounce set, Guard B would win
+/// that race and dump the user straight on /dashboard on that stale,
+/// partially-loaded AppState, preempting the screen's own "go to the
+/// next step" navigation — e.g. skipping the profile-completion screens
+/// after signup OTP, skipping the App Lock PIN gate after 2FA login, or
+/// (the bug this comment used to miss) sending a returning user with an
+/// already-complete profile through Guard C into /signup-tenant-2 or
+/// /signup-landlord-2 on *every* login, since Guard C would see
+/// gender/occupation/maritalStatus still null (not fetched yet, not
+/// actually missing) and — because that dead-end route isn't itself in
+/// this bounce set — leave them stranded there instead of ever reaching
+/// /dashboard.
+///
+/// The accepted tradeoff (same one already accepted for the other four):
+/// a web tab reloaded exactly on /login-tenant or /login-landlord with a
+/// still-valid session won't auto-bounce to /dashboard the way /login or
+/// /get-started would — the user would see the login form and have to
+/// navigate manually. Mobile never hits this, since it always cold-starts
+/// at initialLocation '/'.
 const _returningUserBouncePaths = {
   '/',
   '/get-started',
   '/login',
-  '/login-landlord',
-  '/login-tenant',
   '/signup',
   '/admin-login',
 };
