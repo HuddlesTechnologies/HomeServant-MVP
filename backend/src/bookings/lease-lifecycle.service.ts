@@ -60,11 +60,19 @@ export class LeaseLifecycleService {
     }
   }
 
+  /// Sends the same 30/15/0-day-out reminder to both sides of the lease —
+  /// previously tenant-only, which left a landlord with no warning that a
+  /// unit was about to come back on the market. Both notifications share
+  /// the one [lastRentReminderDaysOut] de-dupe field on the booking, so
+  /// they're always sent (or skipped) together rather than drifting apart.
   private async sendRentExpiryReminders(): Promise<void> {
     const now = new Date();
     const active = await this.prisma.booking.findMany({
       where: { status: BookingStatus.MOVED_IN, leaseEndDate: { gte: now } },
-      include: { property: { select: { title: true } }, tenant: { select: { id: true, email: true } } },
+      include: {
+        property: { select: { title: true, landlord: { select: { id: true, email: true } } } },
+        tenant: { select: { id: true, email: true, fullName: true } },
+      },
     });
 
     let sent = 0;
@@ -75,10 +83,17 @@ export class LeaseLifecycleService {
       if (threshold === undefined || booking.lastRentReminderDaysOut === threshold) continue;
 
       const when = threshold === 0 ? 'today' : `in ${threshold} days`;
-      const title = 'Your lease is ending soon';
-      const body = `Your lease for ${booking.property.title} ends ${when}. Renew from your bookings to keep your stay.`;
-      await this.notifications.create(booking.tenant.id, NotificationType.RENT_EXPIRY_REMINDER, title, body);
-      await this.mail.send(booking.tenant.email, title, `<p>${body}</p>`, body);
+      const tenantTitle = 'Your lease is ending soon';
+      const tenantBody = `Your lease for ${booking.property.title} ends ${when}. Renew from your bookings to keep your stay.`;
+      await this.notifications.create(booking.tenant.id, NotificationType.RENT_EXPIRY_REMINDER, tenantTitle, tenantBody);
+      await this.mail.send(booking.tenant.email, tenantTitle, `<p>${tenantBody}</p>`, tenantBody);
+
+      const tenantName = booking.tenant.fullName?.trim() ? booking.tenant.fullName : 'Your tenant';
+      const landlordTitle = "A tenant's lease is ending soon";
+      const landlordBody = `${tenantName}'s lease for ${booking.property.title} ends ${when}.`;
+      await this.notifications.create(booking.property.landlord.id, NotificationType.RENT_EXPIRY_REMINDER, landlordTitle, landlordBody);
+      await this.mail.send(booking.property.landlord.email, landlordTitle, `<p>${landlordBody}</p>`, landlordBody);
+
       await this.prisma.booking.update({ where: { id: booking.id }, data: { lastRentReminderDaysOut: threshold } });
       sent++;
     }

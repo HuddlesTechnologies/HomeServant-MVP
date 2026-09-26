@@ -138,22 +138,35 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     );
   }
 
-  void _openRentHistory(List<api.Booking> accepted) {
+  void _openRentHistory(List<api.Booking> rented) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => _HistoryListScreen(
           title: 'Rent Roll',
           rows: [
-            for (final b in accepted)
+            for (final b in rented)
               _HistoryRow(
                 name: b.tenantName ?? 'Tenant',
-                subtitle: '${b.property.title} • since ${formatShortDate(b.createdAt)}',
+                subtitle: '${b.property.title} • ${_rentSubtitle(b)}',
                 outcome: _Outcome.accepted,
               ),
           ],
         ),
       ),
     );
+  }
+
+  /// Builds "since ..., expires ..., last paid ..." from the booking's
+  /// lease-start, lease-end, and last-payment dates, falling back
+  /// gracefully wherever a piece is missing (e.g. a Shortlet booking,
+  /// which has no lease dates).
+  String _rentSubtitle(api.Booking b) {
+    final parts = <String>[];
+    if (b.leaseStartDate != null) parts.add('since ${formatShortDate(b.leaseStartDate!)}');
+    if (b.leaseEndDate != null) parts.add('expires ${formatShortDate(b.leaseEndDate!)}');
+    if (b.lastPaidAt != null) parts.add('last paid ${formatShortDate(b.lastPaidAt!)}');
+    if (parts.isEmpty) return 'since ${formatShortDate(b.createdAt)}';
+    return parts.join(' • ');
   }
 
   @override
@@ -163,7 +176,13 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     final photoPath = appState.profilePhotoPath;
     final allBookings = appState.landlordBookings;
     final pendingBookings = allBookings.where((b) => b.status == api.BookingStatus.pending).toList();
-    final acceptedBookings = allBookings.where((b) => b.status == api.BookingStatus.accepted).toList();
+    // MOVED_IN (non-Shortlet) / PAID (Shortlet) are the only statuses that
+    // mean "currently paying rent on this property" — BookingStatus.accepted
+    // is only ever a Shortlet's pre-payment approval step, so filtering on
+    // it here (as this used to) meant a tenant who'd actually moved in and
+    // paid never showed up in "Rent" at all.
+    const rentedStatuses = {api.BookingStatus.movedIn, api.BookingStatus.paid};
+    final rentedBookings = allBookings.where((b) => rentedStatuses.contains(b.status)).toList();
     // A non-Shortlet rental between payment and move-in — this is where an
     // inspection date gets proposed/confirmed, and where the landlord's
     // distinct outright-rejection lever lives (see _rejectBooking).
@@ -361,7 +380,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                         ],
                       ),
                       InkWell(
-                        onTap: () => _openRentHistory(acceptedBookings),
+                        onTap: () => _openRentHistory(rentedBookings),
                         child: Row(
                           children: [
                             Text(
@@ -376,7 +395,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  if (acceptedBookings.isEmpty)
+                  if (rentedBookings.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
@@ -385,7 +404,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                       ),
                     )
                   else
-                    for (final entry in acceptedBookings.take(5))
+                    for (final entry in rentedBookings.take(5))
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -411,7 +430,8 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                                   ),
                                   Text(
-                                    'Since ${formatShortDate(entry.createdAt)}',
+                                    _rentSubtitle(entry),
+                                    overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                                   ),
                                 ],

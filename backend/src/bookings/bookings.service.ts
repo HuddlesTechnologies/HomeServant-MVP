@@ -75,8 +75,13 @@ export class BookingsService {
   /// "View Tenant Profile" screen; a landlord only ever sees these for a
   /// tenant who has actually booked one of their properties, never an
   /// arbitrary lookup.
-  findForLandlord(landlordId: string) {
-    return this.prisma.booking.findMany({
+  ///
+  /// [lastPaidAt] is derived here (not a raw column) from the most recent
+  /// successfully-charged Payment, since a landlord previously had no way
+  /// to see when a tenant actually paid at all — unlike [findForTenant],
+  /// this used to leave the `payments` relation out entirely.
+  async findForLandlord(landlordId: string) {
+    const bookings = await this.prisma.booking.findMany({
       where: { property: { landlordId } },
       include: {
         property: true,
@@ -92,9 +97,16 @@ export class BookingsService {
             dateOfBirth: true,
           },
         },
+        payments: {
+          where: { status: { in: ['PAID_HELD', 'RELEASED'] } },
+          orderBy: { paidAt: 'desc' },
+          take: 1,
+          select: { paidAt: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
+    return bookings.map(({ payments, ...booking }) => ({ ...booking, lastPaidAt: payments[0]?.paidAt ?? null }));
   }
 
   /// Shortlet-only now — a non-Shortlet booking is charged immediately on

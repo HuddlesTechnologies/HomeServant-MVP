@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/models/booking.dart';
+import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
@@ -10,6 +12,19 @@ import '../dashboard/property_detail_screen.dart';
 import '../dashboard/widgets/property_image.dart';
 import 'landlord_add_property_screen.dart';
 import 'landlord_property_status.dart';
+
+/// The booking that put the current tenant into [property], if any — the
+/// most recent MOVED_IN (non-Shortlet)/PAID (Shortlet) booking against it.
+/// [landlordBookings] is ordered newest-first by the API, so the first
+/// match is the current occupancy even if the property has changed hands
+/// between tenants before.
+Booking? _activeBookingFor(Property property, List<Booking> landlordBookings) {
+  for (final booking in landlordBookings) {
+    if (booking.property.id != property.id) continue;
+    if (booking.status == BookingStatus.movedIn || booking.status == BookingStatus.paid) return booking;
+  }
+  return null;
+}
 
 enum PropertyStatusFilter { all, occupied, available }
 
@@ -30,7 +45,9 @@ class LandlordPropertiesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final all = context.watch<AppState>().landlordProperties;
+    final appState = context.watch<AppState>();
+    final all = appState.landlordProperties;
+    final landlordBookings = appState.landlordBookings;
     final entries = switch (filter) {
       PropertyStatusFilter.all => all,
       PropertyStatusFilter.occupied => all.where(isOccupied).toList(),
@@ -58,6 +75,7 @@ class LandlordPropertiesScreen extends StatelessWidget {
                     itemBuilder: (context, index) => _PropertyTile(
                       property: entries[index],
                       occupied: isOccupied(entries[index]),
+                      activeBooking: _activeBookingFor(entries[index], landlordBookings),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => PropertyDetailScreen(property: entries[index], theme: theme),
@@ -78,10 +96,21 @@ class LandlordPropertiesScreen extends StatelessWidget {
 }
 
 class _PropertyTile extends StatelessWidget {
-  const _PropertyTile({required this.property, required this.occupied, required this.onTap, required this.onEdit});
+  const _PropertyTile({
+    required this.property,
+    required this.occupied,
+    required this.activeBooking,
+    required this.onTap,
+    required this.onEdit,
+  });
 
   final Property property;
   final bool occupied;
+
+  /// The current tenant's booking, when [occupied] — null for an available
+  /// property, and also null for an occupied Shortlet (those never carry
+  /// lease dates the same way, see [_activeBookingFor]'s doc comment).
+  final Booking? activeBooking;
   final VoidCallback onTap;
   final VoidCallback onEdit;
 
@@ -140,6 +169,24 @@ class _PropertyTile extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (activeBooking != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Tenant: ${activeBooking!.tenantName ?? 'Unknown'}',
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body(color: AppColors.navy, size: 12, weight: FontWeight.w600),
+                    ),
+                    if (activeBooking!.leaseEndDate != null)
+                      Text(
+                        'Rent expires ${formatShortDate(activeBooking!.leaseEndDate!)}',
+                        style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
+                      ),
+                    if (activeBooking!.lastPaidAt != null)
+                      Text(
+                        'Last paid ${formatShortDate(activeBooking!.lastPaidAt!)}',
+                        style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
+                      ),
+                  ],
                 ],
               ),
             ),

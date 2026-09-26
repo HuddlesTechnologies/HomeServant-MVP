@@ -103,6 +103,7 @@ class Booking {
     this.priceUnitSnapshot,
     this.leaseStartDate,
     this.leaseEndDate,
+    this.lastPaidAt,
   });
 
   final String id;
@@ -149,6 +150,13 @@ class Booking {
   final DateTime? leaseStartDate;
   final DateTime? leaseEndDate;
 
+  /// Only present on a landlord's own view (`GET /bookings/landlord`) —
+  /// when the most recent successful charge on this booking actually
+  /// landed (`Payment.paidAt`), not just when the booking was created. Null
+  /// if nothing has been charged yet, or on a tenant's own view (`GET
+  /// /bookings/mine` doesn't compute this).
+  final DateTime? lastPaidAt;
+
   bool get isShortlet => property.category == 'Shortlet';
 
   /// Computed client-side from [tenantDateOfBirth] — null if that's null.
@@ -186,6 +194,7 @@ class Booking {
       priceUnitSnapshot: json['priceUnitSnapshot'] as String?,
       leaseStartDate: _parseDate(json['leaseStartDate']),
       leaseEndDate: _parseDate(json['leaseEndDate']),
+      lastPaidAt: _parseDate(json['lastPaidAt']),
     );
   }
 
