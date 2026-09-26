@@ -433,9 +433,20 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
             PopupMenuButton<OrderItemStatus>(
               icon: Icon(Icons.more_vert_rounded, color: theme.foreground),
               onSelected: _setOrderStatus,
-              itemBuilder: (context) => const [
-                PopupMenuItem(value: OrderItemStatus.completed, child: Text('Mark Order Completed')),
-                PopupMenuItem(value: OrderItemStatus.cancelled, child: Text('Cancel Order')),
+              // The popup menu itself is always a light Material surface
+              // regardless of theme — theme.foreground flips to white on
+              // Midnight and would be invisible here, so this uses
+              // onSurface (fixed navy, paired with a light surface in
+              // every theme).
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: OrderItemStatus.completed,
+                  child: Text('Mark Order Completed', style: AppTextStyles.body(color: theme.onSurface, size: 14)),
+                ),
+                PopupMenuItem(
+                  value: OrderItemStatus.cancelled,
+                  child: Text('Cancel Order', style: AppTextStyles.body(color: Colors.redAccent, size: 14)),
+                ),
               ],
             ),
         ],

@@ -163,8 +163,17 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                               onSelected: (value) {
                                 if (value == 'mark_all_read') _markAllRead();
                               },
-                              itemBuilder: (context) => const [
-                                PopupMenuItem(value: 'mark_all_read', child: Text('Mark all as read')),
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'mark_all_read',
+                                  // The popup menu itself is always a light
+                                  // Material surface regardless of theme —
+                                  // theme.foreground flips to white on
+                                  // Midnight and would be invisible here, so
+                                  // this uses onSurface (fixed navy, paired
+                                  // with a light surface in every theme).
+                                  child: Text('Mark all as read', style: AppTextStyles.body(color: theme.onSurface, size: 14)),
+                                ),
                               ],
                             ),
                           ],

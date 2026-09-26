@@ -224,13 +224,19 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                                   },
                                   itemBuilder: (context) => [
                                     if (!user.isDeactivated)
-                                      const PopupMenuItem(value: 'deactivate', child: Text('Deactivate')),
+                                      PopupMenuItem(
+                                        value: 'deactivate',
+                                        child: Text('Deactivate', style: AppTextStyles.body(color: AppColors.navy, size: 14)),
+                                      ),
                                     // Deleting is more consequential than
                                     // deactivating — matches the backend's
                                     // MinAdminLevel(MODERATOR) on DELETE
                                     // /admin/users/:id.
                                     if (context.canModerate)
-                                      const PopupMenuItem(value: 'delete', child: Text('Delete permanently')),
+                                      PopupMenuItem(
+                                        value: 'delete',
+                                        child: Text('Delete permanently', style: AppTextStyles.body(color: Colors.redAccent, size: 14)),
+                                      ),
                                   ],
                                 ),
                             ],

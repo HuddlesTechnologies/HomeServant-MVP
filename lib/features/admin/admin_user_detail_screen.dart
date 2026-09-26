@@ -552,7 +552,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                         side: const BorderSide(color: Colors.redAccent),
                         foregroundColor: Colors.redAccent,
                       ),
-                      child: const Text('Delete Account Permanently'),
+                      child: Text('Delete Account Permanently', style: AppTextStyles.button(color: Colors.redAccent, size: 14)),
                     ),
                   ],
                 ],
