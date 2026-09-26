@@ -218,6 +218,16 @@ model User {
   occupation           String?
   maritalStatus        MaritalStatus?
   emailVerifiedAt      DateTime?
+  /// One-way latch: set the first time this account's profile holds every
+  /// field the signup wizard requires (see UsersService.updateProfile) and
+  /// never cleared afterwards — later edits that blank a field don't send
+  /// the user back through the wizard. The Flutter router's "finish setting
+  /// up your account" redirect keys off this single server-owned flag
+  /// (returned on every auth response, including login) instead of
+  /// re-deriving completeness from individual profile fields, which broke
+  /// for every account created before those fields became required and
+  /// raced the post-login profile fetch.
+  profileCompletedAt   DateTime?
   twoFactorEnabled     Boolean        @default(false)
   /// Set true for an admin account created via the console's invite-by-
   /// email flow (AdminService.confirmAdminOtp) — signed in with the

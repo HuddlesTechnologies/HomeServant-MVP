@@ -45,23 +45,18 @@ void _proceedPastTwoFactor(BuildContext context) {
   }
 }
 
-/// Google sign-in skips the OTP step and, for a first-time account, hands
-/// back a profile with no phone number (Google doesn't provide one) — sends
-/// those users through the same profile-completion step normal signup
-/// already forces, instead of silently leaving it empty. A returning
-/// Google user (phone already set from a previous completion) skips
+/// Google sign-in skips the OTP step, so a first-time Google account goes
+/// through the same profile-completion wizard normal signup already
+/// forces. A returning Google user who's already finished it skips
 /// straight through, same as a normal login. Role comes from the account
 /// Google matched to, not necessarily the screen the button was tapped
 /// from — an existing landlord tapping "Sign in with Google" on the tenant
 /// screen still lands in the landlord flow.
 void _proceedAfterGoogleSignIn(BuildContext context) {
   final appState = context.read<AppState>();
-  if (appState.phoneNumber.trim().isEmpty) {
-    if (appState.role == UserRole.landlord) {
-      context.push('/signup-landlord-1');
-    } else {
-      context.push('/signup-tenant-1');
-    }
+  final setupRoute = _profileSetupRoute(appState);
+  if (setupRoute != null) {
+    context.push(setupRoute);
   } else {
     _proceedPastTwoFactor(context);
   }
@@ -149,23 +144,32 @@ const _returningUserBouncePaths = {
 /// does from every dashboard's own NotificationBell.
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
-/// True once a tenant/landlord's basics (name, phone — collected on
-/// signup-*-1) are in. An authenticated account can end up with these
-/// still blank if the app is closed, or a web tab reloaded, in the window
-/// between OTP verification (which already saves a real access token,
-/// authenticating the account) and actually submitting that screen — the
-/// account is fully "logged in" at that point even though the wizard was
-/// never finished. See Guard C in [buildAppRouter]'s `redirect`.
-bool _needsProfileBasics(AppState appState) =>
-    appState.fullName.trim().isEmpty || appState.phoneNumber.trim().isEmpty;
-
-/// Same idea as [_needsProfileBasics] but for gender/occupation/marital
-/// status (collected on signup-*-2), which are required fields there.
-bool _needsProfileDetails(AppState appState) =>
-    appState.gender == null ||
-    appState.occupation == null ||
-    appState.occupation!.trim().isEmpty ||
-    appState.maritalStatus == null;
+/// Where an authenticated tenant/landlord who hasn't finished the signup
+/// wizard should be sent, or null if they have (or aren't a
+/// tenant/landlord at all — vendor/admin never go through this wizard).
+///
+/// "Finished" is decided solely by the server-owned
+/// [AppState.profileCompleted] latch (backend `User.profileCompletedAt`),
+/// never re-derived from individual profile fields here. Deriving it
+/// locally is what kept breaking: (1) accounts created before gender/
+/// occupation/marital status became required have those fields null
+/// forever, so every such user was sent back to the wizard on every
+/// login; and (2) the narrow login response doesn't carry those fields,
+/// so a check against them raced the post-login profile fetch. The latch
+/// comes back on the login response itself, is backfilled for every
+/// existing account, and only ever goes false -> true.
+///
+/// The name/phone check below only picks *which* wizard step to resume
+/// at for an account that is genuinely unfinished.
+String? _profileSetupRoute(AppState appState) {
+  if (appState.role != UserRole.tenant && appState.role != UserRole.landlord) return null;
+  if (appState.profileCompleted) return null;
+  final needsBasics = appState.fullName.trim().isEmpty || appState.phoneNumber.trim().isEmpty;
+  if (appState.role == UserRole.landlord) {
+    return needsBasics ? '/signup-landlord-1' : '/signup-landlord-2';
+  }
+  return needsBasics ? '/signup-tenant-1' : '/signup-tenant-2';
+}
 
 /// The two routes that represent "actually using the app" rather than a
 /// step of getting signed in — the only places Guard C below steps in.
@@ -203,23 +207,13 @@ GoRouter buildAppRouter(AppState appState) {
         return '/admin';
       }
       // Guard C: catches an authenticated tenant/landlord who never
-      // actually finished the signup wizard's required screens (see
-      // _needsProfileBasics/_needsProfileDetails above) from reaching the
-      // real app — without this, closing the app (or reloading the
-      // browser tab, on web) right after OTP verification but before
-      // submitting signup-*-1/2 leaves a fully-authenticated account with
-      // no name/phone/gender/occupation/marital status, and every launch
-      // after that lands straight on /dashboard via Guard B above,
-      // permanently skipping those required screens. Vendor/admin aren't
-      // routed through this wizard at all, so they're excluded.
-      if ((appState.role == UserRole.tenant || appState.role == UserRole.landlord) &&
-          _dashboardLikePaths.contains(state.matchedLocation)) {
-        if (_needsProfileBasics(appState)) {
-          return appState.role == UserRole.landlord ? '/signup-landlord-1' : '/signup-tenant-1';
-        }
-        if (_needsProfileDetails(appState)) {
-          return appState.role == UserRole.landlord ? '/signup-landlord-2' : '/signup-tenant-2';
-        }
+      // actually finished the signup wizard (e.g. closed the app or
+      // reloaded the tab right after OTP verification) from reaching the
+      // real app. See _profileSetupRoute for why this trusts only the
+      // server's profileCompleted flag.
+      if (_dashboardLikePaths.contains(state.matchedLocation)) {
+        final setupRoute = _profileSetupRoute(appState);
+        if (setupRoute != null) return setupRoute;
       }
       return null;
     },

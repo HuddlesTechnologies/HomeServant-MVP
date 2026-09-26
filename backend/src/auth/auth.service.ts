@@ -29,6 +29,7 @@ export interface PublicUser {
   profilePhotoUrl: string | null;
   twoFactorEnabled: boolean;
   mustChangePassword: boolean;
+  profileCompletedAt: Date | null;
 }
 
 export interface TokenPair {
@@ -455,6 +456,7 @@ export class AuthService {
       profilePhotoUrl: user.profilePhotoUrl,
       twoFactorEnabled: user.twoFactorEnabled,
       mustChangePassword: user.mustChangePassword,
+      profileCompletedAt: user.profileCompletedAt,
     };
   }
 }

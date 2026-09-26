@@ -23,6 +23,7 @@ const profileSelect = {
   maritalStatus: true,
   twoFactorEnabled: true,
   mustChangePassword: true,
+  profileCompletedAt: true,
   bankCode: true,
   bankName: true,
   accountNumber: true,
@@ -33,6 +34,25 @@ const profileSelect = {
 /// Unambiguous uppercase alphanumerics — no 0/O or 1/I, since this code
 /// gets read aloud and typed by hand when someone shares an invite.
 const _referralCodeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/// Every field the signup wizard (signup-*-1 and signup-*-2) requires.
+/// Only consulted to set User.profileCompletedAt the first time it becomes
+/// true — see that field's doc comment.
+function hasCompleteProfile(user: {
+  fullName: string | null;
+  phoneNumber: string | null;
+  gender: unknown;
+  occupation: string | null;
+  maritalStatus: unknown;
+}): boolean {
+  return (
+    !!user.fullName?.trim() &&
+    !!user.phoneNumber?.trim() &&
+    user.gender != null &&
+    !!user.occupation?.trim() &&
+    user.maritalStatus != null
+  );
+}
 
 @Injectable()
 export class UsersService {
@@ -90,6 +110,11 @@ export class UsersService {
       },
       select: profileSelect,
     });
+
+    if (!updated.profileCompletedAt && hasCompleteProfile(updated)) {
+      updated.profileCompletedAt = new Date();
+      await this.prisma.user.update({ where: { id }, data: { profileCompletedAt: updated.profileCompletedAt } });
+    }
 
     // Fires once, the first time this account has both a real name and an
     // inviter — for most signups that's this exact call (fullName is set
