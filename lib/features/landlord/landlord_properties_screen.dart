@@ -117,6 +117,13 @@ class _PropertyTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(property.location, style: AppTextStyles.body(color: AppColors.hintGrey, size: 13)),
+                  if (property.listingNumber != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Listing #${property.listingNumber}',
+                      style: AppTextStyles.body(color: AppColors.navy, size: 12, weight: FontWeight.w600),
+                    ),
+                  ],
                   const SizedBox(height: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

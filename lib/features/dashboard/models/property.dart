@@ -18,6 +18,7 @@ class Property {
     this.galleryImages = const [],
     this.videoPath,
     this.landlordId,
+    this.listingNumber,
     this.reviewCount = 0,
     this.isOccupied = false,
     this.rentDurationMonths,
@@ -51,6 +52,7 @@ class Property {
       description: json['description'] as String,
       landlordName: (json['landlord'] as Map<String, dynamic>?)?['fullName'] as String? ?? 'Landlord',
       landlordId: (json['landlord'] as Map<String, dynamic>?)?['id'] as String? ?? json['landlordId'] as String?,
+      listingNumber: json['listingNumber'] as int?,
       galleryImages: ((json['galleryUrls'] as List?)?.cast<String>()) ?? const [],
       isOccupied: json['isOccupied'] as bool? ?? false,
       rentDurationMonths: json['rentDurationMonths'] as int?,
@@ -214,6 +216,13 @@ class Property {
   /// present on anything loaded from the API. Used to filter "my
   /// properties" for the signed-in landlord.
   final String? landlordId;
+
+  /// System-assigned sequential number for this listing, unique across
+  /// every property ever listed — absent on the bundled seed listings,
+  /// present on anything loaded from the API. Always shown to the landlord
+  /// and to admins; shown to a tenant only once they've paid (see
+  /// PropertyDetailScreen).
+  final int? listingNumber;
 
   final int reviewCount;
   final bool isOccupied;

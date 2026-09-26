@@ -139,6 +139,7 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
                           ],
                         ),
                         const SizedBox(height: 14),
+                        _Field('Listing #', property.listingNumber?.toString() ?? '—'),
                         _Field('Location', property.location),
                         _Field('State', property.state),
                         _Field('Category', property.category),

@@ -403,6 +403,10 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                                       children: [
                                         Text(property.title, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 13)),
                                         Text(
+                                          'Listing #${property.listingNumber}',
+                                          style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5, weight: FontWeight.w600),
+                                        ),
+                                        Text(
                                           property.isOccupied ? 'Occupied' : 'Vacant',
                                           style: AppTextStyles.body(color: property.isOccupied ? Colors.orange : Colors.green, size: 11.5),
                                         ),

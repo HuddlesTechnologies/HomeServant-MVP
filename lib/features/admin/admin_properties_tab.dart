@@ -96,7 +96,7 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
     return Column(
       children: [
         AdminSearchBar(
-          hint: 'Search by title or location',
+          hint: 'Search by title, location, or listing #',
           onChanged: (value) {
             _search = value;
             _load();
@@ -145,6 +145,11 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(property.title, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Listing #${property.listingNumber}',
+                                    style: AppTextStyles.body(color: AppColors.navy, size: 12, weight: FontWeight.w600),
+                                  ),
                                   const SizedBox(height: 2),
                                   Text(property.location, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
                                   const SizedBox(height: 2),

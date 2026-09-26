@@ -91,6 +91,7 @@ class VendorSummary {
 class MarketplaceProductApi {
   const MarketplaceProductApi({
     required this.id,
+    required this.listingNumber,
     required this.vendorId,
     required this.name,
     required this.description,
@@ -105,6 +106,12 @@ class MarketplaceProductApi {
   });
 
   final String id;
+
+  /// System-assigned sequential number for this listing, unique across
+  /// every vendor product ever listed. Always shown to the owning vendor
+  /// and to admins; shown to a buyer only once they've paid (see
+  /// OrderHistoryScreen and MarketplaceOrderItemApi.productListingNumber).
+  final int listingNumber;
   final String vendorId;
   final String name;
   final String description;
@@ -121,6 +128,7 @@ class MarketplaceProductApi {
 
   factory MarketplaceProductApi.fromApi(Map<String, dynamic> json) => MarketplaceProductApi(
     id: json['id'] as String,
+    listingNumber: json['listingNumber'] as int,
     vendorId: json['vendorId'] as String,
     name: json['name'] as String,
     description: json['description'] as String,
@@ -148,6 +156,7 @@ class MarketplaceOrderItemApi {
     required this.status,
     required this.notificationRead,
     this.productImageUrl,
+    this.productListingNumber,
     this.vendorName,
     this.vendorUserId,
     this.order,
@@ -166,6 +175,11 @@ class MarketplaceOrderItemApi {
   final OrderItemStatus status;
   final bool notificationRead;
   final String? productImageUrl;
+
+  /// The purchased product's system-assigned listing number — only
+  /// meaningful (and only shown to the buyer) once [isPaid] is true, since
+  /// a listing number shouldn't surface before payment actually clears.
+  final int? productListingNumber;
   final String? vendorName;
   final String? vendorUserId;
 
@@ -200,6 +214,12 @@ class MarketplaceOrderItemApi {
       paymentProgress == OrderItemPaymentProgress.held ||
       (paymentProgress == null && paymentProgressLabel == null && status == OrderItemStatus.pending);
 
+  /// True once this item's payment has actually cleared (held in escrow or
+  /// already released to the vendor) — the gate for showing the purchased
+  /// product's listing number to the buyer. False for a refunded item,
+  /// since the purchase was reversed.
+  bool get isPaid => paymentProgress == OrderItemPaymentProgress.held || paymentProgress == OrderItemPaymentProgress.released;
+
   factory MarketplaceOrderItemApi.fromApi(Map<String, dynamic> json) {
     final product = json['product'] as Map<String, dynamic>?;
     final vendor = json['vendor'] as Map<String, dynamic>?;
@@ -221,6 +241,7 @@ class MarketplaceOrderItemApi {
       status: OrderItemStatusApi.fromApi(json['status'] as String),
       notificationRead: json['notificationRead'] as bool? ?? false,
       productImageUrl: (product?['imageUrls'] as List?)?.cast<String>().firstOrNull,
+      productListingNumber: product?['listingNumber'] as int?,
       vendorName: vendor?['businessName'] as String?,
       vendorUserId: vendor?['userId'] as String?,
       order: order != null ? MarketplaceOrderContext.fromApi(order) : null,

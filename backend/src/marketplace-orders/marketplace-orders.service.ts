@@ -13,7 +13,7 @@ import { ShipOrderItemDto } from './dto/ship-order-item.dto';
 const orderInclude = {
   items: {
     include: {
-      product: { select: { id: true, name: true, imageUrls: true } },
+      product: { select: { id: true, name: true, imageUrls: true, listingNumber: true } },
       vendor: { select: { id: true, userId: true, businessName: true } },
       payment: { select: { status: true } },
     },
@@ -147,7 +147,7 @@ export class MarketplaceOrdersService {
     return this.prisma.marketplaceOrderItem.findMany({
       where: { vendorId: vendor.id },
       include: {
-        product: { select: { id: true, name: true, imageUrls: true } },
+        product: { select: { id: true, name: true, imageUrls: true, listingNumber: true } },
         order: { select: { id: true, createdAt: true, paymentMethod: true, customerName: true, customerPhone: true, customerAddress: true, buyerId: true } },
       },
       orderBy: { order: { createdAt: 'desc' } },

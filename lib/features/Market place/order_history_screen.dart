@@ -253,6 +253,11 @@ class _OrderItemRowState extends State<_OrderItemRow> {
                       '${item.vendorName ?? 'Vendor'} · ${item.fulfillment.label}',
                       style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.55), size: 11.5),
                     ),
+                    if (item.isPaid && item.productListingNumber != null)
+                      Text(
+                        'Item #${item.productListingNumber}',
+                        style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.55), size: 11.5, weight: FontWeight.w600),
+                      ),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

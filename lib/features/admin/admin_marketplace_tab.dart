@@ -100,7 +100,7 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
         ),
         if (_view == _MarketplaceView.products)
           AdminSearchBar(
-            hint: 'Search products',
+            hint: 'Search products by name or item #',
             onChanged: (value) {
               _search = value;
               _load();
@@ -135,6 +135,11 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(product.name, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Item #${product.listingNumber}',
+                        style: AppTextStyles.body(color: AppColors.navy, size: 12, weight: FontWeight.w600),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         '${product.vendorName ?? 'Unknown vendor'} · ₦${formatWithThousandsSeparator(product.price)}',

@@ -461,6 +461,12 @@ model PendingAdmin {
 
 model Property {
   id                 String           @id @default(uuid())
+  /// System-assigned, sequential and unique across every property ever
+  /// listed (independent of Product.listingNumber's own sequence) — the
+  /// human-facing identifier shown to landlords/admins always, and to a
+  /// tenant only once they've paid (see PropertiesService/AdminService
+  /// callers and the Flutter Property.fromApi doc comment).
+  listingNumber      Int              @unique @default(autoincrement())
   landlordId         String
   landlord           User             @relation("LandlordProperties", fields: [landlordId], references: [id], onDelete: Cascade)
   title              String
@@ -775,6 +781,12 @@ enum VendorApplicationStatus {
 /// delete would orphan any past MarketplaceOrderItem that references it.
 model Product {
   id                 String              @id @default(uuid())
+  /// System-assigned, sequential and unique across every vendor product
+  /// ever listed (its own sequence, independent of Property.listingNumber)
+  /// — always visible to the owning vendor and to admins, visible to a
+  /// buyer only once they've paid for it (see MarketplaceOrdersService's
+  /// orderInclude and OrderHistoryScreen).
+  listingNumber      Int                 @unique @default(autoincrement())
   vendorId           String
   vendor             VendorProfile       @relation(fields: [vendorId], references: [id], onDelete: Cascade)
   name               String

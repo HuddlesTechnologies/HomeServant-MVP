@@ -242,6 +242,10 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                                       children: [
                                         Text(product.name, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 13)),
                                         Text(
+                                          'Item #${product.listingNumber}',
+                                          style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5, weight: FontWeight.w600),
+                                        ),
+                                        Text(
                                           '${product.category.label} · Stock: ${product.stock}',
                                           style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
                                         ),

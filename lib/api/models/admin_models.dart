@@ -317,6 +317,7 @@ class AdminUserDetail {
 class AdminUserProperty {
   const AdminUserProperty({
     required this.id,
+    required this.listingNumber,
     required this.title,
     required this.price,
     required this.priceUnit,
@@ -325,6 +326,7 @@ class AdminUserProperty {
   });
 
   final String id;
+  final int listingNumber;
   final String title;
   final int price;
   final String priceUnit;
@@ -333,6 +335,7 @@ class AdminUserProperty {
 
   factory AdminUserProperty.fromApi(Map<String, dynamic> json) => AdminUserProperty(
     id: json['id'] as String,
+    listingNumber: json['listingNumber'] as int,
     title: json['title'] as String,
     price: json['price'] as int,
     priceUnit: json['priceUnit'] as String,
@@ -490,6 +493,7 @@ class AdminVendor {
 class AdminVendorProduct {
   const AdminVendorProduct({
     required this.id,
+    required this.listingNumber,
     required this.name,
     required this.price,
     required this.stock,
@@ -498,6 +502,7 @@ class AdminVendorProduct {
   });
 
   final String id;
+  final int listingNumber;
   final String name;
   final int price;
   final int stock;
@@ -506,6 +511,7 @@ class AdminVendorProduct {
 
   factory AdminVendorProduct.fromApi(Map<String, dynamic> json) => AdminVendorProduct(
     id: json['id'] as String,
+    listingNumber: json['listingNumber'] as int,
     name: json['name'] as String,
     price: json['price'] as int,
     stock: json['stock'] as int,
@@ -623,6 +629,7 @@ class AdminVendorDetail {
 class AdminProperty {
   const AdminProperty({
     required this.id,
+    required this.listingNumber,
     required this.title,
     required this.location,
     required this.price,
@@ -634,6 +641,7 @@ class AdminProperty {
   });
 
   final String id;
+  final int listingNumber;
   final String title;
   final String location;
   final int price;
@@ -651,6 +659,7 @@ class AdminProperty {
     final landlord = json['landlord'] as Map<String, dynamic>?;
     return AdminProperty(
       id: json['id'] as String,
+      listingNumber: json['listingNumber'] as int,
       title: json['title'] as String,
       location: json['location'] as String,
       price: json['price'] as int,
@@ -666,6 +675,7 @@ class AdminProperty {
 class AdminProduct {
   const AdminProduct({
     required this.id,
+    required this.listingNumber,
     required this.name,
     required this.price,
     required this.isAvailable,
@@ -674,6 +684,7 @@ class AdminProduct {
   });
 
   final String id;
+  final int listingNumber;
   final String name;
   final int price;
   final bool isAvailable;
@@ -684,6 +695,7 @@ class AdminProduct {
     final vendor = json['vendor'] as Map<String, dynamic>?;
     return AdminProduct(
       id: json['id'] as String,
+      listingNumber: json['listingNumber'] as int,
       name: json['name'] as String,
       price: json['price'] as int,
       isAvailable: json['isAvailable'] as bool? ?? true,

@@ -483,7 +483,7 @@ export class AdminService {
         vendorProfile: { select: { id: true, businessName: true, status: true, isActive: true } },
         _count: { select: { properties: true, bookings: true, marketplaceOrders: true, favorites: true, reviews: true } },
         properties: {
-          select: { id: true, title: true, price: true, priceUnit: true, isOccupied: true, createdAt: true },
+          select: { id: true, listingNumber: true, title: true, price: true, priceUnit: true, isOccupied: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         },
         bookings: {
@@ -678,7 +678,7 @@ export class AdminService {
       include: {
         user: { select: { email: true } },
         products: {
-          select: { id: true, name: true, price: true, stock: true, isAvailable: true, category: true },
+          select: { id: true, listingNumber: true, name: true, price: true, stock: true, isAvailable: true, category: true },
           orderBy: { createdAt: 'desc' },
         },
         orderItems: {
@@ -771,8 +771,18 @@ export class AdminService {
   // --- Properties --------------------------------------------------------
 
   async findProperties(page = 1, pageSize = 20, search?: string) {
+    // A purely numeric search also matches the listing number exactly, so
+    // an admin can jump straight to a listing by the number shown to them
+    // everywhere it appears, not just by title/location text.
+    const searchAsNumber = search && /^\d+$/.test(search) ? Number(search) : undefined;
     const where: Prisma.PropertyWhereInput = search
-      ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { location: { contains: search, mode: 'insensitive' } }] }
+      ? {
+          OR: [
+            { title: { contains: search, mode: 'insensitive' } },
+            { location: { contains: search, mode: 'insensitive' } },
+            ...(searchAsNumber !== undefined ? [{ listingNumber: searchAsNumber }] : []),
+          ],
+        }
       : {};
     const [items, total] = await Promise.all([
       this.prisma.property.findMany({
@@ -839,7 +849,17 @@ export class AdminService {
   // --- Marketplace ---------------------------------------------------------
 
   async findProducts(page = 1, pageSize = 20, search?: string) {
-    const where: Prisma.ProductWhereInput = search ? { name: { contains: search, mode: 'insensitive' } } : {};
+    // Same "search also matches the listing number exactly" treatment as
+    // findProperties, above.
+    const searchAsNumber = search && /^\d+$/.test(search) ? Number(search) : undefined;
+    const where: Prisma.ProductWhereInput = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            ...(searchAsNumber !== undefined ? [{ listingNumber: searchAsNumber }] : []),
+          ],
+        }
+      : {};
     const [items, total] = await Promise.all([
       this.prisma.product.findMany({
         where,

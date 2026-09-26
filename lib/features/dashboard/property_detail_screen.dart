@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../api/api_exception.dart';
+import '../../api/models/booking.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
@@ -11,6 +12,18 @@ import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
 import 'widgets/property_video_player.dart';
 import 'widgets/shortlet_unavailable_countdown.dart';
+
+/// Every [BookingStatus] from the moment a tenant's payment clears onward —
+/// used to gate showing a property's listing number to the tenant (see
+/// CLAUDE.md-adjacent product requirement: visible to landlord/admin
+/// always, but to a tenant only once they've actually paid).
+const _paidBookingStatuses = {
+  BookingStatus.paid,
+  BookingStatus.paidAwaitingInspection,
+  BookingStatus.inspectionProposed,
+  BookingStatus.inspectionConfirmed,
+  BookingStatus.movedIn,
+};
 
 class PropertyDetailScreen extends StatefulWidget {
   const PropertyDetailScreen({super.key, required this.property, required this.theme});
@@ -99,6 +112,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     final property = widget.property;
     final theme = widget.theme;
     final favorited = context.select<AppState, bool>((state) => state.isFavorite(property.id));
+    final hasPaidForProperty = context.select<AppState, bool>(
+      (state) => state.myBookings.any((b) => b.property.id == property.id && _paidBookingStatuses.contains(b.status)),
+    );
     final messagingEnabled = property.messagingEnabled;
     final isShortlet = property.category == 'Shortlet';
     final unavailable = isShortlet && property.shortletUnavailable;
@@ -166,6 +182,17 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                       property.location,
                                       style: AppTextStyles.body(color: theme.accent, size: 14, weight: FontWeight.w700),
                                     ),
+                                    if (hasPaidForProperty && property.listingNumber != null) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Listing #${property.listingNumber}',
+                                        style: AppTextStyles.body(
+                                          color: theme.foreground.withValues(alpha: 0.65),
+                                          size: 12.5,
+                                          weight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

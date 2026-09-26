@@ -173,6 +173,11 @@ class _VendorProductTile extends StatelessWidget {
                 Text(product.name, style: AppTextStyles.body(color: theme.onSurface, size: 14, weight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text(product.category.label, style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12)),
+                const SizedBox(height: 2),
+                Text(
+                  'Item #${product.listingNumber}',
+                  style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55), size: 12, weight: FontWeight.w600),
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
