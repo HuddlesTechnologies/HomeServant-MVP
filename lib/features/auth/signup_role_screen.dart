@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show TextInput;
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -68,6 +69,9 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
         password: _password.text,
       );
       if (!mounted) return;
+      // See LoginRoleScreen — tells the platform autofill service the
+      // credentials just typed are the real ones, so it offers to save.
+      TextInput.finishAutofillContext();
       widget.onContinue(email);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -124,40 +128,50 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
               ),
             ),
             const SizedBox(height: 28),
-            PillTextField(
-              // Preserved from each original screen: the landlord version
-              // used a lowercase hint, the tenant one capitalised.
-              hint: _role.isLandlord ? 'enter your email' : 'Enter your email',
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              validator: (value) {
-                if (value == null || !value.contains('@')) {
-                  return 'Enter a valid email';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-            PillTextField(
-              hint: 'Password',
-              controller: _password,
-              obscureText: true,
-              validator: (value) {
-                if (value == null || value.length < 8) {
-                  return 'At least 8 characters';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 14),
-            PillTextField(
-              hint: 'Confirm password',
-              controller: _confirmPassword,
-              obscureText: true,
-              validator: (value) {
-                if (value != _password.text) return "Passwords don't match";
-                return null;
-              },
+            AutofillGroup(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  PillTextField(
+                    // Preserved from each original screen: the landlord version
+                    // used a lowercase hint, the tenant one capitalised.
+                    hint: _role.isLandlord ? 'enter your email' : 'Enter your email',
+                    controller: _email,
+                    keyboardType: TextInputType.emailAddress,
+                    autofillHints: const [AutofillHints.username, AutofillHints.email],
+                    validator: (value) {
+                      if (value == null || !value.contains('@')) {
+                        return 'Enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  PillTextField(
+                    hint: 'Password',
+                    controller: _password,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (value) {
+                      if (value == null || value.length < 8) {
+                        return 'At least 8 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  PillTextField(
+                    hint: 'Confirm password',
+                    controller: _confirmPassword,
+                    obscureText: true,
+                    autofillHints: const [AutofillHints.newPassword],
+                    validator: (value) {
+                      if (value != _password.text) return "Passwords don't match";
+                      return null;
+                    },
+                  ),
+                ],
+              ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),

@@ -26,6 +26,7 @@ class PillTextField extends StatefulWidget {
     this.maxLines = 1,
     this.borderRadius = 28,
     this.focusNode,
+    this.autofillHints,
   });
 
   final String hint;
@@ -43,6 +44,7 @@ class PillTextField extends StatefulWidget {
   final int? maxLines;
   final double borderRadius;
   final FocusNode? focusNode;
+  final Iterable<String>? autofillHints;
 
   @override
   State<PillTextField> createState() => _PillTextFieldState();
@@ -71,6 +73,12 @@ class _PillTextFieldState extends State<PillTextField> {
       controller: widget.controller,
       focusNode: widget.focusNode,
       obscureText: _obscured,
+      // Givonic (this app's body font, see AppTextStyles) has no glyph for
+      // '•', Flutter's default obscuring character — it renders as nothing
+      // rather than a mask, so the field looks empty while obscured even
+      // though real characters were typed. '*' is plain ASCII, present in
+      // every font, so it can't silently vanish like this again.
+      obscuringCharacter: '*',
       keyboardType: widget.keyboardType,
       onTap: widget.onTap,
       readOnly: widget.readOnly,
@@ -78,6 +86,7 @@ class _PillTextFieldState extends State<PillTextField> {
       inputFormatters: widget.inputFormatters,
       minLines: widget.minLines,
       maxLines: widget.maxLines,
+      autofillHints: widget.autofillHints,
       style: AppTextStyles.body(color: widget.textColor, size: 16),
       decoration: InputDecoration(
         hintText: widget.hint,

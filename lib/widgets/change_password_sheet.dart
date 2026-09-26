@@ -128,6 +128,9 @@ class _PasswordFieldState extends State<_PasswordField> {
     return TextField(
       controller: widget.controller,
       obscureText: _obscured,
+      // Givonic has no '•' glyph (this app's obscuring dots render
+      // invisible with the default character) — see PillTextField.
+      obscuringCharacter: '*',
       style: AppTextStyles.body(color: AppColors.navy, size: 14),
       decoration: InputDecoration(
         labelText: widget.label,

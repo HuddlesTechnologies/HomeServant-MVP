@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show TextInput;
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -70,6 +71,11 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
         reactivate: reactivate,
       );
       if (!mounted) return;
+      // Tells the platform autofill service (Chrome's/iOS's save-password
+      // prompt) the credentials just typed actually worked — without this,
+      // browsers won't offer to save a password from a Flutter form since
+      // they never see a real form submission to hang the offer on.
+      TextInput.finishAutofillContext();
       await handleLoginOutcome(
         context,
         outcome,
@@ -116,9 +122,26 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
           const SizedBox(height: 24),
           Center(child: HomeServantLogo(role: _role, iconSize: 60)),
           const SizedBox(height: 64),
-          PillTextField(hint: 'Email', controller: _email, keyboardType: TextInputType.emailAddress),
-          const SizedBox(height: 16),
-          PillTextField(hint: 'Password', controller: _password, obscureText: true),
+          AutofillGroup(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                PillTextField(
+                  hint: 'Email',
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.username, AutofillHints.email],
+                ),
+                const SizedBox(height: 16),
+                PillTextField(
+                  hint: 'Password',
+                  controller: _password,
+                  obscureText: true,
+                  autofillHints: const [AutofillHints.password],
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,

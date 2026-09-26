@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show TextInput;
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
@@ -57,6 +58,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       context.read<AppState>().selectRole(UserRole.admin);
       final outcome = await context.read<AppState>().login(email: _email.text.trim(), password: _password.text);
       if (!mounted) return;
+      // See LoginRoleScreen — without this, browsers/iOS never learn the
+      // form was actually submitted, so they don't offer to save it.
+      TextInput.finishAutofillContext();
       switch (outcome) {
         case LoginOutcome.success:
           final role = context.read<AppState>().role;
@@ -114,19 +118,32 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 14),
                   ),
                   const SizedBox(height: 32),
-                  PillTextField(hint: 'Email', controller: _email, keyboardType: TextInputType.emailAddress),
-                  const SizedBox(height: 16),
-                  PillTextField(
-                    hint: 'Password',
-                    controller: _password,
-                    obscureText: _obscurePassword,
-                    trailing: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                        color: AppColors.navy.withValues(alpha: 0.6),
-                        size: 20,
-                      ),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  AutofillGroup(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        PillTextField(
+                          hint: 'Email',
+                          controller: _email,
+                          keyboardType: TextInputType.emailAddress,
+                          autofillHints: const [AutofillHints.username, AutofillHints.email],
+                        ),
+                        const SizedBox(height: 16),
+                        PillTextField(
+                          hint: 'Password',
+                          controller: _password,
+                          obscureText: _obscurePassword,
+                          autofillHints: const [AutofillHints.password],
+                          trailing: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: AppColors.navy.withValues(alpha: 0.6),
+                              size: 20,
+                            ),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 10),

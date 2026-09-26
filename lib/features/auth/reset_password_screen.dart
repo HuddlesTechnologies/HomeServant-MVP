@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show TextInput;
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
@@ -73,6 +74,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     try {
       await context.read<AppState>().resetPassword(email: widget.email, code: _code, newPassword: _newPassword.text);
       if (!mounted) return;
+      // See LoginRoleScreen — lets the browser/iOS offer to update the
+      // saved credential with the new password.
+      TextInput.finishAutofillContext();
       widget.onReset();
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -118,31 +122,40 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
               onChanged: (value) => setState(() => _code = value),
             ),
             const SizedBox(height: 20),
-            PillTextField(
-              hint: 'New Password',
-              controller: _newPassword,
-              obscureText: _obscureNew,
-              trailing: IconButton(
-                icon: Icon(
-                  _obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: role.foreground.withValues(alpha: 0.6),
-                  size: 20,
-                ),
-                onPressed: () => setState(() => _obscureNew = !_obscureNew),
-              ),
-            ),
-            const SizedBox(height: 16),
-            PillTextField(
-              hint: 'Confirm New Password',
-              controller: _confirmPassword,
-              obscureText: _obscureConfirm,
-              trailing: IconButton(
-                icon: Icon(
-                  _obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: role.foreground.withValues(alpha: 0.6),
-                  size: 20,
-                ),
-                onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+            AutofillGroup(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  PillTextField(
+                    hint: 'New Password',
+                    controller: _newPassword,
+                    obscureText: _obscureNew,
+                    autofillHints: const [AutofillHints.newPassword],
+                    trailing: IconButton(
+                      icon: Icon(
+                        _obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: role.foreground.withValues(alpha: 0.6),
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  PillTextField(
+                    hint: 'Confirm New Password',
+                    controller: _confirmPassword,
+                    obscureText: _obscureConfirm,
+                    autofillHints: const [AutofillHints.newPassword],
+                    trailing: IconButton(
+                      icon: Icon(
+                        _obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: role.foreground.withValues(alpha: 0.6),
+                        size: 20,
+                      ),
+                      onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    ),
+                  ),
+                ],
               ),
             ),
             if (_error != null) ...[
