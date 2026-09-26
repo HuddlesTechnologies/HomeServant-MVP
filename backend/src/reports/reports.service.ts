@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationType, Prisma, ReportStatus } from '@prisma/client';
+import { NotificationType, Prisma, ReportStatus, ReportTargetType } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -61,7 +61,7 @@ export class ReportsService {
         include: {
           reporter: { select: summarySelect },
           property: { select: { id: true, title: true } },
-          product: { select: { id: true, name: true } },
+          product: { select: { id: true, name: true, vendorId: true } },
           assignedAdmin: { select: summarySelect },
         },
         orderBy: { createdAt: 'desc' },
@@ -73,9 +73,30 @@ export class ReportsService {
     return { items, total, page, pageSize };
   }
 
-  /// Backs the admin console's report notification badge.
-  countOpen(): Promise<number> {
-    return this.prisma.report.count({ where: { status: 'OPEN' } });
+  /// Full single-report detail — reached by tapping a report row (Reports
+  /// tab or the dashboard's activity feed). Same include shape as
+  /// [findAll] so the client's existing `AdminReport.fromApi` parses it
+  /// unchanged.
+  async findOne(id: string) {
+    const report = await this.prisma.report.findUnique({
+      where: { id },
+      include: {
+        reporter: { select: summarySelect },
+        property: { select: { id: true, title: true } },
+        product: { select: { id: true, name: true, vendorId: true } },
+        assignedAdmin: { select: summarySelect },
+      },
+    });
+    if (!report) throw new NotFoundException('Report not found');
+    return report;
+  }
+
+  /// Backs the admin console's report notification badges — the combined
+  /// Reports-tab count when [targetType] is omitted, or just the
+  /// property-/marketplace-targeted slice for the Properties/Marketplace
+  /// nav badges.
+  countOpen(targetType?: ReportTargetType): Promise<number> {
+    return this.prisma.report.count({ where: { status: 'OPEN', ...(targetType ? { targetType } : {}) } });
   }
 
   async setStatus(id: string, status: ReportStatus) {

@@ -185,6 +185,29 @@ class AdminRepository {
     });
   }
 
+  Future<AdminOrderDetail> orderDetail(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/marketplace/orders/$id');
+      return AdminOrderDetail.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
+  /// Backs the Messages nav badge — see AdminService.messagesAttentionCount.
+  Future<int> messagesAttentionCount() {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/messages/attention-count');
+      return (response.data as Map<String, dynamic>)['count'] as int;
+    });
+  }
+
+  /// Backs the Admins nav badge.
+  Future<int> pendingAdminInvitesCount() {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/admins/pending-count');
+      return (response.data as Map<String, dynamic>)['count'] as int;
+    });
+  }
+
   /// The current admin's own level — fetched right after admin login to
   /// decide what the console shows/allows (the server enforces the real
   /// authorization on every write regardless, this is only for the UI).
@@ -253,17 +276,22 @@ class AdminRepository {
     });
   }
 
-  Future<AdminPage<ActivityLogEntry>> findActivityLog({int page = 1}) {
+  Future<AdminPage<ActivityLogEntry>> findActivityLog({int page = 1, ActivityLogType? type}) {
     return _client.call(() async {
-      final response = await _client.dio.get('/admin/activity-log', queryParameters: {'page': page});
+      final response = await _client.dio.get(
+        '/admin/activity-log',
+        queryParameters: {'page': page, if (type != null) 'type': type.apiValue},
+      );
       return AdminPage<ActivityLogEntry>.fromApi(response.data as Map<String, dynamic>, ActivityLogEntry.fromApi);
     });
   }
 
-  /// SUPER_ADMIN only — the backend independently re-checks this.
-  Future<void> clearActivityLog() {
+  /// SUPER_ADMIN only — the backend independently re-checks this. [type]
+  /// omitted clears the whole log (and gets recorded — see
+  /// AdminService.clearActivityLog); given, clears just that type, silently.
+  Future<void> clearActivityLog({ActivityLogType? type}) {
     return _client.call(() async {
-      await _client.dio.delete('/admin/activity-log');
+      await _client.dio.delete('/admin/activity-log', queryParameters: {if (type != null) 'type': type.apiValue});
     });
   }
 
@@ -277,10 +305,20 @@ class AdminRepository {
     });
   }
 
-  Future<int> openReportsCount() {
+  Future<int> openReportsCount({ReportTargetType? targetType}) {
     return _client.call(() async {
-      final response = await _client.dio.get('/reports/open-count');
+      final response = await _client.dio.get(
+        '/reports/open-count',
+        queryParameters: {if (targetType != null) 'targetType': targetType.apiValue},
+      );
       return (response.data as Map<String, dynamic>)['count'] as int;
+    });
+  }
+
+  Future<AdminReport> reportDetail(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/reports/$id');
+      return AdminReport.fromApi(response.data as Map<String, dynamic>);
     });
   }
 

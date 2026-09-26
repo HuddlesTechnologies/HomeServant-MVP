@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
 import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
+import 'admin_report_detail_screen.dart';
 import 'widgets/admin_filter_chip.dart';
-import 'widgets/admin_picker_sheet.dart';
 
 /// Reports submitted against a property or marketplace listing —
-/// `findReports`/`setReportStatus`/`transferReport` (admin_repository.dart)
-/// and `AdminReport`/`ReportStatus` (admin_models.dart) already exist; this
-/// screen is purely wiring them up. Every admin tier can view, re-status,
-/// and transfer a report — `ReportsController` has no `@MinAdminLevel`
-/// gate on any of its endpoints, unlike vendor/property moderation.
+/// `findReports` (admin_repository.dart) and `AdminReport`/`ReportStatus`
+/// (admin_models.dart) already exist; this screen is purely wiring them up
+/// into a list. Every admin tier can view, re-status, and transfer a
+/// report (see AdminReportDetailScreen, reached by tapping a row) —
+/// `ReportsController` has no `@MinAdminLevel` gate on any of its
+/// endpoints, unlike vendor/property moderation.
 class AdminReportsTab extends StatefulWidget {
   const AdminReportsTab({super.key});
 
@@ -47,101 +47,10 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
     }
   }
 
-  Future<void> _setStatus(AdminReport report, ReportStatus status) async {
-    if (status == report.status) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await context.read<AppState>().admin.setReportStatus(report.id, status);
-      messenger.showSnackBar(SnackBar(content: Text('Marked ${status.label}')));
-      _load();
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
-
-  Future<void> _transfer(AdminReport report) async {
-    final messenger = ScaffoldMessenger.of(context);
-    List<AdminAccount> admins;
-    try {
-      admins = await context.read<AppState>().admin.findAdmins();
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-      return;
-    }
-    if (!mounted) return;
-    final myId = context.read<AppState>().userId;
-    final chosen = await showAdminPickerSheet(
-      context,
-      admins: admins,
-      title: 'Transfer report to',
-      excludeAdminIds: {if (myId != null) myId, if (report.assignedAdmin != null) report.assignedAdmin!.id},
-    );
-    if (chosen == null || !mounted) return;
-    try {
-      await context.read<AppState>().admin.transferReport(report.id, chosen.id);
-      messenger.showSnackBar(SnackBar(content: Text('Transferred to ${chosen.email}')));
-      _load();
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    }
-  }
-
-  Future<void> _openActions(AdminReport report) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.white,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(report.targetLabel, style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
-              const SizedBox(height: 6),
-              Text(report.reason, style: AppTextStyles.body(color: AppColors.hintGrey, size: 13.5)),
-              const SizedBox(height: 18),
-              Text('Status', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 13)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final status in ReportStatus.values)
-                    AdminFilterChip(
-                      label: status.label,
-                      selected: status == report.status,
-                      onTap: () {
-                        Navigator.of(sheetContext).pop();
-                        _setStatus(report, status);
-                      },
-                    ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.of(sheetContext).pop();
-                    _transfer(report);
-                  },
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: const BorderSide(color: AppColors.navy),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                  ),
-                  icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
-                  label: Text('Transfer to another admin', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _openDetail(AdminReport report) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AdminReportDetailScreen(reportId: report.id)),
+    ).then((_) => _load());
   }
 
   @override
@@ -181,7 +90,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                         itemBuilder: (context, index) {
                           final report = reports[index];
                           return InkWell(
-                            onTap: () => _openActions(report),
+                            onTap: () => _openDetail(report),
                             borderRadius: BorderRadius.circular(14),
                             child: Container(
                               padding: const EdgeInsets.all(14),

@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
+import 'admin_order_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
@@ -177,29 +178,35 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
         separatorBuilder: (_, _) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
           final order = orders[index];
-          return Container(
-            padding: const EdgeInsets.all(14),
-            decoration: adminCardDecoration,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        order.buyerName ?? order.buyerEmail ?? 'Unknown buyer',
-                        style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${order.itemCount} item(s) · ${formatShortDate(order.createdAt)}',
-                        style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5),
-                      ),
-                    ],
+          return InkWell(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => AdminOrderDetailScreen(orderId: order.id)),
+            ),
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: adminCardDecoration,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          order.buyerName ?? order.buyerEmail ?? 'Unknown buyer',
+                          style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${order.itemCount} item(s) · ${formatShortDate(order.createdAt)}',
+                          style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Text('₦${formatWithThousandsSeparator(order.total)}', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
-              ],
+                  Text('₦${formatWithThousandsSeparator(order.total)}', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
+                ],
+              ),
             ),
           );
         },

@@ -307,6 +307,12 @@ enum ActivityLogType {
   /// admin tier (including SUPPORT) can perform, so it's logged like every
   /// other admin action for auditability.
   ADMIN_USER_EDITED
+  /// A SUPER_ADMIN wiped the *entire* activity log (every type at once) —
+  /// see ActivityLogService.clear. Written as the one surviving row right
+  /// after the wipe, so there's still a record of who did it. Clearing a
+  /// single type (not the whole log) is intentionally NOT logged — see
+  /// AdminService.clearActivityLog's doc comment for why.
+  ADMIN_ACTIVITY_LOG_CLEARED
 }
 
 /// Site-wide admin audit trail (Activity Log console section) — every

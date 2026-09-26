@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ActivityLogType" ADD VALUE 'ADMIN_ACTIVITY_LOG_CLEARED';

@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { AdminLevel, UserRole } from '@prisma/client';
+import { ActivityLogType, AdminLevel, UserRole } from '@prisma/client';
 import { AllowMustChangePassword } from '../common/decorators/allow-must-change-password.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { MinAdminLevel } from '../common/decorators/min-admin-level.decorator';
@@ -61,6 +61,15 @@ export class AdminController {
     return this.admin.findAdmins();
   }
 
+  /// Backs the Admins nav badge — visible to MODERATOR+ same as the tab
+  /// itself, not SUPER_ADMIN-only like [findAdmins] (this is just a count,
+  /// nothing sensitive).
+  @Get('admins/pending-count')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  async pendingAdminInvitesCount() {
+    return { count: await this.admin.pendingAdminInvitesCount() };
+  }
+
   @Post('admins/request')
   @MinAdminLevel(AdminLevel.SUPER_ADMIN)
   requestAdmin(@Body() dto: RequestAdminDto) {
@@ -113,15 +122,18 @@ export class AdminController {
   // --- Activity log ------------------------------------------------------
 
   @Get('activity-log')
-  findActivityLog(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
-    return this.admin.findActivityLog(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
+  findActivityLog(@Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('type') type?: ActivityLogType) {
+    return this.admin.findActivityLog(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined, type);
   }
 
+  /// `?type=ADMIN_LOGIN` (etc.) clears just that type, silently; omitted
+  /// clears the whole log and records who did it — see
+  /// AdminService.clearActivityLog.
   @Delete('activity-log')
   @MinAdminLevel(AdminLevel.SUPER_ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  async clearActivityLog(): Promise<void> {
-    await this.admin.clearActivityLog();
+  async clearActivityLog(@CurrentUser() actingAdmin: AuthenticatedUser, @Query('type') type?: ActivityLogType): Promise<void> {
+    await this.admin.clearActivityLog(actingAdmin.sub, type);
   }
 
   // --- Users -----------------------------------------------------------
@@ -239,5 +251,18 @@ export class AdminController {
   @Get('marketplace/orders')
   findOrders(@Query('page') page?: string, @Query('pageSize') pageSize?: string) {
     return this.admin.findOrders(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
+  }
+
+  @Get('marketplace/orders/:id')
+  findOrderDetail(@Param('id') id: string) {
+    return this.admin.findOrderDetail(id);
+  }
+
+  // --- Messages badge ------------------------------------------------------
+
+  /// Backs the Messages nav badge — see AdminService.messagesAttentionCount.
+  @Get('messages/attention-count')
+  async messagesAttentionCount(@CurrentUser() actingAdmin: AuthenticatedUser) {
+    return { count: await this.admin.messagesAttentionCount(actingAdmin.sub) };
   }
 }

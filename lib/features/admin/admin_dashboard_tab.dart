@@ -5,6 +5,11 @@ import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
+import 'admin_order_detail_screen.dart';
+import 'admin_property_detail_screen.dart';
+import 'admin_report_detail_screen.dart';
+import 'admin_user_detail_screen.dart';
+import 'admin_vendor_detail_screen.dart';
 
 /// Every destination a dashboard tile can jump to — handled by
 /// [AdminShell] (the only widget that knows how to switch bottom-nav tabs
@@ -167,7 +172,10 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
 
 /// "What's happening on the platform" — recent signups, listings, vendor
 /// applications, orders, and reports, merged and sorted by time. See
-/// AdminRepository.activityFeed / AdminService.activityFeed.
+/// AdminRepository.activityFeed / AdminService.activityFeed. Every row is
+/// tappable — it opens the same detail screen its own tab's list row would
+/// (user profile, listing, vendor shop, order, or report), using
+/// [ActivityFeedItem.entityId].
 class _ActivityFeedSection extends StatelessWidget {
   const _ActivityFeedSection({required this.items});
 
@@ -182,6 +190,17 @@ class _ActivityFeedSection extends StatelessWidget {
   };
 
   Color _colorFor(ActivityFeedType type) => type == ActivityFeedType.reportFiled ? Colors.redAccent : AppColors.navy;
+
+  void _open(BuildContext context, ActivityFeedItem item) {
+    final screen = switch (item.type) {
+      ActivityFeedType.userSignup => AdminUserDetailScreen(userId: item.entityId),
+      ActivityFeedType.propertyListed => AdminPropertyDetailScreen(propertyId: item.entityId),
+      ActivityFeedType.vendorApplication => AdminVendorDetailScreen(vendorId: item.entityId),
+      ActivityFeedType.marketplaceOrder => AdminOrderDetailScreen(orderId: item.entityId),
+      ActivityFeedType.reportFiled => AdminReportDetailScreen(reportId: item.entityId),
+    };
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -201,23 +220,32 @@ class _ActivityFeedSection extends StatelessWidget {
           else
             for (var i = 0; i < items.length; i++) ...[
               if (i > 0) const Divider(height: 18),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(_iconFor(items[i].type), color: _colorFor(items[i].type), size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      items[i].summary,
-                      style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
-                    ),
+              InkWell(
+                onTap: () => _open(context, items[i]),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(_iconFor(items[i].type), color: _colorFor(items[i].type), size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          items[i].summary,
+                          style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        formatRelativeTime(items[i].createdAt),
+                        style: AppTextStyles.body(color: AppColors.hintGrey, size: 11),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(Icons.chevron_right_rounded, color: AppColors.hintGrey, size: 16),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    formatRelativeTime(items[i].createdAt),
-                    style: AppTextStyles.body(color: AppColors.hintGrey, size: 11),
-                  ),
-                ],
+                ),
               ),
             ],
         ],

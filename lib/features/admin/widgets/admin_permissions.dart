@@ -11,4 +11,9 @@ import '../../../state/app_state.dart';
 /// that one field changes, rather than on every AppState change.
 extension AdminPermissions on BuildContext {
   bool get canModerate => (select<AppState, AdminLevel?>((s) => s.adminLevel)?.atLeastModerator) ?? false;
+
+  /// Gates the Activity Log's "Clear" action — every admin can view the
+  /// log, only a SUPER_ADMIN can wipe any of it (server-enforced too, see
+  /// AdminController.clearActivityLog).
+  bool get isSuperAdmin => (select<AppState, AdminLevel?>((s) => s.adminLevel)?.isSuperAdmin) ?? false;
 }

@@ -737,6 +737,91 @@ class AdminOrder {
   }
 }
 
+/// Full order detail — GET /admin/marketplace/orders/:id, see
+/// AdminService.findOrderDetail. Unlike [AdminOrder]'s trimmed list-row
+/// shape, this carries every item's fulfillment/shipment state and vendor
+/// so AdminOrderDetailScreen can show (and link out to) everything about
+/// the order in one place.
+class AdminOrderDetail {
+  const AdminOrderDetail({
+    required this.id,
+    required this.total,
+    this.buyerId,
+    this.buyerName,
+    this.buyerEmail,
+    required this.items,
+    required this.createdAt,
+  });
+
+  final String id;
+  final int total;
+  final String? buyerId;
+  final String? buyerName;
+  final String? buyerEmail;
+  final List<AdminOrderItemDetail> items;
+  final DateTime createdAt;
+
+  factory AdminOrderDetail.fromApi(Map<String, dynamic> json) {
+    final buyer = json['buyer'] as Map<String, dynamic>?;
+    final items = (json['items'] as List).cast<Map<String, dynamic>>().map(AdminOrderItemDetail.fromApi).toList();
+    final total = items.fold<int>(0, (sum, item) => sum + item.unitPrice * item.quantity);
+    return AdminOrderDetail(
+      id: json['id'] as String,
+      total: total,
+      buyerId: buyer?['id'] as String?,
+      buyerName: buyer?['fullName'] as String?,
+      buyerEmail: buyer?['email'] as String?,
+      items: items,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+    );
+  }
+}
+
+class AdminOrderItemDetail {
+  const AdminOrderItemDetail({
+    required this.id,
+    this.productId,
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.fulfillment,
+    required this.status,
+    this.trackingNumber,
+    this.shippedAt,
+    this.vendorId,
+    this.vendorName,
+  });
+
+  final String id;
+  final String? productId;
+  final String productName;
+  final int quantity;
+  final int unitPrice;
+  final String fulfillment;
+  final String status;
+  final String? trackingNumber;
+  final DateTime? shippedAt;
+  final String? vendorId;
+  final String? vendorName;
+
+  factory AdminOrderItemDetail.fromApi(Map<String, dynamic> json) {
+    final vendor = json['vendor'] as Map<String, dynamic>?;
+    return AdminOrderItemDetail(
+      id: json['id'] as String,
+      productId: json['productId'] as String?,
+      productName: json['productName'] as String,
+      quantity: json['quantity'] as int,
+      unitPrice: json['unitPrice'] as int,
+      fulfillment: json['fulfillment'] as String,
+      status: json['status'] as String,
+      trackingNumber: json['trackingNumber'] as String?,
+      shippedAt: json['shippedAt'] != null ? DateTime.parse(json['shippedAt'] as String) : null,
+      vendorId: vendor?['id'] as String?,
+      vendorName: vendor?['businessName'] as String?,
+    );
+  }
+}
+
 extension UserRoleFromApiValue on UserRole {
   static UserRole fromApiValue(String value) => switch (value) {
     'LANDLORD' => UserRole.landlord,
@@ -749,19 +834,36 @@ extension UserRoleFromApiValue on UserRole {
 enum ActivityLogType {
   adminLogin,
   adminPasswordChanged,
-  adminPasswordReset;
+  adminPasswordReset,
+  adminUserEdited,
+  adminActivityLogCleared;
 
   static ActivityLogType fromApi(String value) => switch (value) {
     'ADMIN_LOGIN' => ActivityLogType.adminLogin,
     'ADMIN_PASSWORD_CHANGED' => ActivityLogType.adminPasswordChanged,
     'ADMIN_PASSWORD_RESET' => ActivityLogType.adminPasswordReset,
+    'ADMIN_USER_EDITED' => ActivityLogType.adminUserEdited,
+    'ADMIN_ACTIVITY_LOG_CLEARED' => ActivityLogType.adminActivityLogCleared,
     _ => ActivityLogType.adminLogin,
+  };
+
+  /// Sent back on `DELETE /admin/activity-log?type=...` — the inverse of
+  /// [fromApi]. Only meaningful for clearing a single type; clearing the
+  /// whole log passes no type at all (see AdminRepository.clearActivityLog).
+  String get apiValue => switch (this) {
+    ActivityLogType.adminLogin => 'ADMIN_LOGIN',
+    ActivityLogType.adminPasswordChanged => 'ADMIN_PASSWORD_CHANGED',
+    ActivityLogType.adminPasswordReset => 'ADMIN_PASSWORD_RESET',
+    ActivityLogType.adminUserEdited => 'ADMIN_USER_EDITED',
+    ActivityLogType.adminActivityLogCleared => 'ADMIN_ACTIVITY_LOG_CLEARED',
   };
 
   String get label => switch (this) {
     ActivityLogType.adminLogin => 'Logged in',
     ActivityLogType.adminPasswordChanged => 'Changed password',
     ActivityLogType.adminPasswordReset => 'Password reset',
+    ActivityLogType.adminUserEdited => 'Edited a user',
+    ActivityLogType.adminActivityLogCleared => 'Cleared the activity log',
   };
 }
 
@@ -837,6 +939,7 @@ class ActivityFeedItem {
   const ActivityFeedItem({
     required this.type,
     required this.createdAt,
+    required this.entityId,
     this.actor,
     this.role,
     this.propertyTitle,
@@ -849,6 +952,13 @@ class ActivityFeedItem {
 
   final ActivityFeedType type;
   final DateTime createdAt;
+
+  /// What tapping this row should open — a user id for [userSignup]
+  /// (there [entityId] and [actor.id] are the same person), a property id
+  /// for [propertyListed], a vendor-profile id for [vendorApplication], an
+  /// order id for [marketplaceOrder], or a report id for [reportFiled].
+  /// See AdminDashboardTab's `_ActivityFeedSection`.
+  final String entityId;
   final ActivityLogPersonRef? actor;
   final String? role;
   final String? propertyTitle;
@@ -877,6 +987,7 @@ class ActivityFeedItem {
 
   factory ActivityFeedItem.fromApi(Map<String, dynamic> json) => ActivityFeedItem(
     type: ActivityFeedType.fromApi(json['type'] as String),
+    entityId: json['entityId'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
     actor: json['actor'] != null ? ActivityLogPersonRef.fromApi(json['actor'] as Map<String, dynamic>) : null,
     role: json['role'] as String?,
@@ -926,8 +1037,11 @@ class AdminReport {
   const AdminReport({
     required this.id,
     required this.targetType,
+    this.propertyId,
     this.propertyTitle,
+    this.productId,
     this.productName,
+    this.vendorId,
     required this.reason,
     required this.status,
     this.reporter,
@@ -937,8 +1051,15 @@ class AdminReport {
 
   final String id;
   final ReportTargetType targetType;
+  final String? propertyId;
   final String? propertyTitle;
+  final String? productId;
   final String? productName;
+
+  /// The reported product's vendor-profile id — lets the report detail
+  /// screen link straight to that vendor's shop (there's no standalone
+  /// product detail screen today). Null for a property report.
+  final String? vendorId;
   final String reason;
   final ReportStatus status;
   final ActivityLogPersonRef? reporter;
@@ -953,8 +1074,11 @@ class AdminReport {
     return AdminReport(
       id: json['id'] as String,
       targetType: ReportTargetType.fromApi(json['targetType'] as String),
+      propertyId: property?['id'] as String?,
       propertyTitle: property?['title'] as String?,
+      productId: product?['id'] as String?,
       productName: product?['name'] as String?,
+      vendorId: product?['vendorId'] as String?,
       reason: json['reason'] as String,
       status: ReportStatus.fromApi(json['status'] as String),
       reporter: json['reporter'] != null ? ActivityLogPersonRef.fromApi(json['reporter'] as Map<String, dynamic>) : null,

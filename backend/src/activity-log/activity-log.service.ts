@@ -50,20 +50,25 @@ export class ActivityLogService {
     }
   }
 
-  async findAll(page = 1, pageSize = 30) {
+  async findAll(page = 1, pageSize = 30, type?: ActivityLogType) {
+    const where = type ? { type } : {};
     const [items, total] = await Promise.all([
       this.prisma.activityLog.findMany({
+        where,
         include: { actor: { select: summarySelect }, target: { select: summarySelect } },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
-      this.prisma.activityLog.count(),
+      this.prisma.activityLog.count({ where }),
     ]);
     return { items, total, page, pageSize };
   }
 
-  async clear(): Promise<void> {
-    await this.prisma.activityLog.deleteMany({});
+  /// [type] omitted clears every entry (the whole log); given, clears only
+  /// that type. See AdminService.clearActivityLog for which one gets
+  /// logged afterwards.
+  async clear(type?: ActivityLogType): Promise<void> {
+    await this.prisma.activityLog.deleteMany({ where: type ? { type } : {} });
   }
 }

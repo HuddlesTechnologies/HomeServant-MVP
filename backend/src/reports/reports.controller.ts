@@ -43,8 +43,18 @@ export class ReportsController {
   @Get('open-count')
   @UseGuards(RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
   @Roles(UserRole.ADMIN)
-  async openCount() {
-    return { count: await this.reports.countOpen() };
+  async openCount(@Query('targetType') targetType?: 'PROPERTY' | 'MARKETPLACE_ITEM') {
+    return { count: await this.reports.countOpen(targetType) };
+  }
+
+  /// Full detail for one report — reached by tapping a row (Reports tab or
+  /// the dashboard's activity feed). Registered after the static routes
+  /// above ('mine', 'open-count') so this `:id` wildcard doesn't shadow them.
+  @Get(':id')
+  @UseGuards(RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
+  @Roles(UserRole.ADMIN)
+  findOne(@Param('id') id: string) {
+    return this.reports.findOne(id);
   }
 
   @Patch(':id/status')

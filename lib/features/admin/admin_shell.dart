@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../api/models/admin_models.dart';
 import '../../api/models/vendor.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -11,6 +12,7 @@ import '../../state/app_state.dart';
 import '../../widgets/change_password_sheet.dart';
 import '../../widgets/notification_bell.dart';
 import '../dashboard/notifications_screen.dart';
+import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
 import 'admin_dashboard_tab.dart';
 import 'admin_marketplace_tab.dart';
@@ -45,14 +47,25 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
   Timer? _idleTimer;
+
+  // Nav badge counts — each best-effort loaded once at console startup (see
+  // [_loadBadgeCounts]); a failed fetch just leaves that one badge at 0
+  // rather than blocking the console or the others. Vendors/Reports badge
+  // their own primary tab; the rest badge their tile inside the "More"
+  // sheet (see [_moreItems]) and roll up into that sheet's own nav badge.
   int _openReportsCount = 0;
+  int _pendingVendorsCount = 0;
+  int _openPropertyReportsCount = 0;
+  int _openMarketplaceReportsCount = 0;
+  int _messagesAttentionCount = 0;
+  int _pendingAdminInvitesCount = 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptPasswordChange());
     _resetIdleTimer();
-    _loadOpenReportsCount();
+    _loadBadgeCounts();
     // Unlike tenant/landlord, an admin session's `_loadInitialData` skips
     // `loadNotifications()` entirely (it only loads the admin level + opens
     // the chat socket) — so without this, `AppState.unreadNotificationCount`
@@ -60,15 +73,26 @@ class _AdminShellState extends State<AdminShell> {
     context.read<AppState>().loadNotifications();
   }
 
-  Future<void> _loadOpenReportsCount() async {
-    try {
-      final count = await context.read<AppState>().admin.openReportsCount();
-      if (!mounted) return;
-      setState(() => _openReportsCount = count);
-    } catch (_) {
-      // Best-effort — the Reports tab itself still loads the real list;
-      // this only affects the nav badge.
-    }
+  void _loadBadgeCounts() {
+    final admin = context.read<AppState>().admin;
+    admin.openReportsCount().then((c) {
+      if (mounted) setState(() => _openReportsCount = c);
+    }).catchError((_) {});
+    admin.pendingVendorsCount().then((c) {
+      if (mounted) setState(() => _pendingVendorsCount = c);
+    }).catchError((_) {});
+    admin.openReportsCount(targetType: ReportTargetType.property).then((c) {
+      if (mounted) setState(() => _openPropertyReportsCount = c);
+    }).catchError((_) {});
+    admin.openReportsCount(targetType: ReportTargetType.marketplaceItem).then((c) {
+      if (mounted) setState(() => _openMarketplaceReportsCount = c);
+    }).catchError((_) {});
+    admin.messagesAttentionCount().then((c) {
+      if (mounted) setState(() => _messagesAttentionCount = c);
+    }).catchError((_) {});
+    admin.pendingAdminInvitesCount().then((c) {
+      if (mounted) setState(() => _pendingAdminInvitesCount = c);
+    }).catchError((_) {});
   }
 
   @override
@@ -263,13 +287,17 @@ class _AdminShellState extends State<AdminShell> {
     }
   }
 
-  /// Not `static const` like the old list — the Reports destination's icon
-  /// carries a live open-reports-count badge (`_openReportsCount`), so this
-  /// has to be rebuilt from instance state rather than fixed at compile time.
+  /// Not `static const` like the old list — the Vendors/Reports
+  /// destinations' icons carry live badge counts, so this has to be
+  /// rebuilt from instance state rather than fixed at compile time.
   List<NavigationDestination> get _primaryDestinations => [
     const NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
     const NavigationDestination(icon: Icon(Icons.people_outline_rounded), selectedIcon: Icon(Icons.people_rounded), label: 'Users'),
-    const NavigationDestination(icon: Icon(Icons.storefront_outlined), selectedIcon: Icon(Icons.storefront_rounded), label: 'Vendors'),
+    NavigationDestination(
+      icon: _badgedIcon(Icons.storefront_outlined, _pendingVendorsCount),
+      selectedIcon: _badgedIcon(Icons.storefront_rounded, _pendingVendorsCount),
+      label: 'Vendors',
+    ),
     NavigationDestination(
       icon: _badgedIcon(Icons.flag_outlined, _openReportsCount),
       selectedIcon: _badgedIcon(Icons.flag_rounded, _openReportsCount),
@@ -279,13 +307,25 @@ class _AdminShellState extends State<AdminShell> {
 
   /// One entry per screen folded into the "More" tab — pushed on top of the
   /// shell via Navigator rather than kept in the IndexedStack, same as a
-  /// native "More" list pushing into its own detail screens.
+  /// native "More" list pushing into its own detail screens. [count] backs
+  /// both that item's own row badge and the "More" nav destination's total
+  /// (see [_moreAttentionTotal]/[_openMoreSheet]).
   List<_MoreItem> _moreItems(bool canSeeAdmins) => [
-    const _MoreItem(icon: Icons.home_work_outlined, label: 'Properties', builder: AdminPropertiesTab.new),
-    const _MoreItem(icon: Icons.shopping_bag_outlined, label: 'Marketplace', builder: AdminMarketplaceTab.new),
-    const _MoreItem(icon: Icons.forum_outlined, label: 'Messages', builder: AdminMessagesTab.new),
-    if (canSeeAdmins) const _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', builder: AdminAdminsTab.new),
+    _MoreItem(icon: Icons.home_work_outlined, label: 'Properties', count: _openPropertyReportsCount, builder: AdminPropertiesTab.new),
+    _MoreItem(
+      icon: Icons.shopping_bag_outlined,
+      label: 'Marketplace',
+      count: _openMarketplaceReportsCount,
+      builder: AdminMarketplaceTab.new,
+    ),
+    _MoreItem(icon: Icons.forum_outlined, label: 'Messages', count: _messagesAttentionCount, builder: AdminMessagesTab.new),
+    if (canSeeAdmins) ...[
+      _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', count: _pendingAdminInvitesCount, builder: AdminAdminsTab.new),
+      const _MoreItem(icon: Icons.history_rounded, label: 'Activity Log', builder: AdminActivityLogScreen.new),
+    ],
   ];
+
+  int _moreAttentionTotal(bool canSeeAdmins) => _moreItems(canSeeAdmins).fold<int>(0, (sum, item) => sum + item.count);
 
   void _openMoreSheet(BuildContext context, bool canSeeAdmins) {
     showModalBottomSheet<void>(
@@ -305,6 +345,7 @@ class _AdminShellState extends State<AdminShell> {
               ListTile(
                 leading: Icon(item.icon, color: AppColors.navy),
                 title: Text(item.label, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+                trailing: item.count > 0 ? _CountBadge(count: item.count) : null,
                 onTap: () {
                   Navigator.of(sheetContext).pop();
                   Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
@@ -412,20 +453,50 @@ class _AdminShellState extends State<AdminShell> {
         indicatorColor: AppColors.navy.withValues(alpha: 0.1),
         destinations: [
           ..._primaryDestinations,
-          const NavigationDestination(icon: Icon(Icons.more_horiz_rounded), selectedIcon: Icon(Icons.more_horiz_rounded), label: 'More'),
+          NavigationDestination(
+            icon: _badgedIcon(Icons.more_horiz_rounded, _moreAttentionTotal(canSeeAdmins)),
+            selectedIcon: _badgedIcon(Icons.more_horiz_rounded, _moreAttentionTotal(canSeeAdmins)),
+            label: 'More',
+          ),
         ],
       ),
     );
   }
 }
 
-/// One screen folded into the admin console's "More" tab.
+/// One screen folded into the admin console's "More" tab. [count] is its
+/// unattended-activity badge — 0 for a screen with no such concept (e.g.
+/// Activity Log).
 class _MoreItem {
-  const _MoreItem({required this.icon, required this.label, required this.builder});
+  const _MoreItem({required this.icon, required this.label, this.count = 0, required this.builder});
 
   final IconData icon;
   final String label;
+  final int count;
   final Widget Function() builder;
+}
+
+/// Small numeric badge for a "More" sheet row — same red-circle convention
+/// as [_AdminShellState._badgedIcon], just laid out inline as a `trailing`
+/// widget instead of overlaid on an icon.
+class _CountBadge extends StatelessWidget {
+  const _CountBadge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      constraints: const BoxConstraints(minWidth: 22),
+      decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
 }
 
 class _MoreScreen extends StatelessWidget {

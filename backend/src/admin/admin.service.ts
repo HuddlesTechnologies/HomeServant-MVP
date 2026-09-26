@@ -267,14 +267,24 @@ export class AdminService {
 
   // --- Activity log --------------------------------------------------------
 
-  findActivityLog(page?: number, pageSize?: number) {
-    return this.activityLog.findAll(page, pageSize);
+  findActivityLog(page?: number, pageSize?: number, type?: ActivityLogType) {
+    return this.activityLog.findAll(page, pageSize, type);
   }
 
   /// SUPER_ADMIN only (see AdminController) — every other admin can only
-  /// view the log, never wipe it.
-  clearActivityLog(): Promise<void> {
-    return this.activityLog.clear();
+  /// view the log, never wipe it. Clearing a single [type] leaves no trace
+  /// (it's a routine housekeeping action, and logging it would just be
+  /// noise in that same type's history). Clearing the *whole* log — every
+  /// type, [type] omitted — is different: the log would otherwise go from
+  /// "full history" to "totally empty" with nothing showing who did that,
+  /// which is exactly the kind of admin action this log exists to catch.
+  /// So that case writes one ADMIN_ACTIVITY_LOG_CLEARED row right after the
+  /// wipe, naming the acting super admin.
+  async clearActivityLog(actingAdminId: string, type?: ActivityLogType): Promise<void> {
+    await this.activityLog.clear(type);
+    if (!type) {
+      await this.activityLog.log(ActivityLogType.ADMIN_ACTIVITY_LOG_CLEARED, { actorId: actingAdminId });
+    }
   }
 
   // --- Platform stats ----------------------------------------------------
@@ -389,6 +399,12 @@ export class AdminService {
       type: 'USER_SIGNUP' | 'PROPERTY_LISTED' | 'VENDOR_APPLICATION' | 'MARKETPLACE_ORDER' | 'REPORT_FILED';
       createdAt: Date;
       actor: { id: string; email: string; fullName: string | null } | null;
+      /// The id of the thing tapping this row should open — a user id for
+      /// a signup (AdminUserDetailScreen), property id for a listing
+      /// (AdminPropertyDetailScreen), vendor-profile id for an application
+      /// (AdminVendorDetailScreen), order id (AdminOrderDetailScreen), or
+      /// report id (AdminReportDetailScreen). See admin_dashboard_tab.dart.
+      entityId: string;
       role?: string;
       propertyTitle?: string;
       businessName?: string;
@@ -399,20 +415,34 @@ export class AdminService {
     };
 
     const items: FeedItem[] = [
-      ...signups.map((u) => ({ type: 'USER_SIGNUP' as const, createdAt: u.createdAt, actor: u, role: u.role })),
-      ...properties.map((p) => ({ type: 'PROPERTY_LISTED' as const, createdAt: p.createdAt, actor: p.landlord, propertyTitle: p.title })),
+      ...signups.map((u) => ({ type: 'USER_SIGNUP' as const, createdAt: u.createdAt, actor: u, entityId: u.id, role: u.role })),
+      ...properties.map((p) => ({
+        type: 'PROPERTY_LISTED' as const,
+        createdAt: p.createdAt,
+        actor: p.landlord,
+        entityId: p.id,
+        propertyTitle: p.title,
+      })),
       ...vendorApplications.map((v) => ({
         type: 'VENDOR_APPLICATION' as const,
         createdAt: v.createdAt,
         actor: v.user,
+        entityId: v.id,
         businessName: v.businessName,
         vendorStatus: v.status,
       })),
-      ...orders.map((o) => ({ type: 'MARKETPLACE_ORDER' as const, createdAt: o.createdAt, actor: o.buyer, itemCount: o._count.items })),
+      ...orders.map((o) => ({
+        type: 'MARKETPLACE_ORDER' as const,
+        createdAt: o.createdAt,
+        actor: o.buyer,
+        entityId: o.id,
+        itemCount: o._count.items,
+      })),
       ...reports.map((r) => ({
         type: 'REPORT_FILED' as const,
         createdAt: r.createdAt,
         actor: r.reporter,
+        entityId: r.id,
         reportReason: r.reason,
         reportTargetType: r.targetType,
       })),
@@ -902,5 +932,59 @@ export class AdminService {
       this.prisma.marketplaceOrder.count(),
     ]);
     return { items, total, page, pageSize };
+  }
+
+  /// Full order detail — reached by tapping an order row (Marketplace tab
+  /// or the dashboard's activity feed). Unlike [findOrders]' trimmed list
+  /// shape, this pulls in every field a support/dispute conversation would
+  /// need: full item fulfillment/shipment state, the buyer's delivery
+  /// details, and each item's vendor so an admin can jump straight to the
+  /// vendor's shop from here.
+  async findOrderDetail(id: string) {
+    const order = await this.prisma.marketplaceOrder.findUnique({
+      where: { id },
+      include: {
+        buyer: { select: { id: true, fullName: true, email: true } },
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            productName: true,
+            quantity: true,
+            unitPrice: true,
+            fulfillment: true,
+            status: true,
+            trackingNumber: true,
+            shippedAt: true,
+            vendor: { select: { id: true, businessName: true } },
+          },
+        },
+      },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
+  }
+
+  // --- Messages / admin-invite badge counts ---------------------------------
+
+  /// Backs the Messages nav badge: the acting admin's own unread messages
+  /// (mirrors ChatService.findForUser's unreadCount query) plus every open
+  /// "Contact Support" thread awaiting any admin's reply — the same two
+  /// concepts the request behind this named ("unread message" and
+  /// "unattended activity").
+  async messagesAttentionCount(adminId: string): Promise<number> {
+    const [unreadOwnMessages, openSupportThreads] = await Promise.all([
+      this.prisma.message.count({
+        where: { thread: { participants: { some: { userId: adminId } } }, senderId: { not: adminId }, readAt: null },
+      }),
+      this.prisma.thread.count({ where: { isSupport: true, status: 'OPEN' } }),
+    ]);
+    return unreadOwnMessages + openSupportThreads;
+  }
+
+  /// Backs the Admins nav badge — invites sent (via [requestAdminOtp]) but
+  /// never confirmed, i.e. genuinely "unattended".
+  pendingAdminInvitesCount(): Promise<number> {
+    return this.prisma.pendingAdmin.count();
   }
 }
