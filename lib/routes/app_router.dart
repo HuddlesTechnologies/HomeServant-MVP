@@ -67,13 +67,12 @@ void _proceedAfterGoogleSignIn(BuildContext context) {
   }
 }
 
-/// Entry/pre-auth screens a returning, already-authenticated user has no
-/// reason to see again — a restored session (see AppState.load) should
-/// drop them straight into their dashboard instead of making them repeat
-/// login/signup. Also includes verify-otp and login-2fa: those are pushed
-/// *before* AppState.signup()/login() calls _applyUser (OTP entry has to
-/// happen first), so the app is still unauthenticated while sitting on
-/// them — without listing them here, the redirect guard below bounces the
+/// Entry/pre-auth screens an unauthenticated user is allowed to sit on
+/// without being bounced back to /get-started (see Guard A in the
+/// `redirect` callback below). Includes verify-otp and login-2fa: those
+/// are pushed *before* AppState.signup()/login() calls _applyUser (OTP
+/// entry has to happen first), so the app is still unauthenticated while
+/// sitting on them — without listing them here, Guard A would bounce the
 /// user straight back to /get-started the instant they land on the OTP
 /// screen. signup-*-1/2 and app-lock-verify aren't included: those are
 /// only reached after verification, once _applyUser has already run.
@@ -88,6 +87,33 @@ const _preAuthPaths = {
   '/signup-landlord',
   '/signup-tenant',
   '/verify-otp',
+  '/admin-login',
+};
+
+/// Narrower subset of [_preAuthPaths]: genuine entry screens that should
+/// send an *already*-authenticated returning user (see Guard B below)
+/// straight to their dashboard instead of re-showing a login/signup form.
+///
+/// Deliberately excludes verify-otp, login-2fa, signup-landlord and
+/// signup-tenant. Those four become "authenticated" mid-flow — the
+/// instant OTP verification or Google sign-in succeeds, AppState's
+/// _applyUser sets userId and calls notifyListeners() synchronously,
+/// which is this router's refreshListenable, so `redirect` re-runs
+/// immediately, while state.matchedLocation is still one of those four
+/// routes (refreshProfile()/_loadInitialData() are still in flight and
+/// the screen's own onVerified/onGoogleSignedIn callback hasn't run yet).
+/// If those four stayed in this bounce set, Guard B would win that race
+/// and dump the user straight on /dashboard, preempting the screen's own
+/// "go to the next step" navigation — e.g. skipping the profile-
+/// completion screens after signup OTP, or skipping the App Lock PIN gate
+/// after 2FA login.
+const _returningUserBouncePaths = {
+  '/',
+  '/get-started',
+  '/login',
+  '/login-landlord',
+  '/login-tenant',
+  '/signup',
   '/admin-login',
 };
 
@@ -118,7 +144,7 @@ GoRouter buildAppRouter(AppState appState) {
         if (!_preAuthPaths.contains(state.matchedLocation)) return '/get-started';
         return null;
       }
-      if (_preAuthPaths.contains(state.matchedLocation)) {
+      if (_returningUserBouncePaths.contains(state.matchedLocation)) {
         return appState.role == UserRole.admin ? '/admin' : '/dashboard';
       }
       // An admin session has no business on the tenant/landlord dashboard
