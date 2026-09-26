@@ -25,6 +25,7 @@ class ChatSocketService {
   final _notificationController = StreamController<AppNotification>.broadcast();
   final _readController = StreamController<String>.broadcast();
   final _claimedController = StreamController<String>.broadcast();
+  final _badgesChangedController = StreamController<void>.broadcast();
 
   Stream<ChatSocketMessage> get onNewMessage => _controller.stream;
 
@@ -47,6 +48,15 @@ class ChatSocketService {
   /// carries the exact same shape `GET /notifications` already returns per
   /// row, so [AppNotification.fromApi] parses it unchanged.
   Stream<AppNotification> get onNotification => _notificationController.stream;
+
+  /// Fires whenever a mutation on the backend changes one of the admin
+  /// console's nav badge counts (a report submitted/resolved/transferred,
+  /// a vendor application submitted/approved/rejected, an admin invite
+  /// sent/confirmed) — AdminShell listens to this and refetches all of
+  /// them, live, instead of only ever loading them once at console
+  /// startup. No payload: cheaper to just refetch the handful of COUNT
+  /// queries than to keep track of which specific badge changed.
+  Stream<void> get onAdminBadgesChanged => _badgesChangedController.stream;
 
   void connect(String accessToken) {
     disconnect();
@@ -86,6 +96,7 @@ class ChatSocketService {
         if (threadId != null) _claimedController.add(threadId);
       }
     });
+    socket.on('admin:badges-changed', (_) => _badgesChangedController.add(null));
     socket.on('notification:new', (data) {
       if (data is Map) {
         try {

@@ -48,6 +48,7 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int _index = 0;
   Timer? _idleTimer;
+  final List<StreamSubscription> _badgeSubscriptions = [];
 
   // Nav badge counts — each best-effort loaded once at console startup (see
   // [_loadBadgeCounts]); a failed fetch just leaves that one badge at 0
@@ -72,6 +73,24 @@ class _AdminShellState extends State<AdminShell> {
     // the chat socket) — so without this, `AppState.unreadNotificationCount`
     // would just stay 0 forever and the bell below would never show a dot.
     context.read<AppState>().loadNotifications();
+    _subscribeToLiveBadgeUpdates();
+  }
+
+  /// Without this, every one of these badges was "best-effort loaded once
+  /// at console startup" (see the field doc above) — a second admin
+  /// resolving a report, approving a vendor, or claiming a support thread
+  /// left every *other* already-open console showing stale counts until
+  /// its next restart. `admin:badges-changed` is the new event backing
+  /// reports/vendors/admin-invite mutations; `message:new`/`thread:claimed`
+  /// already reached every admin (see ChatGateway.broadcastToAdmins) but
+  /// nothing here was listening to them yet.
+  void _subscribeToLiveBadgeUpdates() {
+    final chatSocket = context.read<AppState>().chatSocket;
+    _badgeSubscriptions.addAll([
+      chatSocket.onAdminBadgesChanged.listen((_) => _loadBadgeCounts()),
+      chatSocket.onNewMessage.listen((_) => _loadBadgeCounts()),
+      chatSocket.onThreadClaimed.listen((_) => _loadBadgeCounts()),
+    ]);
   }
 
   void _loadBadgeCounts() {
@@ -99,6 +118,9 @@ class _AdminShellState extends State<AdminShell> {
   @override
   void dispose() {
     _idleTimer?.cancel();
+    for (final subscription in _badgeSubscriptions) {
+      subscription.cancel();
+    }
     super.dispose();
   }
 

@@ -1,4 +1,5 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ChatGateway } from '../chat/chat.gateway';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -11,6 +12,7 @@ export class VendorsService {
     private readonly prisma: PrismaService,
     private readonly paystack: PaystackService,
     private readonly storage: StorageService,
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   async create(userId: string, dto: CreateVendorProfileDto) {
@@ -19,7 +21,12 @@ export class VendorsService {
     if (existing) {
       throw new ConflictException('This account already has a vendor profile');
     }
-    return this.prisma.vendorProfile.create({ data: { userId, ...dto } });
+    const profile = await this.prisma.vendorProfile.create({ data: { userId, ...dto } });
+    // The admin console's Vendors nav badge (AdminShell._pendingVendorsCount)
+    // only ever refreshed once, at console startup — without this, a new
+    // application wouldn't show up there until the next login.
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
+    return profile;
   }
 
   async findMine(userId: string) {

@@ -590,6 +590,13 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Fetches a single property fresh from the server — used by
+  /// PropertyDetailScreen so a price/availability change made elsewhere
+  /// (another tab, another session, an admin edit) shows up even when the
+  /// screen was opened from an already-stale list, instead of only ever
+  /// trusting the snapshot it was handed.
+  Future<Property> fetchProperty(String id) => _propertiesRepo.findOne(id);
+
   // --- Landlord: properties added through "Add Property" ----------------
 
   List<Property> _landlordProperties = [];

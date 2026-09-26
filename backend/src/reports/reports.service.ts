@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { NotificationType, Prisma, ReportStatus, ReportTargetType } from '@prisma/client';
+import { ChatGateway } from '../chat/chat.gateway';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,7 @@ export class ReportsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   /// A tenant can only report a property they've actually rented (an
@@ -34,7 +36,7 @@ export class ReportsService {
       if (!purchased) throw new ForbiddenException('You can only report an item you have purchased');
     }
 
-    return this.prisma.report.create({
+    const report = await this.prisma.report.create({
       data: {
         reporterId,
         targetType: dto.targetType,
@@ -43,6 +45,13 @@ export class ReportsService {
         reason: dto.reason,
       },
     });
+    // Nothing previously told an already-open admin console a new report
+    // had come in — the Reports/Properties/Marketplace nav badges
+    // (AdminShell._loadBadgeCounts) only ever refreshed once, at console
+    // startup. This reuses the same admin-room broadcast ChatGateway
+    // already uses for chat (`thread:claimed`/`message:new`).
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
+    return report;
   }
 
   findMine(reporterId: string) {
@@ -101,7 +110,9 @@ export class ReportsService {
 
   async setStatus(id: string, status: ReportStatus) {
     await this.requireReport(id);
-    return this.prisma.report.update({ where: { id }, data: { status } });
+    const updated = await this.prisma.report.update({ where: { id }, data: { status } });
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
+    return updated;
   }
 
   /// Hands a report off to another admin, "the way Namecheap support does
@@ -130,6 +141,10 @@ export class ReportsService {
       '<p>Another admin transferred a report to you — open Reports in the admin console to review it.</p>',
       'Another admin transferred a report to you — open Reports in the admin console to review it.',
     );
+    // A transfer out of OPEN moves it to IN_PROGRESS, which drops out of
+    // countOpen() for every admin watching the shared badge, not just the
+    // new assignee (who already gets the notification above).
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
     return updated;
   }
 

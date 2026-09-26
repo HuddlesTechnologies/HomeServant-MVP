@@ -39,12 +39,37 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   bool _descriptionExpanded = false;
   bool _bookingBusy = false;
 
-  List<String> get _allPhotos => [widget.property.image, ...widget.property.galleryImages];
+  // Starts as whatever the caller passed in (usually from an already-
+  // stale list) and is swapped for a fresh copy once [_refreshProperty]
+  // resolves — see initState. Kept as a plain field (not widget.property)
+  // so a price/availability change made elsewhere while this screen is
+  // already open shows up without needing to leave and reopen it.
+  late Property _property = widget.property;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshProperty();
+  }
+
+  Future<void> _refreshProperty() async {
+    try {
+      final fresh = await context.read<AppState>().fetchProperty(widget.property.id);
+      if (mounted) setState(() => _property = fresh);
+    } catch (_) {
+      // Leaves the passed-in snapshot in place — better than blocking the
+      // screen (or showing an error) over a background refresh that
+      // failed while the caller's own data was already good enough to
+      // render from.
+    }
+  }
+
+  List<String> get _allPhotos => [_property.image, ..._property.galleryImages];
 
   void _openGallery(int index) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PropertyGalleryScreen(images: _allPhotos, initialIndex: index, title: widget.property.title),
+        builder: (_) => PropertyGalleryScreen(images: _allPhotos, initialIndex: index, title: _property.title),
       ),
     );
   }
@@ -82,7 +107,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
   }
 
   Future<void> _messageLandlord() async {
-    final property = widget.property;
+    final property = _property;
     final landlordId = property.landlordId;
     if (landlordId == null) return;
     final appState = context.read<AppState>();
@@ -109,7 +134,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final property = widget.property;
+    final property = _property;
     final theme = widget.theme;
     final favorited = context.select<AppState, bool>((state) => state.isFavorite(property.id));
     final hasPaidForProperty = context.select<AppState, bool>(

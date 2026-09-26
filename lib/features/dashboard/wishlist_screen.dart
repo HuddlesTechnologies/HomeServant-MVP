@@ -32,9 +32,15 @@ class WishlistScreen extends StatelessWidget {
                     title: 'No favorites yet',
                     message: 'Tap the heart on any property to save it here for later.',
                   )
-                  : ListView(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                    children: [for (final property in favorites) PropertyCard(property: property, theme: theme)],
+                  // Previously had no reload path at all — a favorite
+                  // removed/changed elsewhere (another session, or a
+                  // property update) only ever showed up on next login.
+                  : RefreshIndicator(
+                    onRefresh: () => context.read<AppState>().loadFavorites(),
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                      children: [for (final property in favorites) PropertyCard(property: property, theme: theme)],
+                    ),
                   ),
         ),
       ),

@@ -181,7 +181,9 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
           return InkWell(
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => AdminOrderDetailScreen(orderId: order.id)),
-            ),
+            ).then((_) {
+              if (mounted) _load();
+            }),
             borderRadius: BorderRadius.circular(14),
             child: Container(
               padding: const EdgeInsets.all(14),

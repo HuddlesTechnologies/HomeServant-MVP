@@ -4,6 +4,7 @@ import { AdminLevel, ActivityLogType, NotificationType, OtpPurpose, Prisma } fro
 import * as bcrypt from 'bcryptjs';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AuthService } from '../auth/auth.service';
+import { ChatGateway } from '../chat/chat.gateway';
 import { ChatService } from '../chat/chat.service';
 import { PresenceService } from '../chat/presence.service';
 import { MailService } from '../mail/mail.service';
@@ -52,6 +53,7 @@ export class AdminService {
     private readonly activityLog: ActivityLogService,
     private readonly presence: PresenceService,
     private readonly chat: ChatService,
+    private readonly chatGateway: ChatGateway,
   ) {}
 
   // --- Bootstrap / admin accounts ---------------------------------------
@@ -121,6 +123,9 @@ export class AdminService {
         `Sign in with the temporary password, then set your own — it only works until you do. The code expires in 10 minutes.`,
     );
 
+    // Keeps the Admins nav badge (AdminShell._pendingAdminInvitesCount)
+    // live across every other admin's already-open console.
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
     return { message: `Code sent to ${dto.email}` };
   }
 
@@ -145,6 +150,7 @@ export class AdminService {
       select: adminSelect,
     });
     await this.prisma.pendingAdmin.delete({ where: { email: dto.email } });
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
     return admin;
   }
 
@@ -686,6 +692,9 @@ export class AdminService {
       `<p>Great news — <strong>${vendor.businessName}</strong> has been approved.</p><p>Your products are now visible to shoppers in the Marketplace.</p>`,
       `Great news — ${vendor.businessName} has been approved. Your products are now visible to shoppers in the Marketplace.`,
     );
+    // Keeps the Vendors nav badge (AdminShell._pendingVendorsCount) live
+    // across every other admin's already-open console.
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
     return updated;
   }
 
@@ -712,6 +721,7 @@ export class AdminService {
         dto.reason ? `: ${dto.reason}` : '.'
       }\n\nYou can update your shop details and this will be reviewed again.`,
     );
+    this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
     return updated;
   }
 
