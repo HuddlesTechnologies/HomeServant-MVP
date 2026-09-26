@@ -170,6 +170,11 @@ class SupportQueueThread {
   });
 
   final String id;
+
+  /// Always null in practice — the backend only ever returns unclaimed
+  /// threads from this endpoint now (see ChatService.findSupportQueue);
+  /// kept here as a faithful mirror of the API response shape rather than
+  /// dropped outright.
   final String? assignedAdminId;
 
   /// Needed to pass as `ChatThreadScreen.adminViewOfUserId` when opening a
@@ -181,8 +186,6 @@ class SupportQueueThread {
   final ChatMessage? lastMessage;
   final DateTime createdAt;
   final DateTime updatedAt;
-
-  bool get isClaimed => assignedAdminId != null;
 
   factory SupportQueueThread.fromApi(Map<String, dynamic> json) {
     final requester = json['requester'] as Map<String, dynamic>?;

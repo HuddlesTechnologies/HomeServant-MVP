@@ -44,6 +44,17 @@ class ChatRepository {
     });
   }
 
+  /// Admin-only — explicitly claims an unattended support thread, called
+  /// right before navigating into it from the Support Queue so it moves
+  /// into the claiming admin's own inbox immediately, not just once they
+  /// reply. Throws (via `_client.call`'s ApiException wrapping) if another
+  /// admin claimed it a moment earlier — see backend ChatService.claimThread.
+  Future<void> claimThread(String threadId) {
+    return _client.call(() async {
+      await _client.dio.patch('/threads/$threadId/claim');
+    });
+  }
+
   Future<ChatThread> openThread({required String recipientId, String? propertyId, String? orderId}) {
     return _client.call(() async {
       final response = await _client.dio.post(

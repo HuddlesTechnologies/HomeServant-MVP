@@ -47,6 +47,17 @@ export class ChatController {
     return this.chat.findSupportQueue();
   }
 
+  /// Explicitly claims an unattended support thread — fired the moment an
+  /// admin opens it from the shared Support Queue, before they've
+  /// necessarily replied. See ChatService.claimThread.
+  @Patch(':id/claim')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async claim(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.chat.claimThread(id, user.sub);
+  }
+
   @Get(':id/messages')
   messages(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Query('before') before?: string) {
     return this.chat.findMessages(id, user.sub, user.role, before);
@@ -83,8 +94,8 @@ export class ChatController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async resolve(@Param('id') id: string): Promise<void> {
-    await this.chat.resolveSupportThread(id);
+  async resolve(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.chat.resolveSupportThread(id, user.sub);
   }
 
   /// Admin-only in practice — [transferThread] itself already refuses

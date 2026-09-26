@@ -24,6 +24,7 @@ class ChatSocketService {
   final _controller = StreamController<ChatSocketMessage>.broadcast();
   final _notificationController = StreamController<AppNotification>.broadcast();
   final _readController = StreamController<String>.broadcast();
+  final _claimedController = StreamController<String>.broadcast();
 
   Stream<ChatSocketMessage> get onNewMessage => _controller.stream;
 
@@ -32,6 +33,13 @@ class ChatSocketService {
   /// open ChatThreadScreen flip its own sent messages to "Seen" live
   /// instead of only finding out on the next full reload.
   Stream<String> get onRead => _readController.stream;
+
+  /// Fires with a thread id the instant any admin claims a support thread
+  /// (opening it from the Support Queue, or being the first to reply — see
+  /// backend ChatService.claimThread/attemptClaim) — lets every other
+  /// admin's open Support Queue tab drop that row live instead of only on
+  /// their next new message.
+  Stream<String> get onThreadClaimed => _claimedController.stream;
 
   /// Fires the instant a new `Notification` row is created for this user
   /// anywhere on the backend (chat, admin, payments, reports, …) — the
@@ -70,6 +78,12 @@ class ChatSocketService {
       if (data is Map) {
         final threadId = data['threadId'] as String?;
         if (threadId != null) _readController.add(threadId);
+      }
+    });
+    socket.on('thread:claimed', (data) {
+      if (data is Map) {
+        final threadId = data['threadId'] as String?;
+        if (threadId != null) _claimedController.add(threadId);
       }
     });
     socket.on('notification:new', (data) {

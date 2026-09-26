@@ -294,6 +294,8 @@ model User {
   paymentsMade           Payment[]           @relation("PaymentsMade")
   paymentsReceived       Payment[]           @relation("PaymentsReceived")
   supportThreadsAssigned Thread[]            @relation("SupportThreadsAssigned")
+  threadTransfersFrom    ThreadTransferLog[] @relation("ThreadTransfersFrom")
+  threadTransfersTo      ThreadTransferLog[] @relation("ThreadTransfersTo")
 
   @@index([role])
 }
@@ -313,6 +315,17 @@ enum ActivityLogType {
   /// single type (not the whole log) is intentionally NOT logged — see
   /// AdminService.clearActivityLog's doc comment for why.
   ADMIN_ACTIVITY_LOG_CLEARED
+  /// An admin claimed an unattended support thread, either explicitly
+  /// (opening it from the Support Queue) or implicitly (being the first to
+  /// reply) — see ChatService.claimThread/attemptClaim.
+  SUPPORT_THREAD_CLAIMED
+  /// An admin handed a support (or any) thread off to another admin — see
+  /// ChatService.transferThread. [actorId] is the admin who transferred it
+  /// away, [targetId] is the admin it was transferred to.
+  SUPPORT_THREAD_TRANSFERRED
+  /// An admin marked a support thread resolved — see
+  /// ChatService.resolveSupportThread.
+  SUPPORT_THREAD_RESOLVED
 }
 
 /// Site-wide admin audit trail (Activity Log console section) — every
@@ -576,6 +589,7 @@ model Thread {
 
   participants ThreadParticipant[]
   messages     Message[]
+  transferLogs ThreadTransferLog[]
 
   @@index([propertyId])
   @@index([orderId])
@@ -585,6 +599,26 @@ model Thread {
 enum ThreadStatus {
   OPEN
   RESOLVED
+}
+
+/// One row per transfer of a thread from one admin to another — unlike
+/// [Thread.assignedAdminId] (which only ever holds the *current* handler),
+/// this is append-only, so the super-admin Chat Log can show the full chain
+/// of everyone who has ever held a conversation, not just whoever holds it
+/// now. Cascades with its Thread, so it's purged by the same 30-day support
+/// cleanup cron that already deletes old support threads/messages — no
+/// separate retention job needed.
+model ThreadTransferLog {
+  id          String   @id @default(uuid())
+  threadId    String
+  thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  fromAdminId String?
+  fromAdmin   User?    @relation("ThreadTransfersFrom", fields: [fromAdminId], references: [id], onDelete: SetNull)
+  toAdminId   String?
+  toAdmin     User?    @relation("ThreadTransfersTo", fields: [toAdminId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([threadId])
 }
 
 model ThreadParticipant {

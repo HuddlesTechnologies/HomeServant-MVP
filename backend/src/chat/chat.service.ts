@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationType, Prisma, UserRole } from '@prisma/client';
+import { ActivityLogType, NotificationType, Prisma, UserRole } from '@prisma/client';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -9,6 +10,7 @@ import { SendMessageDto } from './dto/send-message.dto';
 import { PresenceService } from './presence.service';
 
 const MESSAGE_PAGE_SIZE = 50;
+const CHAT_LOG_WINDOW_DAYS = 30;
 
 @Injectable()
 export class ChatService {
@@ -18,6 +20,7 @@ export class ChatService {
     private readonly mail: MailService,
     private readonly presence: PresenceService,
     private readonly gateway: ChatGateway,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   /// Reuses an existing thread between the same two people about the same
@@ -147,14 +150,17 @@ export class ChatService {
     }
   }
 
-  /// Every admin's shared queue — open support threads regardless of
-  /// whether they've been claimed yet, oldest first (so the longest-waiting
-  /// user is handled first). Not restricted to threads the calling admin
-  /// happens to be a participant of, unlike [findForUser] — that's the
-  /// whole point of a shared queue.
+  /// Every admin's shared queue — open, *unclaimed* support threads, oldest
+  /// first (so the longest-waiting user is handled first). The moment any
+  /// admin claims one (opening it from this queue, or being first to reply
+  /// — see [claimThread]/[attemptClaim]) it drops out of here and into that
+  /// admin's own inbox instead ([findForUser]); this is what keeps the
+  /// queue down to only truly unattended tickets. Not restricted to
+  /// threads the calling admin happens to be a participant of, unlike
+  /// [findForUser] — that's the whole point of a shared queue.
   async findSupportQueue() {
     const threads = await this.prisma.thread.findMany({
-      where: { isSupport: true, status: 'OPEN' },
+      where: { isSupport: true, status: 'OPEN', assignedAdminId: null },
       include: {
         participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -171,16 +177,98 @@ export class ChatService {
     }));
   }
 
+  /// Every support thread from the last [CHAT_LOG_WINDOW_DAYS] days,
+  /// regardless of who (if anyone) claimed it or whether it's resolved —
+  /// the super-admin-only "Chat Log" audit view. The window mirrors (and is
+  /// belt-and-suspenders with) SupportChatCleanupService's own 30-day purge,
+  /// which already means nothing older ever survives to be queried here.
+  /// [transferChain] lists every admin who has ever held this thread, in
+  /// order, distinct from [Thread.assignedAdminId] which only ever holds
+  /// the *current* one.
+  async findChatLog() {
+    const cutoff = new Date(Date.now() - CHAT_LOG_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const threads = await this.prisma.thread.findMany({
+      where: { isSupport: true, createdAt: { gte: cutoff } },
+      include: {
+        participants: { include: { user: { select: { id: true, fullName: true } } } },
+        assignedAdmin: { select: { id: true, fullName: true } },
+        transferLogs: {
+          orderBy: { createdAt: 'asc' },
+          include: { fromAdmin: { select: { fullName: true } }, toAdmin: { select: { fullName: true } } },
+        },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return threads.map((thread) => {
+      const chain = [
+        thread.transferLogs[0]?.fromAdmin?.fullName,
+        ...thread.transferLogs.map((log) => log.toAdmin?.fullName),
+      ].filter((name): name is string => Boolean(name));
+      return {
+        id: thread.id,
+        requester: thread.participants.find((p) => p.userId !== thread.assignedAdminId)?.user ?? null,
+        currentAdmin: thread.assignedAdmin,
+        status: thread.status === 'RESOLVED' ? 'RESOLVED' : thread.assignedAdminId ? 'OPENED' : 'UNATTENDED',
+        transferChain: chain,
+        lastMessage: thread.messages[0] ?? null,
+        createdAt: thread.createdAt,
+        resolvedAt: thread.resolvedAt,
+      };
+    });
+  }
+
+  /// Claims an unattended support thread for [adminId] — the explicit
+  /// counterpart to [sendMessage]'s implicit "first reply claims it": this
+  /// is what fires the moment an admin *opens* a ticket from the Support
+  /// Queue, before they've necessarily typed anything, which is what
+  /// actually moves it into their inbox and off every other admin's queue.
+  /// Refuses a thread that's already resolved (nothing left to claim) or
+  /// already claimed by someone else (loses the race, see [attemptClaim]).
+  async claimThread(threadId: string, adminId: string): Promise<void> {
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
+    if (thread.status === 'RESOLVED') throw new ForbiddenException('This conversation is already resolved');
+    if (thread.assignedAdminId === adminId) return;
+
+    const claimed = await this.attemptClaim(threadId, adminId);
+    if (!claimed) throw new ForbiddenException('This conversation has already been claimed by another admin');
+
+    await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: adminId });
+    this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+  }
+
+  /// Race-safe "claim this unattended support thread" primitive shared by
+  /// [claimThread] (an explicit open from the Support Queue) and
+  /// [sendMessage] (an implicit claim via first reply). The conditional
+  /// `updateMany` (not a plain read-then-write) is what makes it race-safe:
+  /// two admins racing for the same thread can't both win it — Postgres
+  /// row-locks the UPDATE, so only whichever one still finds
+  /// `assignedAdminId: null` true when it actually runs gets `count: 1`;
+  /// the loser gets `count: 0` and is told it lost rather than silently
+  /// double-claiming.
+  private async attemptClaim(threadId: string, adminId: string): Promise<boolean> {
+    const claim = await this.prisma.thread.updateMany({
+      where: { id: threadId, assignedAdminId: null },
+      data: { assignedAdminId: adminId },
+    });
+    if (claim.count === 0) return false;
+    await this.prisma.threadParticipant.create({ data: { threadId, userId: adminId } });
+    return true;
+  }
+
   /// Sets `status: RESOLVED` — from that point [findForUser] hides this
   /// thread from the *user's* inbox (see its `isAdmin` param); the admin
   /// side still shows it until the 30-day cleanup cron purges it. Any admin
   /// can resolve it, not just whoever's assigned, same as any admin can
-  /// see the shared queue.
-  async resolveSupportThread(threadId: string): Promise<void> {
+  /// see the shared queue. [adminId] is only used for the activity-log
+  /// entry — it plays no part in authorization.
+  async resolveSupportThread(threadId: string, adminId: string): Promise<void> {
     const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, include: { participants: true } });
     if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
     if (thread.status === 'RESOLVED') return;
     await this.prisma.thread.update({ where: { id: threadId }, data: { status: 'RESOLVED', resolvedAt: new Date() } });
+    await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_RESOLVED, { actorId: adminId });
 
     const requester = thread.participants.find((p) => p.userId !== thread.assignedAdminId);
     if (requester) {
@@ -216,25 +304,15 @@ export class ChatService {
     const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
 
     // First admin to reply to an unclaimed support thread claims it — the
-    // same "first responder owns it" idea Report.assignedAdminId already
-    // uses. Adding them as a real ThreadParticipant (not just
-    // `assignedAdminId`) is what makes the thread show up in their own
-    // inbox (findForUser) from here on, and lets ChatGateway's normal
-    // per-user-room broadcast reach them for later messages.
-    //
-    // The claim itself is a conditional `updateMany` (not a plain
-    // read-then-write) so two admins replying within milliseconds of each
-    // other can't both win it — Postgres serializes the two UPDATEs via
-    // row locking, so only the one that actually finds `assignedAdminId:
-    // null` still true when it runs gets `count: 1`; the loser's `count`
-    // is 0 and it doesn't add itself as a participant.
+    // implicit counterpart to [claimThread]'s explicit "open it from the
+    // queue" claim, for whenever an admin replies without having opened it
+    // that way first (e.g. an old client, or a reply typed from a
+    // notification deep-link). See [attemptClaim] for the race-safety.
     if (senderRole === 'ADMIN' && thread?.isSupport && !thread.assignedAdminId) {
-      const claim = await this.prisma.thread.updateMany({
-        where: { id: threadId, assignedAdminId: null },
-        data: { assignedAdminId: userId },
-      });
-      if (claim.count > 0) {
-        await this.prisma.threadParticipant.create({ data: { threadId, userId } });
+      const claimed = await this.attemptClaim(threadId, userId);
+      if (claimed) {
+        await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: userId });
+        this.gateway.broadcastToAdmins('thread:claimed', { threadId });
       }
     }
 
@@ -314,10 +392,20 @@ export class ChatService {
   /// support does it" — [fromAdminId] must actually be in this thread
   /// (so an admin can only transfer conversations they're personally
   /// part of, not any thread by id) and [toAdminId] must be an admin
-  /// account. Swaps the ThreadParticipant row's `userId` in place rather
-  /// than delete+recreate, so message history/read state is unaffected.
+  /// account. Refuses once the thread's been marked resolved — there's
+  /// nothing left to hand off. Swaps the ThreadParticipant row's `userId`
+  /// in place rather than delete+recreate, so message history/read state
+  /// is unaffected; also moves `assignedAdminId` to [toAdminId] (it's meant
+  /// to track *current* handler, used by the queue/badge logic) and records
+  /// a [ThreadTransferLog] row so the super-admin Chat Log can show the
+  /// full chain later, since `assignedAdminId` itself only ever holds the
+  /// latest one.
   async transferThread(threadId: string, fromAdminId: string, toAdminId: string): Promise<void> {
     if (fromAdminId === toAdminId) throw new ForbiddenException("Can't transfer a thread to yourself");
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    if (!thread) throw new NotFoundException('Thread not found');
+    if (thread.status === 'RESOLVED') throw new ForbiddenException("Can't transfer a resolved conversation");
+
     const membership = await this.prisma.threadParticipant.findUnique({
       where: { threadId_userId: { threadId, userId: fromAdminId } },
     });
@@ -330,7 +418,13 @@ export class ChatService {
     });
     if (alreadyIn) throw new ForbiddenException('That admin is already part of this conversation');
 
-    await this.prisma.threadParticipant.update({ where: { id: membership.id }, data: { userId: toAdminId } });
+    await this.prisma.$transaction([
+      this.prisma.threadParticipant.update({ where: { id: membership.id }, data: { userId: toAdminId } }),
+      this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: toAdminId } }),
+      this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId, toAdminId } }),
+    ]);
+    await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: fromAdminId, targetId: toAdminId });
+
     await this.notifications.create(
       toAdminId,
       NotificationType.THREAD_TRANSFERRED,

@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'models/admin_models.dart';
+import 'models/chat_log.dart';
 import '../features/dashboard/models/property.dart';
 
 class AdminRepository {
@@ -292,6 +293,16 @@ class AdminRepository {
   Future<void> clearActivityLog({ActivityLogType? type}) {
     return _client.call(() async {
       await _client.dio.delete('/admin/activity-log', queryParameters: {if (type != null) 'type': type.apiValue});
+    });
+  }
+
+  /// SUPER_ADMIN only — the backend independently re-checks this. Every
+  /// support thread from the last 30 days, with its current badge/handler
+  /// and full transfer chain — see AdminChatLogScreen.
+  Future<List<ChatLogEntry>> findChatLog() {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/chat-log');
+      return (response.data as List).cast<Map<String, dynamic>>().map(ChatLogEntry.fromApi).toList();
     });
   }
 

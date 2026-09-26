@@ -33,12 +33,16 @@ class AdminMessagesTab extends StatefulWidget {
 
 enum _MessagesView { inbox, supportQueue }
 
+enum _InboxFilter { all, opened, resolved }
+
 class _AdminMessagesTabState extends State<AdminMessagesTab> {
   _MessagesView _view = _MessagesView.inbox;
+  _InboxFilter _inboxFilter = _InboxFilter.all;
   List<ChatThread>? _threads;
   List<SupportQueueThread>? _queue;
   String? _error;
   StreamSubscription<ChatSocketMessage>? _socketSubscription;
+  StreamSubscription<String>? _claimedSubscription;
 
   @override
   void initState() {
@@ -48,11 +52,16 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
     // refresh or reopening the tab — a message arriving while an admin sat
     // here just never showed up until then.
     _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen((_) => _load());
+    // A ticket another admin just claimed (opened, or replied to) needs to
+    // vanish from *my* Support Queue view live too — a claim carries no
+    // message of its own, so onNewMessage alone wouldn't catch it.
+    _claimedSubscription = context.read<AppState>().chatSocket.onThreadClaimed.listen((_) => _load());
   }
 
   @override
   void dispose() {
     _socketSubscription?.cancel();
+    _claimedSubscription?.cancel();
     super.dispose();
   }
 
@@ -89,6 +98,12 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
           adminViewOfUserId: thread.otherParticipants.isNotEmpty ? thread.otherParticipants.first.id : null,
           showExportAction: true,
           otherParticipant: thread.otherParticipant,
+          // Only support threads carry resolve/transfer semantics — a
+          // regular property/order thread has neither.
+          showResolveTransferActions: thread.isSupport,
+          isResolved: thread.resolved,
+          onResolve: thread.isSupport ? () => _resolve(thread.id) : null,
+          onTransfer: thread.isSupport ? () => _transfer(thread.id) : null,
         ),
       ),
     );
@@ -96,7 +111,21 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
     _load();
   }
 
+  /// Claims the ticket (moving it into this admin's own inbox) *before*
+  /// opening it — that's what makes "opening a message from the queue"
+  /// itself the claim, not waiting for a reply. If another admin claimed
+  /// it a moment earlier, this throws instead of navigating anywhere.
   Future<void> _openQueueThread(SupportQueueThread thread) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().chat.claimThread(thread.id);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      _load();
+      return;
+    }
+    if (!mounted) return;
+    final requesterName = thread.requesterName?.isNotEmpty == true ? thread.requesterName! : 'A user';
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ChatThreadScreen(
@@ -104,10 +133,13 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
           // The *requester* is the customer, not "HomeServant Support" —
           // that label belongs on the user's own side of this
           // conversation (see support_sheet.dart), never the admin's.
-          contactName: thread.requesterName?.isNotEmpty == true ? thread.requesterName! : 'A user',
+          contactName: requesterName,
           threadId: thread.id,
           adminViewOfUserId: thread.requesterId,
           showExportAction: true,
+          showResolveTransferActions: true,
+          onResolve: () => _resolve(thread.id),
+          onTransfer: () => _transfer(thread.id),
         ),
       ),
     );
@@ -126,7 +158,7 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
     }
   }
 
-  Future<void> _transfer(ChatThread thread) async {
+  Future<void> _transfer(String threadId) async {
     final messenger = ScaffoldMessenger.of(context);
     List<AdminAccount> admins;
     try {
@@ -145,7 +177,7 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
     );
     if (chosen == null || !mounted) return;
     try {
-      await context.read<AppState>().chat.transferThread(thread.id, chosen.id);
+      await context.read<AppState>().chat.transferThread(threadId, chosen.id);
       messenger.showSnackBar(SnackBar(content: Text('Transferred to ${chosen.email}')));
       _load();
     } on ApiException catch (e) {
@@ -193,77 +225,131 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
   }
 
   Widget _buildInbox() {
-    final threads = _threads;
-    if (threads == null) return Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator());
-    if (threads.isEmpty) return const Center(child: Text('No conversations yet'));
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-        itemCount: threads.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 10),
-        itemBuilder: (context, index) {
-          final thread = threads[index];
-          final unread = thread.unreadCount > 0;
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final allThreads = _threads;
+    if (allThreads == null) return Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator());
+    // Unattended (red) is a Support Queue-only concept — a thread that's
+    // reached the inbox has, by definition, already been claimed — so the
+    // inbox only ever needs to distinguish still-open ("Read") from
+    // resolved.
+    final threads = switch (_inboxFilter) {
+      _InboxFilter.all => allThreads,
+      _InboxFilter.opened => allThreads.where((t) => t.isSupport && !t.resolved).toList(),
+      _InboxFilter.resolved => allThreads.where((t) => t.isSupport && t.resolved).toList(),
+    };
+    return Column(
+      children: [
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () => _openThread(thread),
-                  borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: adminCardDecoration,
-                    child: ChatThreadListTile(
-                      thread: thread,
-                      avatar: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: AppColors.navy.withValues(alpha: 0.1),
-                        child: Icon(thread.isSupport ? Icons.support_agent_rounded : Icons.person, color: AppColors.navy),
-                      ),
-                      nameStyle: AppTextStyles.body(
-                        color: AppColors.navy,
-                        size: 14,
-                        weight: unread ? FontWeight.w800 : FontWeight.w700,
-                      ),
-                      messageStyle: AppTextStyles.body(
-                        color: AppColors.hintGrey,
-                        size: 12.5,
-                        weight: unread ? FontWeight.w600 : FontWeight.w400,
-                      ),
-                      trailing: unread
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                              decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(9)),
-                              constraints: const BoxConstraints(minWidth: 20),
-                              child: Text(
-                                '${thread.unreadCount}',
-                                textAlign: TextAlign.center,
-                                style: AppTextStyles.body(color: Colors.white, size: 11, weight: FontWeight.w700),
+              AdminFilterChip(
+                label: 'All',
+                selected: _inboxFilter == _InboxFilter.all,
+                onTap: () => setState(() => _inboxFilter = _InboxFilter.all),
+              ),
+              const SizedBox(width: 8),
+              AdminFilterChip(
+                label: 'Opened',
+                selected: _inboxFilter == _InboxFilter.opened,
+                onTap: () => setState(() => _inboxFilter = _InboxFilter.opened),
+              ),
+              const SizedBox(width: 8),
+              AdminFilterChip(
+                label: 'Resolved',
+                selected: _inboxFilter == _InboxFilter.resolved,
+                onTap: () => setState(() => _inboxFilter = _InboxFilter.resolved),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: threads.isEmpty
+              ? const Center(child: Text('No conversations yet'))
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                    itemCount: threads.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final thread = threads[index];
+                      final unread = thread.unreadCount > 0;
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () => _openThread(thread),
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: adminCardDecoration,
+                                child: ChatThreadListTile(
+                                  thread: thread,
+                                  avatar: CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: AppColors.navy.withValues(alpha: 0.1),
+                                    child: Icon(
+                                      thread.isSupport ? Icons.support_agent_rounded : Icons.person,
+                                      color: AppColors.navy,
+                                    ),
+                                  ),
+                                  nameStyle: AppTextStyles.body(
+                                    color: AppColors.navy,
+                                    size: 14,
+                                    weight: unread ? FontWeight.w800 : FontWeight.w700,
+                                  ),
+                                  messageStyle: AppTextStyles.body(
+                                    color: AppColors.hintGrey,
+                                    size: 12.5,
+                                    weight: unread ? FontWeight.w600 : FontWeight.w400,
+                                  ),
+                                  trailing: unread
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                          decoration:
+                                              BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(9)),
+                                          constraints: const BoxConstraints(minWidth: 20),
+                                          child: Text(
+                                            '${thread.unreadCount}',
+                                            textAlign: TextAlign.center,
+                                            style: AppTextStyles.body(color: Colors.white, size: 11, weight: FontWeight.w700),
+                                          ),
+                                        )
+                                      : null,
+                                ),
                               ),
-                            )
-                          : null,
-                    ),
+                            ),
+                          ),
+                          if (thread.isSupport) ...[
+                            const SizedBox(width: 8),
+                            _Badge(
+                              text: thread.resolved ? 'Resolved' : 'Read',
+                              color: thread.resolved ? Colors.green : Colors.blue,
+                            ),
+                            const SizedBox(width: 4),
+                            if (!thread.resolved)
+                              IconButton(
+                                onPressed: () => _resolve(thread.id),
+                                icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
+                                tooltip: 'Mark resolved',
+                              ),
+                          ] else
+                            IconButton(
+                              onPressed: () => _transfer(thread.id),
+                              icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
+                              tooltip: 'Transfer to another admin',
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
-              ),
-              if (thread.isSupport && !thread.resolved)
-                IconButton(
-                  onPressed: () => _resolve(thread.id),
-                  icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
-                  tooltip: 'Mark resolved',
-                )
-              else if (!thread.isSupport)
-                IconButton(
-                  onPressed: () => _transfer(thread),
-                  icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
-                  tooltip: 'Transfer to another admin',
-                ),
-            ],
-          );
-        },
-      ),
+        ),
+      ],
     );
   }
 
@@ -317,10 +403,11 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(formatRelativeTime(thread.createdAt), style: AppTextStyles.body(color: AppColors.hintGrey, size: 11)),
-                      if (!thread.isClaimed) ...[
-                        const SizedBox(height: 4),
-                        const _Badge(text: 'Unclaimed', color: Colors.orange),
-                      ],
+                      // The backend now excludes claimed threads from this
+                      // queue entirely (see ChatService.findSupportQueue),
+                      // so every row here is unattended by construction.
+                      const SizedBox(height: 4),
+                      const _Badge(text: 'Unattended', color: Colors.red),
                     ],
                   ),
                 ],

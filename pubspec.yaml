@@ -51,6 +51,7 @@ dependencies:
   google_sign_in: ^6.3.0
   socket_io_client: ^3.1.2
   device_info_plus: ^11.2.0
+  audioplayers: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -88,6 +89,7 @@ flutter:
     - assets/images/marketplace/
     - assets/icons/
     - assets/videos/
+    - assets/sounds/
 
   fonts:
     - family: Quity

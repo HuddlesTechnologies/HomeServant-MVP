@@ -14,6 +14,7 @@ import '../../widgets/notification_bell.dart';
 import '../dashboard/notifications_screen.dart';
 import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
+import 'admin_chat_log_screen.dart';
 import 'admin_dashboard_tab.dart';
 import 'admin_marketplace_tab.dart';
 import 'admin_messages_tab.dart';
@@ -310,7 +311,7 @@ class _AdminShellState extends State<AdminShell> {
   /// native "More" list pushing into its own detail screens. [count] backs
   /// both that item's own row badge and the "More" nav destination's total
   /// (see [_moreAttentionTotal]/[_openMoreSheet]).
-  List<_MoreItem> _moreItems(bool canSeeAdmins) => [
+  List<_MoreItem> _moreItems(bool canSeeAdmins, bool isSuperAdmin) => [
     _MoreItem(icon: Icons.home_work_outlined, label: 'Properties', count: _openPropertyReportsCount, builder: AdminPropertiesTab.new),
     _MoreItem(
       icon: Icons.shopping_bag_outlined,
@@ -323,11 +324,17 @@ class _AdminShellState extends State<AdminShell> {
       _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', count: _pendingAdminInvitesCount, builder: AdminAdminsTab.new),
       const _MoreItem(icon: Icons.history_rounded, label: 'Activity Log', builder: AdminActivityLogScreen.new),
     ],
+    // Every other admin's chat history across the last 30 days — kept
+    // SUPER_ADMIN-only (the server independently re-checks this too, see
+    // AdminController.findChatLog) since it's not scoped to the viewing
+    // admin's own conversations the way Messages is.
+    if (isSuperAdmin) const _MoreItem(icon: Icons.history_edu_rounded, label: 'Chat Log', builder: AdminChatLogScreen.new),
   ];
 
-  int _moreAttentionTotal(bool canSeeAdmins) => _moreItems(canSeeAdmins).fold<int>(0, (sum, item) => sum + item.count);
+  int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>
+      _moreItems(canSeeAdmins, isSuperAdmin).fold<int>(0, (sum, item) => sum + item.count);
 
-  void _openMoreSheet(BuildContext context, bool canSeeAdmins) {
+  void _openMoreSheet(BuildContext context, bool canSeeAdmins, bool isSuperAdmin) {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.white,
@@ -341,7 +348,7 @@ class _AdminShellState extends State<AdminShell> {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
               child: Text('More', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
             ),
-            for (final item in _moreItems(canSeeAdmins))
+            for (final item in _moreItems(canSeeAdmins, isSuperAdmin))
               ListTile(
                 leading: Icon(item.icon, color: AppColors.navy),
                 title: Text(item.label, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
@@ -394,18 +401,20 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
-    final canSeeAdmins = context.watch<AppState>().adminLevel?.atLeastModerator ?? false;
+    final adminLevel = context.watch<AppState>().adminLevel;
+    final canSeeAdmins = adminLevel?.atLeastModerator ?? false;
+    final isSuperAdmin = adminLevel?.isSuperAdmin ?? false;
     final index = _index >= _primaryTabs.length ? 0 : _index;
 
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _resetIdleTimer(),
       onPointerSignal: (_) => _resetIdleTimer(),
-      child: _buildScaffold(context, canSeeAdmins, index),
+      child: _buildScaffold(context, canSeeAdmins, isSuperAdmin, index),
     );
   }
 
-  Widget _buildScaffold(BuildContext context, bool canSeeAdmins, int index) {
+  Widget _buildScaffold(BuildContext context, bool canSeeAdmins, bool isSuperAdmin, int index) {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
@@ -444,7 +453,7 @@ class _AdminShellState extends State<AdminShell> {
         selectedIndex: index,
         onDestinationSelected: (value) {
           if (value == _primaryTabs.length) {
-            _openMoreSheet(context, canSeeAdmins);
+            _openMoreSheet(context, canSeeAdmins, isSuperAdmin);
             return;
           }
           setState(() => _index = value);
@@ -454,8 +463,8 @@ class _AdminShellState extends State<AdminShell> {
         destinations: [
           ..._primaryDestinations,
           NavigationDestination(
-            icon: _badgedIcon(Icons.more_horiz_rounded, _moreAttentionTotal(canSeeAdmins)),
-            selectedIcon: _badgedIcon(Icons.more_horiz_rounded, _moreAttentionTotal(canSeeAdmins)),
+            icon: _badgedIcon(Icons.more_horiz_rounded, _moreAttentionTotal(canSeeAdmins, isSuperAdmin)),
+            selectedIcon: _badgedIcon(Icons.more_horiz_rounded, _moreAttentionTotal(canSeeAdmins, isSuperAdmin)),
             label: 'More',
           ),
         ],

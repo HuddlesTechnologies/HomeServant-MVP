@@ -136,6 +136,19 @@ export class AdminController {
     await this.admin.clearActivityLog(actingAdmin.sub, type);
   }
 
+  // --- Chat log ----------------------------------------------------------
+
+  /// Every support thread from the last 30 days — badges, current handler,
+  /// and the full transfer chain (who it was handed between, and how many
+  /// times) — unlike the Support Queue/Inbox, this is read-only history
+  /// across *every* admin's conversations, so it's restricted to
+  /// SUPER_ADMIN. See ChatService.findChatLog.
+  @Get('chat-log')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  findChatLog() {
+    return this.admin.findChatLog();
+  }
+
   // --- Users -----------------------------------------------------------
 
   @Get('users')

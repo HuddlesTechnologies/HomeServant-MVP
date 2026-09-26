@@ -57,6 +57,11 @@ class ChatThreadScreen extends StatefulWidget {
     this.adminViewOfUserId,
     this.showExportAction = false,
     this.otherParticipant,
+    this.showResolveTransferActions = false,
+    this.isResolved = false,
+    this.onResolve,
+    this.onTransfer,
+    this.readOnly = false,
   });
 
   final DashboardTheme theme;
@@ -99,6 +104,26 @@ class ChatThreadScreen extends StatefulWidget {
   /// no prior participant data) or a non-1:1 context.
   final ThreadParticipant? otherParticipant;
 
+  /// True to render the "Mark as Resolved"/"Transfer" bar under the AppBar
+  /// — only ever passed `true` from an admin's own Inbox (never from the
+  /// shared Support Queue, and never for the read-only Chat Log viewer),
+  /// since transferring/resolving only makes sense once a conversation is
+  /// genuinely in that admin's inbox.
+  final bool showResolveTransferActions;
+
+  /// Only meaningful when [showResolveTransferActions] is true — swaps the
+  /// action buttons for a plain green "Resolved" label once the thread's
+  /// already resolved (nothing left to transfer or resolve again).
+  final bool isResolved;
+
+  final Future<void> Function()? onResolve;
+  final Future<void> Function()? onTransfer;
+
+  /// True for the super-admin Chat Log's history viewer — hides the input
+  /// row and the resolve/transfer bar entirely so browsing another admin's
+  /// past conversation can't be mistaken for actually replying to it.
+  final bool readOnly;
+
   @override
   State<ChatThreadScreen> createState() => _ChatThreadScreenState();
 }
@@ -116,6 +141,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _loadingRecipientDetail = false;
   String? _recipientDetailError;
   bool _exportingPdf = false;
+  bool _resolvingOrTransferring = false;
 
   @override
   void initState() {
@@ -255,6 +281,28 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       if (mounted) messenger.showSnackBar(const SnackBar(content: Text("Couldn't export this chat.")));
     } finally {
       if (mounted) setState(() => _exportingPdf = false);
+    }
+  }
+
+  Future<void> _handleResolve() async {
+    final onResolve = widget.onResolve;
+    if (onResolve == null || _resolvingOrTransferring) return;
+    setState(() => _resolvingOrTransferring = true);
+    try {
+      await onResolve();
+    } finally {
+      if (mounted) setState(() => _resolvingOrTransferring = false);
+    }
+  }
+
+  Future<void> _handleTransfer() async {
+    final onTransfer = widget.onTransfer;
+    if (onTransfer == null || _resolvingOrTransferring) return;
+    setState(() => _resolvingOrTransferring = true);
+    try {
+      await onTransfer();
+    } finally {
+      if (mounted) setState(() => _resolvingOrTransferring = false);
     }
   }
 
@@ -406,6 +454,14 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 ),
               if (orderItem != null && orderStatus != null)
                 _OrderStatusBanner(theme: theme, item: orderItem, status: orderStatus),
+              if (widget.showResolveTransferActions && !widget.readOnly)
+                _ResolveTransferBar(
+                  theme: theme,
+                  isResolved: widget.isResolved,
+                  busy: _resolvingOrTransferring,
+                  onResolve: _handleResolve,
+                  onTransfer: _handleTransfer,
+                ),
               if (_loadingRemote) const LinearProgressIndicator(minHeight: 2),
               Expanded(
                 child: ListView.builder(
@@ -496,37 +552,38 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     ),
                   ),
                 ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: PillTextField(
-                        hint: 'Type a message',
-                        controller: _inputController,
-                        fillColor: theme.surface,
-                        textColor: theme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    GestureDetector(
-                      onTap: _send,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.accent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.send_rounded,
-                          color: theme.onAccent,
-                          size: 20,
+              if (!widget.readOnly)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: PillTextField(
+                          hint: 'Type a message',
+                          controller: _inputController,
+                          fillColor: theme.surface,
+                          textColor: theme.onSurface,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: _send,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: theme.accent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.send_rounded,
+                            color: theme.onAccent,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -627,6 +684,72 @@ class _PropertyPreviewBubble extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The literal "at the top of a chat there should be a section that says
+/// mark as resolved" bar — a plain green "Resolved" label once [isResolved]
+/// (nothing left to do), otherwise a "Mark as Resolved" button plus a
+/// "Transfer" icon button. `theme.surface`/`theme.onSurface` are used
+/// rather than `theme.background`/`theme.foreground` since this sits as
+/// its own raised bar (same convention as [_OrderStatusBanner]/
+/// `_RecipientInfoPanel`), and `onSurface` stays navy-on-light-surface
+/// across every `DashboardTheme` variant.
+class _ResolveTransferBar extends StatelessWidget {
+  const _ResolveTransferBar({
+    required this.theme,
+    required this.isResolved,
+    required this.busy,
+    required this.onResolve,
+    required this.onTransfer,
+  });
+
+  final DashboardTheme theme;
+  final bool isResolved;
+  final bool busy;
+  final VoidCallback onResolve;
+  final VoidCallback onTransfer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(14)),
+      child: isResolved
+          ? Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.green, size: 18),
+                const SizedBox(width: 8),
+                Text('Resolved', style: AppTextStyles.body(color: Colors.green, size: 13.5, weight: FontWeight.w700)),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: busy ? null : onResolve,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.green),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green, size: 16),
+                    label: Text(
+                      'Mark as Resolved',
+                      style: AppTextStyles.body(color: Colors.green, size: 12.5, weight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  onPressed: busy ? null : onTransfer,
+                  icon: Icon(Icons.swap_horiz_rounded, color: theme.onSurface),
+                  tooltip: 'Transfer to another admin',
+                ),
+              ],
+            ),
     );
   }
 }

@@ -836,7 +836,10 @@ enum ActivityLogType {
   adminPasswordChanged,
   adminPasswordReset,
   adminUserEdited,
-  adminActivityLogCleared;
+  adminActivityLogCleared,
+  supportThreadClaimed,
+  supportThreadTransferred,
+  supportThreadResolved;
 
   static ActivityLogType fromApi(String value) => switch (value) {
     'ADMIN_LOGIN' => ActivityLogType.adminLogin,
@@ -844,6 +847,9 @@ enum ActivityLogType {
     'ADMIN_PASSWORD_RESET' => ActivityLogType.adminPasswordReset,
     'ADMIN_USER_EDITED' => ActivityLogType.adminUserEdited,
     'ADMIN_ACTIVITY_LOG_CLEARED' => ActivityLogType.adminActivityLogCleared,
+    'SUPPORT_THREAD_CLAIMED' => ActivityLogType.supportThreadClaimed,
+    'SUPPORT_THREAD_TRANSFERRED' => ActivityLogType.supportThreadTransferred,
+    'SUPPORT_THREAD_RESOLVED' => ActivityLogType.supportThreadResolved,
     _ => ActivityLogType.adminLogin,
   };
 
@@ -856,6 +862,9 @@ enum ActivityLogType {
     ActivityLogType.adminPasswordReset => 'ADMIN_PASSWORD_RESET',
     ActivityLogType.adminUserEdited => 'ADMIN_USER_EDITED',
     ActivityLogType.adminActivityLogCleared => 'ADMIN_ACTIVITY_LOG_CLEARED',
+    ActivityLogType.supportThreadClaimed => 'SUPPORT_THREAD_CLAIMED',
+    ActivityLogType.supportThreadTransferred => 'SUPPORT_THREAD_TRANSFERRED',
+    ActivityLogType.supportThreadResolved => 'SUPPORT_THREAD_RESOLVED',
   };
 
   String get label => switch (this) {
@@ -864,6 +873,9 @@ enum ActivityLogType {
     ActivityLogType.adminPasswordReset => 'Password reset',
     ActivityLogType.adminUserEdited => 'Edited a user',
     ActivityLogType.adminActivityLogCleared => 'Cleared the activity log',
+    ActivityLogType.supportThreadClaimed => 'Claimed a support chat',
+    ActivityLogType.supportThreadTransferred => 'Transferred a chat',
+    ActivityLogType.supportThreadResolved => 'Resolved a support chat',
   };
 }
 

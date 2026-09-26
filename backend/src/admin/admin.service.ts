@@ -4,6 +4,7 @@ import { AdminLevel, ActivityLogType, NotificationType, OtpPurpose, Prisma } fro
 import * as bcrypt from 'bcryptjs';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AuthService } from '../auth/auth.service';
+import { ChatService } from '../chat/chat.service';
 import { PresenceService } from '../chat/presence.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -50,6 +51,7 @@ export class AdminService {
     private readonly otp: OtpService,
     private readonly activityLog: ActivityLogService,
     private readonly presence: PresenceService,
+    private readonly chat: ChatService,
   ) {}
 
   // --- Bootstrap / admin accounts ---------------------------------------
@@ -285,6 +287,16 @@ export class AdminService {
     if (!type) {
       await this.activityLog.log(ActivityLogType.ADMIN_ACTIVITY_LOG_CLEARED, { actorId: actingAdminId });
     }
+  }
+
+  // --- Chat log ------------------------------------------------------------
+
+  /// SUPER_ADMIN only (see AdminController) — delegates straight to
+  /// ChatService, which already owns every Thread/Message/ThreadTransferLog
+  /// query; this stays a one-line pass-through the same way
+  /// [findActivityLog] delegates to ActivityLogService.
+  findChatLog() {
+    return this.chat.findChatLog();
   }
 
   // --- Platform stats ----------------------------------------------------

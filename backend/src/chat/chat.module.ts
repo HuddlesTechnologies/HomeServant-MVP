@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -13,9 +14,12 @@ import { SupportChatCleanupService } from './support-chat-cleanup.service';
 /// message) — a circular module reference, hence forwardRef on both sides,
 /// same as PaymentsModule/PaystackModule.
 @Module({
-  imports: [AuthModule, forwardRef(() => NotificationsModule), MailModule],
+  imports: [AuthModule, forwardRef(() => NotificationsModule), MailModule, ActivityLogModule],
   controllers: [ChatController],
   providers: [ChatService, ChatGateway, SupportChatCleanupService],
-  exports: [ChatGateway],
+  // ChatService is exported for AdminModule, whose super-admin-only Chat
+  // Log endpoint (AdminService.findChatLog) delegates straight into
+  // ChatService.findChatLog rather than duplicating its Prisma query.
+  exports: [ChatGateway, ChatService],
 })
 export class ChatModule {}

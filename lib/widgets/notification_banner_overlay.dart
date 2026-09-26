@@ -6,7 +6,18 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
 import '../features/dashboard/notifications_screen.dart';
 import '../routes/app_router.dart';
+import '../services/chat_sound_service.dart';
 import '../state/app_state.dart';
+
+/// Notification types worth an audible alert in the admin console — a new
+/// queue/inbox message, a conversation handed to you, or one you're on
+/// getting resolved. Deliberately not every [NotificationType] (a tenant
+/// getting a rent-expiry reminder, say, shouldn't ding).
+const _chatSoundTypes = {
+  NotificationType.newMessage,
+  NotificationType.threadTransferred,
+  NotificationType.supportThreadResolved,
+};
 
 /// Instagram-style transient toast for any new notification (messages,
 /// booking/order status, vendor approvals — everything that passes through
@@ -52,6 +63,12 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
     // in sync with what the banner just showed, without this overlay
     // needing to know how those counters are maintained internally.
     unawaited(appState.loadNotifications());
+    // Sound is admin-console-only (an admin session is the only one with a
+    // non-null adminLevel) and only for chat-relevant events — see
+    // _chatSoundTypes.
+    if (appState.adminLevel != null && _chatSoundTypes.contains(notification.type)) {
+      unawaited(ChatSoundService.instance.play());
+    }
     _dismissTimer?.cancel();
     setState(() => _visible = notification);
     if (appState.bannerAutoDismiss) {

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { AuthModule } from '../auth/auth.module';
+import { ChatModule } from '../chat/chat.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OtpModule } from '../otp/otp.module';
@@ -9,7 +10,7 @@ import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
 @Module({
-  imports: [AuthModule, MailModule, NotificationsModule, OtpModule, ActivityLogModule],
+  imports: [AuthModule, MailModule, NotificationsModule, OtpModule, ActivityLogModule, ChatModule],
   controllers: [AdminController, AdminBootstrapController],
   providers: [AdminService],
 })
