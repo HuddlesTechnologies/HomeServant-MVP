@@ -1,19 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../api/api_exception.dart';
 import '../core/theme/app_text_styles.dart';
 import '../features/dashboard/chat_thread_screen.dart';
 import '../models/dashboard_theme.dart';
+import '../state/app_state.dart';
 
 /// Home Servant's support line — shown to the user if the dialer can't be
 /// launched (e.g. a browser blocking it), so they can still dial manually.
 const supportPhoneNumber = '+234 700 000 0000';
-
-/// A seeded conversation with support, reused as the "Live Chat" target
-/// for both tenants/landlords and vendors — this prototype has no live
-/// support backend, so it opens the same scripted thread every time.
-List<ChatMessage> get _supportMessages => [
-  ChatMessage(text: 'Hi! How can we help today?', fromMe: false),
-];
 
 /// Bottom sheet offering the two ways to reach support: a phone call or a
 /// live chat thread. Shared by the tenant/landlord Settings screen and the
@@ -54,17 +50,9 @@ Future<void> showSupportOptionsSheet(BuildContext context, {required DashboardTh
               icon: Icons.chat_bubble_outline_rounded,
               label: 'Live Chat',
               subtitle: 'Chat with our support team',
-              onTap: () {
+              onTap: () async {
                 Navigator.of(sheetContext).pop();
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ChatThreadScreen(
-                      theme: theme,
-                      contactName: 'HomeServant Support',
-                      initialMessages: _supportMessages,
-                    ),
-                  ),
-                );
+                await _openLiveChat(context, theme);
               },
             ),
           ],
@@ -72,6 +60,29 @@ Future<void> showSupportOptionsSheet(BuildContext context, {required DashboardTh
       ),
     ),
   );
+}
+
+/// Opens (or reuses) the caller's own support thread and pushes a real
+/// [ChatThreadScreen] on it — previously this pushed a purely local,
+/// scripted conversation with no `threadId`, so nothing typed here ever
+/// left the device.
+Future<void> _openLiveChat(BuildContext context, DashboardTheme theme) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final thread = await context.read<AppState>().chat.openSupportThread();
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatThreadScreen(
+          theme: theme,
+          contactName: 'HomeServant Support',
+          threadId: thread.id,
+        ),
+      ),
+    );
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+  }
 }
 
 Future<void> _callSupport(BuildContext context) async {

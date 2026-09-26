@@ -69,6 +69,7 @@ class AdminStats {
     required this.landlords,
     required this.vendors,
     required this.pendingVendors,
+    required this.activeVendors,
     required this.properties,
     required this.bookings,
     required this.marketplaceOrders,
@@ -80,6 +81,7 @@ class AdminStats {
   final int landlords;
   final int vendors;
   final int pendingVendors;
+  final int activeVendors;
   final int properties;
   final int bookings;
   final int marketplaceOrders;
@@ -91,6 +93,7 @@ class AdminStats {
     landlords: json['landlords'] as int,
     vendors: json['vendors'] as int,
     pendingVendors: json['pendingVendors'] as int,
+    activeVendors: json['activeVendors'] as int? ?? 0,
     properties: json['properties'] as int,
     bookings: json['bookings'] as int,
     marketplaceOrders: json['marketplaceOrders'] as int,
@@ -187,6 +190,10 @@ class AdminUserDetail {
     this.properties = const [],
     this.bookings = const [],
     this.marketplaceOrders = const [],
+    this.isOnline = false,
+    this.lastActiveAt,
+    this.lastLoginIp,
+    this.lastLoginDeviceModel,
   });
 
   final String id;
@@ -206,6 +213,18 @@ class AdminUserDetail {
   final String? accountName;
   final String? referralCode;
   final DateTime createdAt;
+
+  /// Whether this user currently has a connected chat socket (see backend
+  /// PresenceService) — a live snapshot at the moment this screen loaded,
+  /// not a subscription, so it can go stale while the screen stays open.
+  final bool isOnline;
+
+  /// Set the moment their last open socket disconnects (or, if never
+  /// connected since this field existed, null) — "Last active" reads this
+  /// when [isOnline] is false.
+  final DateTime? lastActiveAt;
+  final String? lastLoginIp;
+  final String? lastLoginDeviceModel;
 
   final String? vendorBusinessName;
   final String? vendorStatus;
@@ -275,6 +294,10 @@ class AdminUserDetail {
       properties: properties,
       bookings: bookings,
       marketplaceOrders: marketplaceOrders,
+      isOnline: json['isOnline'] as bool? ?? false,
+      lastActiveAt: json['lastActiveAt'] != null ? DateTime.parse(json['lastActiveAt'] as String) : null,
+      lastLoginIp: json['lastLoginIp'] as String?,
+      lastLoginDeviceModel: json['lastLoginDeviceModel'] as String?,
     );
   }
 }
@@ -525,6 +548,7 @@ class AdminVendorDetail {
     required this.isActive,
     this.suspendedAt,
     this.rejectionReason,
+    this.rcNumber,
     this.bankCode,
     this.bankName,
     this.accountNumber,
@@ -546,6 +570,7 @@ class AdminVendorDetail {
   /// this, not [isActive], to drive the admin Suspend/Unsuspend UI.
   final DateTime? suspendedAt;
   final String? rejectionReason;
+  final String? rcNumber;
 
   /// The vendor's payout account, same shape as [VendorProfile]'s own
   /// fields — not yet returned by `GET /admin/vendors/:id` as of this
@@ -571,6 +596,7 @@ class AdminVendorDetail {
     isActive: json['isActive'] as bool? ?? true,
     suspendedAt: json['suspendedAt'] != null ? DateTime.parse(json['suspendedAt'] as String) : null,
     rejectionReason: json['rejectionReason'] as String?,
+    rcNumber: json['rcNumber'] as String?,
     bankCode: json['bankCode'] as String?,
     bankName: json['bankName'] as String?,
     accountNumber: json['accountNumber'] as String?,

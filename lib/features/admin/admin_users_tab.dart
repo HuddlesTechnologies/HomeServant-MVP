@@ -16,7 +16,15 @@ import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
 class AdminUsersTab extends StatefulWidget {
-  const AdminUsersTab({super.key});
+  const AdminUsersTab({super.key, this.initialRoleFilter, this.initialShowDeactivatedOnly = false});
+
+  /// Pre-selects a role chip — set when navigating in from a dashboard tile
+  /// (e.g. "Tenants") instead of landing on the default "All" view.
+  final UserRole? initialRoleFilter;
+
+  /// Pre-selects the "Deactivated" chip — set from the dashboard's
+  /// "Deactivated Accounts" tile.
+  final bool initialShowDeactivatedOnly;
 
   @override
   State<AdminUsersTab> createState() => _AdminUsersTabState();
@@ -25,7 +33,8 @@ class AdminUsersTab extends StatefulWidget {
 class _AdminUsersTabState extends State<AdminUsersTab> {
   List<AdminUser>? _users;
   String _search = '';
-  UserRole? _roleFilter;
+  late UserRole? _roleFilter = widget.initialRoleFilter;
+  late bool _deactivatedOnly = widget.initialShowDeactivatedOnly;
   String? _error;
 
   @override
@@ -39,6 +48,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       final page = await context.read<AppState>().admin.findUsers(
         role: _roleFilter?.apiValue,
         search: _search,
+        deactivatedOnly: _deactivatedOnly,
       );
       if (!mounted) return;
       setState(() {
@@ -86,6 +96,9 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
             theme: DashboardTheme.midnight,
             contactName: user.fullName?.isNotEmpty == true ? user.fullName! : user.email,
             threadId: thread.id,
+            adminViewOfUserId: user.id,
+            showExportAction: true,
+            otherParticipant: thread.otherParticipant,
           ),
         ),
       );
@@ -131,13 +144,15 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              AdminFilterChip(label: 'All', selected: _roleFilter == null, onTap: () => setState(() { _roleFilter = null; _load(); })),
+              AdminFilterChip(label: 'All', selected: _roleFilter == null && !_deactivatedOnly, onTap: () => setState(() { _roleFilter = null; _deactivatedOnly = false; _load(); })),
               const SizedBox(width: 8),
-              AdminFilterChip(label: 'Tenants', selected: _roleFilter == UserRole.tenant, onTap: () => setState(() { _roleFilter = UserRole.tenant; _load(); })),
+              AdminFilterChip(label: 'Tenants', selected: _roleFilter == UserRole.tenant, onTap: () => setState(() { _roleFilter = UserRole.tenant; _deactivatedOnly = false; _load(); })),
               const SizedBox(width: 8),
-              AdminFilterChip(label: 'Landlords', selected: _roleFilter == UserRole.landlord, onTap: () => setState(() { _roleFilter = UserRole.landlord; _load(); })),
+              AdminFilterChip(label: 'Landlords', selected: _roleFilter == UserRole.landlord, onTap: () => setState(() { _roleFilter = UserRole.landlord; _deactivatedOnly = false; _load(); })),
               const SizedBox(width: 8),
-              AdminFilterChip(label: 'Vendors', selected: _roleFilter == UserRole.vendor, onTap: () => setState(() { _roleFilter = UserRole.vendor; _load(); })),
+              AdminFilterChip(label: 'Vendors', selected: _roleFilter == UserRole.vendor, onTap: () => setState(() { _roleFilter = UserRole.vendor; _deactivatedOnly = false; _load(); })),
+              const SizedBox(width: 8),
+              AdminFilterChip(label: 'Deactivated', selected: _deactivatedOnly, onTap: () => setState(() { _roleFilter = null; _deactivatedOnly = true; _load(); })),
             ],
           ),
         ),

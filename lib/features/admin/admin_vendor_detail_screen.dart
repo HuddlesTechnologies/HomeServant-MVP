@@ -26,6 +26,7 @@ class AdminVendorDetailScreen extends StatefulWidget {
 class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
   AdminVendorDetail? _vendor;
   String? _error;
+  bool _approving = false;
 
   @override
   void initState() {
@@ -51,13 +52,17 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
   }
 
   Future<void> _approve(AdminVendorDetail vendor) async {
+    if (_approving) return;
+    setState(() => _approving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
       await context.read<AppState>().admin.approveVendor(vendor.id);
       messenger.showSnackBar(SnackBar(content: Text('${vendor.businessName} approved')));
-      _load();
+      await _load();
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _approving = false);
     }
   }
 
@@ -154,6 +159,7 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.navy,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Text('Vendor Details', style: AppTextStyles.heading(color: Colors.white, size: 18)),
       ),
       body: vendor == null
@@ -185,6 +191,7 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                         _Field('Category', vendor.category.label),
                         _Field('State', vendor.state),
                         _Field('Owner Email', vendor.ownerEmail ?? '—'),
+                        _Field('CAC/RC Number', vendor.rcNumber ?? '—'),
                         if (vendor.status == VendorApplicationStatus.rejected && vendor.rejectionReason != null)
                           _Field('Rejection Reason', vendor.rejectionReason!),
                       ],
@@ -315,9 +322,15 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: ElevatedButton(
-                              onPressed: () => _approve(vendor),
+                              onPressed: _approving ? null : () => _approve(vendor),
                               style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy, padding: const EdgeInsets.symmetric(vertical: 14)),
-                              child: const Text('Approve', style: TextStyle(color: Colors.white)),
+                              child: _approving
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Text('Approve', style: TextStyle(color: Colors.white)),
                             ),
                           ),
                         ],

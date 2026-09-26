@@ -7,6 +7,7 @@ import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { ChatModule } from './chat/chat.module';
+import { PresenceModule } from './chat/presence.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { HealthController } from './health/health.controller';
 import { MarketplaceOrdersModule } from './marketplace-orders/marketplace-orders.module';
@@ -38,6 +39,7 @@ import { VendorsModule } from './vendors/vendors.module';
       },
     ]),
     PrismaModule,
+    PresenceModule,
     AuthModule,
     UsersModule,
     PropertiesModule,

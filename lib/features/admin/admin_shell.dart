@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../api/models/vendor.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/change_password_sheet.dart';
 import '../../widgets/notification_bell.dart';
@@ -181,12 +183,85 @@ class _AdminShellState extends State<AdminShell> {
   // starts pushing labels to truncate on smaller phones. These four are the
   // areas most likely to need a quick check-in; Properties, Marketplace,
   // Messages, and (conditionally) Admins move into the "More" sheet below.
-  static const _primaryTabs = [
-    AdminDashboardTab(),
-    AdminUsersTab(),
-    AdminVendorsTab(),
-    AdminReportsTab(),
+  // Not `static const` — the Users/Vendors tabs can be handed a
+  // dashboard-requested initial filter (see [_handleDashboardNavigate]),
+  // and a fresh [ValueKey] per "epoch" forces a real remount so that
+  // filter actually takes effect (a rebuilt widget with a new constructor
+  // arg alone wouldn't re-run the target's `late` field initializers).
+  // Plain bottom-nav tab switches don't touch the epoch, so a manually
+  // chosen filter still survives navigating away and back.
+  UserRole? _usersInitialRoleFilter;
+  bool _usersInitialDeactivatedOnly = false;
+  int _usersTabEpoch = 0;
+  VendorApplicationStatus? _vendorsInitialStatusFilter;
+  int _vendorsTabEpoch = 0;
+
+  List<Widget> get _primaryTabs => [
+    AdminDashboardTab(onNavigate: _handleDashboardNavigate),
+    AdminUsersTab(
+      key: ValueKey('admin-users-tab-$_usersTabEpoch'),
+      initialRoleFilter: _usersInitialRoleFilter,
+      initialShowDeactivatedOnly: _usersInitialDeactivatedOnly,
+    ),
+    AdminVendorsTab(
+      key: ValueKey('admin-vendors-tab-$_vendorsTabEpoch'),
+      initialStatusFilter: _vendorsInitialStatusFilter,
+    ),
+    const AdminReportsTab(),
   ];
+
+  void _goToUsers({UserRole? roleFilter, bool deactivatedOnly = false}) {
+    setState(() {
+      _usersInitialRoleFilter = roleFilter;
+      _usersInitialDeactivatedOnly = deactivatedOnly;
+      _usersTabEpoch++;
+      _index = 1;
+    });
+  }
+
+  void _goToVendors({VendorApplicationStatus? statusFilter}) {
+    setState(() {
+      _vendorsInitialStatusFilter = statusFilter;
+      _vendorsTabEpoch++;
+      _index = 2;
+    });
+  }
+
+  void _handleDashboardNavigate(AdminDashboardDestination destination) {
+    switch (destination) {
+      case AdminDashboardDestination.totalUsers:
+        _goToUsers();
+      case AdminDashboardDestination.tenants:
+        _goToUsers(roleFilter: UserRole.tenant);
+      case AdminDashboardDestination.landlords:
+        _goToUsers(roleFilter: UserRole.landlord);
+      case AdminDashboardDestination.deactivatedAccounts:
+        _goToUsers(deactivatedOnly: true);
+      case AdminDashboardDestination.vendors:
+        _goToVendors();
+      case AdminDashboardDestination.pendingVendors:
+        _goToVendors(statusFilter: VendorApplicationStatus.pending);
+      case AdminDashboardDestination.activeVendors:
+        // No separate "active" status exists on VendorApplicationStatus —
+        // an active shop is always an approved one, so this is the closest
+        // filter that actually narrows the list.
+        _goToVendors(statusFilter: VendorApplicationStatus.approved);
+      case AdminDashboardDestination.properties:
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => const _MoreScreen(item: _MoreItem(icon: Icons.home_work_outlined, label: 'Properties', builder: AdminPropertiesTab.new)),
+          ),
+        );
+      case AdminDashboardDestination.marketplaceOrders:
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => _MoreScreen(
+              item: _MoreItem(icon: Icons.shopping_bag_outlined, label: 'Marketplace', builder: () => const AdminMarketplaceTab(initialShowOrders: true)),
+            ),
+          ),
+        );
+    }
+  }
 
   /// Not `static const` like the old list — the Reports destination's icon
   /// carries a live open-reports-count badge (`_openReportsCount`), so this

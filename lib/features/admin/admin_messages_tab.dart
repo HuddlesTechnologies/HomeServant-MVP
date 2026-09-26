@@ -1,24 +1,29 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
 import '../../api/models/chat.dart';
+import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_picker_sheet.dart';
 
-/// The admin console's own inbox — every chat thread the signed-in admin
-/// is a participant in (tenant/landlord/vendor conversations they've been
-/// assigned, plus anything transferred to them). `ChatRepository.myThreads()`
-/// already returns exactly this for whichever role holds the bearer token,
-/// so this is a straight reuse of the same repository/tile the tenant and
-/// landlord Messages screens use, plus a transfer action neither of those
-/// roles need.
+/// The admin console's messaging area — the signed-in admin's own inbox
+/// (conversations they've been assigned or transferred, same as any other
+/// role gets from `ChatRepository.myThreads()`) plus a shared "Support
+/// Queue" tab: every open "Contact Support" thread, claimed or not, visible
+/// to every admin regardless of participancy (see backend
+/// ChatService.findSupportQueue) — that's the fix for "admins never
+/// receive support messages," which used to be a fully local, fake UI with
+/// no backend thread behind it at all.
 class AdminMessagesTab extends StatefulWidget {
   const AdminMessagesTab({super.key});
 
@@ -26,24 +31,48 @@ class AdminMessagesTab extends StatefulWidget {
   State<AdminMessagesTab> createState() => _AdminMessagesTabState();
 }
 
+enum _MessagesView { inbox, supportQueue }
+
 class _AdminMessagesTabState extends State<AdminMessagesTab> {
+  _MessagesView _view = _MessagesView.inbox;
   List<ChatThread>? _threads;
+  List<SupportQueueThread>? _queue;
   String? _error;
+  StreamSubscription<ChatSocketMessage>? _socketSubscription;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Without this, the inbox only ever refreshed on manual pull-to-
+    // refresh or reopening the tab — a message arriving while an admin sat
+    // here just never showed up until then.
+    _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _socketSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final threads = await context.read<AppState>().chat.myThreads();
-      if (!mounted) return;
-      setState(() {
-        _threads = threads;
-        _error = null;
-      });
+      if (_view == _MessagesView.inbox) {
+        final threads = await context.read<AppState>().chat.myThreads();
+        if (!mounted) return;
+        setState(() {
+          _threads = threads;
+          _error = null;
+        });
+      } else {
+        final queue = await context.read<AppState>().chat.supportQueue();
+        if (!mounted) return;
+        setState(() {
+          _queue = queue;
+          _error = null;
+        });
+      }
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = "Couldn't load messages.");
@@ -57,11 +86,40 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
           theme: DashboardTheme.midnight,
           contactName: thread.otherParticipantName,
           threadId: thread.id,
+          adminViewOfUserId: thread.otherParticipants.isNotEmpty ? thread.otherParticipants.first.id : null,
+          showExportAction: true,
+          otherParticipant: thread.otherParticipant,
         ),
       ),
     );
     if (!mounted) return;
     _load();
+  }
+
+  Future<void> _openQueueThread(SupportQueueThread thread) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ChatThreadScreen(
+          theme: DashboardTheme.midnight,
+          contactName: thread.requesterName?.isNotEmpty == true ? thread.requesterName! : 'HomeServant Support',
+          threadId: thread.id,
+          showExportAction: true,
+        ),
+      ),
+    );
+    if (!mounted) return;
+    _load();
+  }
+
+  Future<void> _resolve(String threadId) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().chat.resolveThread(threadId);
+      messenger.showSnackBar(const SnackBar(content: Text('Marked resolved')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _transfer(ChatThread thread) async {
@@ -93,72 +151,196 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
 
   @override
   Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: AdminFilterChip(
+                  label: 'Inbox',
+                  selected: _view == _MessagesView.inbox,
+                  onTap: () => setState(() {
+                    _view = _MessagesView.inbox;
+                    _threads = null;
+                    _load();
+                  }),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: AdminFilterChip(
+                  label: 'Support Queue',
+                  selected: _view == _MessagesView.supportQueue,
+                  onTap: () => setState(() {
+                    _view = _MessagesView.supportQueue;
+                    _queue = null;
+                    _load();
+                  }),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: _view == _MessagesView.inbox ? _buildInbox() : _buildQueue()),
+      ],
+    );
+  }
+
+  Widget _buildInbox() {
     final threads = _threads;
-    return threads == null
-        ? Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator())
-        : threads.isEmpty
-            ? const Center(child: Text('No conversations yet'))
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                  itemCount: threads.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final thread = threads[index];
-                    final unread = thread.unreadCount > 0;
-                    return Row(
+    if (threads == null) return Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator());
+    if (threads.isEmpty) return const Center(child: Text('No conversations yet'));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        itemCount: threads.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final thread = threads[index];
+          final unread = thread.unreadCount > 0;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => _openThread(thread),
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: adminCardDecoration,
+                    child: ChatThreadListTile(
+                      thread: thread,
+                      avatar: CircleAvatar(
+                        radius: 22,
+                        backgroundColor: AppColors.navy.withValues(alpha: 0.1),
+                        child: Icon(thread.isSupport ? Icons.support_agent_rounded : Icons.person, color: AppColors.navy),
+                      ),
+                      nameStyle: AppTextStyles.body(
+                        color: AppColors.navy,
+                        size: 14,
+                        weight: unread ? FontWeight.w800 : FontWeight.w700,
+                      ),
+                      messageStyle: AppTextStyles.body(
+                        color: AppColors.hintGrey,
+                        size: 12.5,
+                        weight: unread ? FontWeight.w600 : FontWeight.w400,
+                      ),
+                      trailing: unread
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(9)),
+                              constraints: const BoxConstraints(minWidth: 20),
+                              child: Text(
+                                '${thread.unreadCount}',
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.body(color: Colors.white, size: 11, weight: FontWeight.w700),
+                              ),
+                            )
+                          : null,
+                    ),
+                  ),
+                ),
+              ),
+              if (thread.isSupport && !thread.resolved)
+                IconButton(
+                  onPressed: () => _resolve(thread.id),
+                  icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.green),
+                  tooltip: 'Mark resolved',
+                )
+              else if (!thread.isSupport)
+                IconButton(
+                  onPressed: () => _transfer(thread),
+                  icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
+                  tooltip: 'Transfer to another admin',
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildQueue() {
+    final queue = _queue;
+    if (queue == null) return Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator());
+    if (queue.isEmpty) return const Center(child: Text('No open support conversations'));
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        itemCount: queue.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final thread = queue[index];
+          return InkWell(
+            onTap: () => _openQueueThread(thread),
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: adminCardDecoration,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.navy.withValues(alpha: 0.1),
+                    child: const Icon(Icons.support_agent_rounded, color: AppColors.navy),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _openThread(thread),
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: adminCardDecoration,
-                              child: ChatThreadListTile(
-                                thread: thread,
-                                avatar: CircleAvatar(
-                                  radius: 22,
-                                  backgroundColor: AppColors.navy.withValues(alpha: 0.1),
-                                  child: const Icon(Icons.person, color: AppColors.navy),
-                                ),
-                                nameStyle: AppTextStyles.body(
-                                  color: AppColors.navy,
-                                  size: 14,
-                                  weight: unread ? FontWeight.w800 : FontWeight.w700,
-                                ),
-                                messageStyle: AppTextStyles.body(
-                                  color: AppColors.hintGrey,
-                                  size: 12.5,
-                                  weight: unread ? FontWeight.w600 : FontWeight.w400,
-                                ),
-                                trailing: unread
-                                    ? Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                        decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(9)),
-                                        constraints: const BoxConstraints(minWidth: 20),
-                                        child: Text(
-                                          '${thread.unreadCount}',
-                                          textAlign: TextAlign.center,
-                                          style: AppTextStyles.body(color: Colors.white, size: 11, weight: FontWeight.w700),
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                            ),
+                        Text(
+                          thread.requesterName?.isNotEmpty == true ? thread.requesterName! : 'A user',
+                          style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w700),
+                        ),
+                        if (thread.lastMessage != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            thread.lastMessage!.body,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: () => _transfer(thread),
-                          icon: const Icon(Icons.swap_horiz_rounded, color: AppColors.navy),
-                          tooltip: 'Transfer to another admin',
-                        ),
+                        ],
                       ],
-                    );
-                  },
-                ),
-              );
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(formatRelativeTime(thread.createdAt), style: AppTextStyles.body(color: AppColors.hintGrey, size: 11)),
+                      if (!thread.isClaimed) ...[
+                        const SizedBox(height: 4),
+                        const _Badge(text: 'Unclaimed', color: Colors.orange),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({required this.text, required this.color});
+
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
+      child: Text(text, style: AppTextStyles.body(color: color, size: 10, weight: FontWeight.w700)),
+    );
   }
 }

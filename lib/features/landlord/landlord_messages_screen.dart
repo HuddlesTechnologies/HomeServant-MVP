@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/models/chat.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../dashboard/chat_thread_screen.dart';
@@ -30,16 +33,19 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
   String _searchQuery = '';
 
   static const _filters = ['Unread', 'Deleted', 'Archived'];
+  StreamSubscription<ChatSocketMessage>? _socketSubscription;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen((_) => _load());
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _socketSubscription?.cancel();
     super.dispose();
   }
 
@@ -77,7 +83,12 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
   Future<void> _openThread(ChatThread thread) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(theme: widget.theme, contactName: thread.otherParticipantName, threadId: thread.id),
+        builder: (_) => ChatThreadScreen(
+          theme: widget.theme,
+          contactName: thread.otherParticipantName,
+          threadId: thread.id,
+          otherParticipant: thread.otherParticipant,
+        ),
       ),
     );
     if (!mounted) return;

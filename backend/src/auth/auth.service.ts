@@ -127,6 +127,7 @@ export class AuthService {
     if (user.role === 'ADMIN') {
       await this.activityLog.log(ActivityLogType.ADMIN_LOGIN, { actorId: user.id, targetId: user.id, ip });
     }
+    await this.recordLogin(user.id, ip, dto.deviceModel);
     return { ...tokens, user: this.toPublicUser(user), requiresTwoFactor: false, requiresReactivation: false };
   }
 
@@ -155,6 +156,7 @@ export class AuthService {
     if (user.role === 'ADMIN') {
       await this.activityLog.log(ActivityLogType.ADMIN_LOGIN, { actorId: user.id, targetId: user.id, ip });
     }
+    await this.recordLogin(user.id, ip, dto.deviceModel);
     return { ...tokens, user: this.toPublicUser(user) };
   }
 
@@ -205,6 +207,7 @@ export class AuthService {
   /// erroring on a duplicate email.
   async googleAuth(
     dto: GoogleAuthDto,
+    ip?: string,
   ): Promise<(TokenPair & { user: PublicUser; requiresReactivation: false }) | { requiresReactivation: true; email: string }> {
     let payload: { email?: string; email_verified?: boolean; sub: string; name?: string; picture?: string };
     try {
@@ -260,6 +263,7 @@ export class AuthService {
     }
 
     const tokens = await this.issueTokens(user);
+    await this.recordLogin(user.id, ip, dto.deviceModel);
     return { ...tokens, user: this.toPublicUser(user), requiresReactivation: false };
   }
 
@@ -375,6 +379,19 @@ export class AuthService {
   /// on the confirmation dialog.
   async deleteAccount(userId: string): Promise<void> {
     await this.prisma.user.delete({ where: { id: userId } });
+  }
+
+  /// Called from every actual "sign in" completion (password login,
+  /// login-2FA verification, Google sign-in) — not from [issueTokens]
+  /// itself, since that's also used by token refresh and password-reset
+  /// completion, neither of which is a fresh "login" whose IP/device is
+  /// worth recording. Previously this data (IP at least) was only ever
+  /// captured for ADMIN role logins, and only into ActivityLog.
+  private async recordLogin(userId: string, ip?: string, deviceModel?: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastActiveAt: new Date(), lastLoginIp: ip, lastLoginDeviceModel: deviceModel },
+    });
   }
 
   private async issueTokens(user: User): Promise<TokenPair> {

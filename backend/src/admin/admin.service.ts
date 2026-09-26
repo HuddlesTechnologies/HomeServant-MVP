@@ -4,6 +4,7 @@ import { AdminLevel, ActivityLogType, NotificationType, OtpPurpose, Prisma } fro
 import * as bcrypt from 'bcryptjs';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AuthService } from '../auth/auth.service';
+import { PresenceService } from '../chat/presence.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OtpService } from '../otp/otp.service';
@@ -48,6 +49,7 @@ export class AdminService {
     private readonly notifications: NotificationsService,
     private readonly otp: OtpService,
     private readonly activityLog: ActivityLogService,
+    private readonly presence: PresenceService,
   ) {}
 
   // --- Bootstrap / admin accounts ---------------------------------------
@@ -284,6 +286,7 @@ export class AdminService {
       landlords,
       vendors,
       pendingVendors,
+      activeVendors,
       properties,
       bookings,
       marketplaceOrders,
@@ -292,21 +295,47 @@ export class AdminService {
       this.prisma.user.count(),
       this.prisma.user.count({ where: { role: 'TENANT' } }),
       this.prisma.user.count({ where: { role: 'LANDLORD' } }),
-      this.prisma.user.count({ where: { role: 'VENDOR' } }),
+      // A vendor keeps their original User.role (typically TENANT) — a
+      // VendorProfile row, not User.role, is what makes someone a vendor.
+      // See AdminService.findUsers' role=VENDOR handling below for the
+      // same distinction.
+      this.prisma.vendorProfile.count(),
       this.prisma.vendorProfile.count({ where: { status: 'PENDING' } }),
+      // A shop is actually visible/trading only when all three hold — see
+      // VendorProfile.isActive's doc comment in schema.prisma.
+      this.prisma.vendorProfile.count({ where: { isActive: true, suspendedAt: null, status: 'APPROVED' } }),
       this.prisma.property.count(),
       this.prisma.booking.count(),
       this.prisma.marketplaceOrder.count(),
       this.prisma.user.count({ where: { deactivatedAt: { not: null } } }),
     ]);
-    return { totalUsers, tenants, landlords, vendors, pendingVendors, properties, bookings, marketplaceOrders, deactivatedAccounts };
+    return {
+      totalUsers,
+      tenants,
+      landlords,
+      vendors,
+      pendingVendors,
+      activeVendors,
+      properties,
+      bookings,
+      marketplaceOrders,
+      deactivatedAccounts,
+    };
+  }
+
+  pendingVendorsCount(): Promise<number> {
+    return this.prisma.vendorProfile.count({ where: { status: 'PENDING' } });
   }
 
   // --- Users ---------------------------------------------------------------
 
   async findUsers(query: QueryUsersDto) {
     const where: Prisma.UserWhereInput = {
-      role: query.role,
+      // A vendor keeps their original role (TENANT, in practice) — nothing
+      // ever sets User.role = 'VENDOR', so that value never actually
+      // matches by itself. "Vendor" here means "has a VendorProfile".
+      ...(query.role === 'VENDOR' ? { vendorProfile: { isNot: null } } : { role: query.role }),
+      ...(query.deactivatedOnly ? { deactivatedAt: { not: null } } : {}),
       ...(query.search
         ? {
             OR: [
@@ -392,6 +421,7 @@ export class AdminService {
     const { passwordHash, properties, bookings, marketplaceOrders, ...rest } = user;
     return {
       ...rest,
+      isOnline: this.presence.isOnline(user.id),
       properties: user.role === 'LANDLORD' ? properties : [],
       bookings: bookings.map((b) => ({
         id: b.id,
@@ -488,6 +518,10 @@ export class AdminService {
 
   async approveVendor(id: string) {
     const vendor = await this.requireVendor(id);
+    // Idempotent: a double-tap or a retry on a slow response previously
+    // re-sent the approval notification + email every time this was
+    // called, even for a vendor already approved.
+    if (vendor.status === 'APPROVED') return vendor;
     const updated = await this.prisma.vendorProfile.update({
       where: { id },
       data: { status: 'APPROVED', rejectionReason: null },
@@ -509,6 +543,7 @@ export class AdminService {
 
   async rejectVendor(id: string, dto: RejectVendorDto) {
     const vendor = await this.requireVendor(id);
+    if (vendor.status === 'REJECTED' && vendor.rejectionReason === (dto.reason ?? null)) return vendor;
     const updated = await this.prisma.vendorProfile.update({
       where: { id },
       data: { status: 'REJECTED', rejectionReason: dto.reason ?? null },
@@ -570,6 +605,7 @@ export class AdminService {
       isActive: vendor.isActive,
       suspendedAt: vendor.suspendedAt,
       rejectionReason: vendor.rejectionReason,
+      rcNumber: vendor.rcNumber,
       bankCode: vendor.bankCode,
       bankName: vendor.bankName,
       accountNumber: vendor.accountNumber,
@@ -590,6 +626,7 @@ export class AdminService {
 
   async suspendVendor(id: string, reason: string) {
     const vendor = await this.requireVendor(id);
+    if (vendor.suspendedAt !== null) return vendor;
     const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { suspendedAt: new Date() } });
     await this.notifications.create(
       vendor.userId,
@@ -608,6 +645,7 @@ export class AdminService {
 
   async unsuspendVendor(id: string, reason: string) {
     const vendor = await this.requireVendor(id);
+    if (vendor.suspendedAt === null) return vendor;
     const updated = await this.prisma.vendorProfile.update({ where: { id }, data: { suspendedAt: null } });
     await this.notifications.create(
       vendor.userId,
@@ -647,6 +685,21 @@ export class AdminService {
       this.prisma.property.count({ where }),
     ]);
     return { items, total, page, pageSize };
+  }
+
+  /// Full listing — everything `findProperties` already fetches via
+  /// `include` but discards when shaping the list-row response, plus
+  /// relation counts the list doesn't need.
+  async findPropertyDetail(id: string) {
+    const property = await this.prisma.property.findUnique({
+      where: { id },
+      include: {
+        landlord: { select: { id: true, fullName: true, email: true, phoneNumber: true } },
+        _count: { select: { bookings: true, favorites: true, reviews: true } },
+      },
+    });
+    if (!property) throw new NotFoundException('Property not found');
+    return property;
   }
 
   /// A landlord can't re-list their own occupied property (a tenant's

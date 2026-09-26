@@ -85,6 +85,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
             contactName: property.landlordName,
             property: property,
             threadId: thread.id,
+            otherParticipant: thread.otherParticipant,
           ),
         ),
       );

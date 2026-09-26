@@ -56,7 +56,12 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
       if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => ChatThreadScreen(theme: widget.theme, contactName: order.customerName, threadId: thread.id),
+          builder: (_) => ChatThreadScreen(
+            theme: widget.theme,
+            contactName: order.customerName,
+            threadId: thread.id,
+            otherParticipant: thread.otherParticipant,
+          ),
         ),
       );
     } on ApiException catch (e) {

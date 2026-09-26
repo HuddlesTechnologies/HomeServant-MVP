@@ -16,6 +16,34 @@ class ChatRepository {
     });
   }
 
+  /// Finds-or-creates the caller's own "Contact Support" thread — see
+  /// backend ChatService.openSupportThread. Unlike [openThread], there's no
+  /// recipient to pick; any admin can pick it up from the shared queue.
+  Future<ChatThread> openSupportThread() {
+    return _client.call(() async {
+      final response = await _client.dio.post('/threads/support');
+      final threadId = response.data['id'] as String;
+      final threads = await myThreads();
+      return threads.firstWhere((t) => t.id == threadId);
+    });
+  }
+
+  /// Admin-only — every open "Contact Support" thread, claimed or not.
+  Future<List<SupportQueueThread>> supportQueue() {
+    return _client.call(() async {
+      final response = await _client.dio.get('/threads/support-queue');
+      return (response.data as List).cast<Map<String, dynamic>>().map(SupportQueueThread.fromApi).toList();
+    });
+  }
+
+  /// Admin-only — marks a support thread resolved, which hides it from the
+  /// user's own inbox from then on (see backend ChatService.findForUser).
+  Future<void> resolveThread(String threadId) {
+    return _client.call(() async {
+      await _client.dio.patch('/threads/$threadId/resolve');
+    });
+  }
+
   Future<ChatThread> openThread({required String recipientId, String? propertyId, String? orderId}) {
     return _client.call(() async {
       final response = await _client.dio.post(

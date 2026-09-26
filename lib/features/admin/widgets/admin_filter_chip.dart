@@ -7,15 +7,19 @@ import '../../../core/theme/app_text_styles.dart';
 /// (admin_users_tab.dart) and `_StatusChip` (admin_vendors_tab.dart),
 /// which were identical apart from their name.
 class AdminFilterChip extends StatelessWidget {
-  const AdminFilterChip({super.key, required this.label, required this.selected, required this.onTap});
+  const AdminFilterChip({super.key, required this.label, required this.selected, required this.onTap, this.badgeCount});
 
   final String label;
   final bool selected;
   final VoidCallback onTap;
 
+  /// A live count badge on the chip's corner (e.g. how many vendors are
+  /// currently pending) — null or 0 renders nothing.
+  final int? badgeCount;
+
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
+    final chip = ChoiceChip(
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
@@ -23,6 +27,28 @@ class AdminFilterChip extends StatelessWidget {
       selectedColor: AppColors.navy,
       labelStyle: AppTextStyles.body(color: selected ? Colors.white : AppColors.navy, size: 12.5, weight: FontWeight.w600),
       side: BorderSide.none,
+    );
+    final count = badgeCount;
+    if (count == null || count <= 0) return chip;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        chip,
+        Positioned(
+          top: -4,
+          right: -4,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            constraints: const BoxConstraints(minWidth: 16),
+            decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(9)),
+            child: Text(
+              count > 99 ? '99+' : '$count',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body(color: Colors.white, size: 9.5, weight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

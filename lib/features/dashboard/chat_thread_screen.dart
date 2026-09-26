@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
-import '../../api/models/chat.dart' show MessageType;
+import '../../api/models/admin_models.dart';
+import '../../api/models/chat.dart' show MessageType, ThreadParticipant;
 import '../../api/models/marketplace_api.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
@@ -13,6 +15,7 @@ import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_text_field.dart';
 import '../Market place/models/order_options.dart';
+import '../admin/chat_transcript_pdf.dart';
 import 'models/property.dart';
 import 'widgets/property_image.dart';
 
@@ -25,6 +28,7 @@ class ChatMessage {
     this.previewPropertyImageUrl,
     this.previewPropertyPrice,
     this.previewPropertyPriceUnit,
+    this.read = false,
   });
 
   final String text;
@@ -34,6 +38,11 @@ class ChatMessage {
   final String? previewPropertyImageUrl;
   final int? previewPropertyPrice;
   final String? previewPropertyPriceUnit;
+
+  /// True once the other participant has read this message (see backend
+  /// `Message.readAt`) — only ever rendered for [fromMe] bubbles, the way
+  /// every social/messaging app shows "Seen" on your own last sent message.
+  bool read;
 }
 
 class ChatThreadScreen extends StatefulWidget {
@@ -45,6 +54,9 @@ class ChatThreadScreen extends StatefulWidget {
     this.threadId,
     this.property,
     this.orderItem,
+    this.adminViewOfUserId,
+    this.showExportAction = false,
+    this.otherParticipant,
   });
 
   final DashboardTheme theme;
@@ -69,6 +81,24 @@ class ChatThreadScreen extends StatefulWidget {
   /// the order fulfilled or cancel it without leaving the chat.
   final MarketplaceOrderItemApi? orderItem;
 
+  /// Set only from an admin console call site — the other participant's
+  /// user id, fetched lazily (via `AdminRepository.findUserDetail`) into a
+  /// collapsible info panel the admin can toggle open while replying,
+  /// instead of having to leave the chat to look someone up.
+  final String? adminViewOfUserId;
+
+  /// True to show a "download as PDF" action in the AppBar — an admin
+  /// backing up/saving a conversation locally. Only ever passed `true` from
+  /// an admin call site.
+  final bool showExportAction;
+
+  /// The other participant, carrying a presence snapshot (see
+  /// ChatThread.otherParticipant) — when set, the AppBar shows "Active
+  /// now" or "Last active X ago" under the contact name. Null for a caller
+  /// that doesn't have a ChatThread on hand (e.g. a brand-new thread with
+  /// no prior participant data) or a non-1:1 context.
+  final ThreadParticipant? otherParticipant;
+
   @override
   State<ChatThreadScreen> createState() => _ChatThreadScreenState();
 }
@@ -80,6 +110,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   OrderItemStatus? _orderStatus;
   bool _loadingRemote = false;
   StreamSubscription<ChatSocketMessage>? _socketSubscription;
+  StreamSubscription<String>? _readSubscription;
+  bool _infoPanelOpen = false;
+  AdminUserDetail? _recipientDetail;
+  bool _loadingRecipientDetail = false;
+  String? _recipientDetailError;
+  bool _exportingPdf = false;
 
   @override
   void initState() {
@@ -90,8 +126,22 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     if (threadId != null) {
       _loadingRemote = true;
       unawaited(_loadRemoteMessages(threadId));
-      _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen(_onSocketMessage);
+      final chatSocket = context.read<AppState>().chatSocket;
+      _socketSubscription = chatSocket.onNewMessage.listen(_onSocketMessage);
+      _readSubscription = chatSocket.onRead.listen(_onSocketRead);
     }
+  }
+
+  /// The other participant just read this thread — flip every message we
+  /// sent to "Seen" (backend markRead marks them all at once, so there's
+  /// no per-message id to reconcile against).
+  void _onSocketRead(String threadId) {
+    if (threadId != widget.threadId) return;
+    setState(() {
+      for (final message in _messages) {
+        if (message.fromMe) message.read = true;
+      }
+    });
   }
 
   /// Appends a message pushed live over the socket (see
@@ -140,6 +190,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 previewPropertyImageUrl: m.previewPropertyImageUrl,
                 previewPropertyPrice: m.previewPropertyPrice,
                 previewPropertyPriceUnit: m.previewPropertyPriceUnit,
+                read: m.readAt != null,
               ),
             ),
           );
@@ -155,9 +206,56 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   @override
   void dispose() {
     _socketSubscription?.cancel();
+    _readSubscription?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleInfoPanel() async {
+    setState(() => _infoPanelOpen = !_infoPanelOpen);
+    final userId = widget.adminViewOfUserId;
+    if (!_infoPanelOpen || userId == null || _recipientDetail != null || _loadingRecipientDetail) return;
+    setState(() {
+      _loadingRecipientDetail = true;
+      _recipientDetailError = null;
+    });
+    try {
+      final detail = await context.read<AppState>().admin.findUserDetail(userId);
+      if (!mounted) return;
+      setState(() {
+        _recipientDetail = detail;
+        _loadingRecipientDetail = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _recipientDetailError = e.message;
+        _loadingRecipientDetail = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recipientDetailError = "Couldn't load this user's details.";
+        _loadingRecipientDetail = false;
+      });
+    }
+  }
+
+  Future<void> _exportPdf() async {
+    if (_exportingPdf) return;
+    setState(() => _exportingPdf = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final doc = await buildChatTranscriptPdf(contactName: widget.contactName, messages: _messages);
+      final bytes = await doc.save();
+      final slug = widget.contactName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+      await Printing.sharePdf(bytes: bytes, filename: 'chat_$slug.pdf');
+    } catch (_) {
+      if (mounted) messenger.showSnackBar(const SnackBar(content: Text("Couldn't export this chat.")));
+    } finally {
+      if (mounted) setState(() => _exportingPdf = false);
+    }
   }
 
   void _scrollToBottom() {
@@ -249,11 +347,39 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         backgroundColor: theme.background,
         elevation: 0,
         iconTheme: IconThemeData(color: theme.foreground),
-        title: Text(
-          widget.contactName,
-          style: AppTextStyles.heading(color: theme.foreground, size: 18),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.contactName,
+              style: AppTextStyles.heading(color: theme.foreground, size: 18),
+            ),
+            if (widget.otherParticipant != null) _presenceLabel(widget.otherParticipant!, theme),
+          ],
         ),
         actions: [
+          if (widget.adminViewOfUserId != null)
+            IconButton(
+              onPressed: _toggleInfoPanel,
+              icon: Icon(_infoPanelOpen ? Icons.info_rounded : Icons.info_outline_rounded, color: theme.foreground),
+              tooltip: 'User info',
+            ),
+          if (widget.showExportAction)
+            _exportingPdf
+                ? Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: theme.foreground),
+                    ),
+                  )
+                : IconButton(
+                    onPressed: _exportPdf,
+                    icon: Icon(Icons.download_rounded, color: theme.foreground),
+                    tooltip: 'Export as PDF',
+                  ),
           if (orderItem != null && orderStatus == OrderItemStatus.pending)
             PopupMenuButton<OrderItemStatus>(
               icon: Icon(Icons.more_vert_rounded, color: theme.foreground),
@@ -270,6 +396,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           maxWidth: 680,
           child: Column(
             children: [
+              if (_infoPanelOpen)
+                _RecipientInfoPanel(
+                  theme: theme,
+                  detail: _recipientDetail,
+                  loading: _loadingRecipientDetail,
+                  error: _recipientDetailError,
+                ),
               if (orderItem != null && orderStatus != null)
                 _OrderStatusBanner(theme: theme, item: orderItem, status: orderStatus),
               if (_loadingRemote) const LinearProgressIndicator(minHeight: 2),
@@ -280,41 +413,61 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   itemCount: _messages.length,
                   itemBuilder: (context, index) {
                     final message = _messages[index];
+                    // Only the last message we sent ever shows "Seen" — the
+                    // same convention every mainstream chat app uses, since
+                    // a receipt on every past bubble would be noise.
+                    final showSeen = message.fromMe && message.read && !_messages.skip(index + 1).any((m) => m.fromMe);
+                    final Widget bubble;
                     if (message.type == MessageType.propertyPreview) {
-                      return Align(
+                      bubble = Align(
                         alignment: message.fromMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: _PropertyPreviewBubble(theme: theme, message: message),
                       );
-                    }
-                    return Align(
-                      alignment:
-                          message.fromMe
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                      child: Container(
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * 0.72,
-                        ),
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: message.fromMe ? theme.accent : theme.surface,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Text(
-                          message.text,
-                          style: AppTextStyles.body(
-                            color:
-                                message.fromMe
-                                    ? theme.onAccent
-                                    : theme.onSurface,
-                            size: 14,
+                    } else {
+                      bubble = Align(
+                        alignment:
+                            message.fromMe
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                        child: Container(
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * 0.72,
+                          ),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            color: message.fromMe ? theme.accent : theme.surface,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Text(
+                            message.text,
+                            style: AppTextStyles.body(
+                              color:
+                                  message.fromMe
+                                      ? theme.onAccent
+                                      : theme.onSurface,
+                              size: 14,
+                            ),
                           ),
                         ),
-                      ),
+                      );
+                    }
+                    if (!showSeen) return bubble;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        bubble,
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4, bottom: 8, top: 2),
+                          child: Text(
+                            'Seen',
+                            style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.45), size: 11),
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -376,6 +529,29 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       ),
     );
   }
+}
+
+/// "Active now" (green dot) or "Last active X ago", under the contact
+/// name in the AppBar — the same presence snapshot ChatThreadListTile's
+/// avatar dot already uses, just spelled out as text here since there's no
+/// list of other threads' avatars to dot next to.
+Widget _presenceLabel(ThreadParticipant participant, DashboardTheme theme) {
+  if (participant.isOnline) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(width: 7, height: 7, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+        const SizedBox(width: 5),
+        Text('Active now', style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 11.5)),
+      ],
+    );
+  }
+  final lastActiveAt = participant.lastActiveAt;
+  if (lastActiveAt == null) return const SizedBox();
+  return Text(
+    'Last active ${formatRelativeTime(lastActiveAt)}',
+    style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.5), size: 11.5),
+  );
 }
 
 /// Formats a future date/time as "24 Oct at 10:00 AM" for the inspection
@@ -477,6 +653,84 @@ class _OrderStatusBanner extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(color: status.color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
             child: Text(status.label, style: AppTextStyles.body(color: status.color, size: 11, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Collapsible box showing everything on file about the person an admin is
+/// chatting with — toggled via the AppBar's info icon, so an admin can
+/// check who they're replying to without leaving the conversation.
+class _RecipientInfoPanel extends StatelessWidget {
+  const _RecipientInfoPanel({required this.theme, required this.detail, required this.loading, required this.error});
+
+  final DashboardTheme theme;
+  final AdminUserDetail? detail;
+  final bool loading;
+  final String? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = this.detail;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(14)),
+      child: loading
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            )
+          : error != null
+              ? Text(error!, style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 12.5))
+              : detail == null
+                  ? const SizedBox()
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          detail.fullName?.isNotEmpty == true ? detail.fullName! : detail.email,
+                          style: AppTextStyles.body(color: theme.onSurface, size: 14.5, weight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        _InfoRow('Email', detail.email, theme),
+                        if (detail.phoneNumber != null && detail.phoneNumber!.isNotEmpty)
+                          _InfoRow('Phone', detail.phoneNumber!, theme),
+                        _InfoRow('Role', detail.role.adminLabel, theme),
+                        if (detail.houseAddress != null && detail.houseAddress!.isNotEmpty)
+                          _InfoRow('Address', detail.houseAddress!, theme),
+                        if (detail.vendorBusinessName != null) _InfoRow('Shop', detail.vendorBusinessName!, theme),
+                        _InfoRow('Joined', formatShortDate(detail.createdAt), theme),
+                        if (detail.deactivatedAt != null) _InfoRow('Status', 'Deactivated', theme),
+                      ],
+                    ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  const _InfoRow(this.label, this.value, this.theme);
+
+  final String label;
+  final String value;
+  final DashboardTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 70,
+            child: Text(label, style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.5), size: 12)),
+          ),
+          Expanded(
+            child: Text(value, style: AppTextStyles.body(color: theme.onSurface, size: 12.5, weight: FontWeight.w600)),
           ),
         ],
       ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
@@ -13,7 +15,12 @@ import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
 
 class AdminVendorsTab extends StatefulWidget {
-  const AdminVendorsTab({super.key});
+  const AdminVendorsTab({super.key, this.initialStatusFilter});
+
+  /// Pre-selects a status chip — set when navigating in from a dashboard
+  /// tile (e.g. "Pending Vendor Reviews"). Defaults to "All" otherwise, so
+  /// admins see the whole vendor base first rather than just the queue.
+  final VendorApplicationStatus? initialStatusFilter;
 
   @override
   State<AdminVendorsTab> createState() => _AdminVendorsTabState();
@@ -22,13 +29,26 @@ class AdminVendorsTab extends StatefulWidget {
 class _AdminVendorsTabState extends State<AdminVendorsTab> {
   List<AdminVendor>? _vendors;
   String _search = '';
-  VendorApplicationStatus? _statusFilter = VendorApplicationStatus.pending;
+  late VendorApplicationStatus? _statusFilter = widget.initialStatusFilter;
   String? _error;
+  int _pendingCount = 0;
+  final Set<String> _approvingIds = {};
 
   @override
   void initState() {
     super.initState();
     _load();
+    _loadPendingCount();
+  }
+
+  Future<void> _loadPendingCount() async {
+    try {
+      final count = await context.read<AppState>().admin.pendingVendorsCount();
+      if (!mounted) return;
+      setState(() => _pendingCount = count);
+    } catch (_) {
+      // Best-effort — only affects the chip badge.
+    }
   }
 
   Future<void> _load() async {
@@ -49,13 +69,21 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
   }
 
   Future<void> _approve(AdminVendor vendor) async {
+    // Guards against a double-tap (or a slow response tempting a second
+    // tap) firing the approve endpoint more than once, which previously
+    // sent the vendor a duplicate approval email/notification each time.
+    if (_approvingIds.contains(vendor.id)) return;
+    setState(() => _approvingIds.add(vendor.id));
     final messenger = ScaffoldMessenger.of(context);
     try {
       await context.read<AppState>().admin.approveVendor(vendor.id);
       messenger.showSnackBar(SnackBar(content: Text('${vendor.businessName} approved')));
-      _load();
+      await _load();
+      unawaited(_loadPendingCount());
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _approvingIds.remove(vendor.id));
     }
   }
 
@@ -168,7 +196,12 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              AdminFilterChip(label: 'Pending', selected: _statusFilter == VendorApplicationStatus.pending, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.pending; _load(); })),
+              AdminFilterChip(
+                label: 'Pending',
+                selected: _statusFilter == VendorApplicationStatus.pending,
+                badgeCount: _pendingCount,
+                onTap: () => setState(() { _statusFilter = VendorApplicationStatus.pending; _load(); }),
+              ),
               const SizedBox(width: 8),
               AdminFilterChip(label: 'Approved', selected: _statusFilter == VendorApplicationStatus.approved, onTap: () => setState(() { _statusFilter = VendorApplicationStatus.approved; _load(); })),
               const SizedBox(width: 8),
@@ -241,9 +274,15 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: ElevatedButton(
-                                      onPressed: () => _approve(vendor),
+                                      onPressed: _approvingIds.contains(vendor.id) ? null : () => _approve(vendor),
                                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.navy),
-                                      child: const Text('Approve', style: TextStyle(color: Colors.white)),
+                                      child: _approvingIds.contains(vendor.id)
+                                          ? const SizedBox(
+                                              width: 16,
+                                              height: 16,
+                                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                            )
+                                          : const Text('Approve', style: TextStyle(color: Colors.white)),
                                     ),
                                   ),
                                 ] else

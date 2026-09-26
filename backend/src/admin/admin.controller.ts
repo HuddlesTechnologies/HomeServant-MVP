@@ -158,6 +158,13 @@ export class AdminController {
     return this.admin.findVendors(query);
   }
 
+  /// Registered ahead of `vendors/:id` — Nest matches routes in
+  /// registration order, so `:id` would otherwise swallow this literal path.
+  @Get('vendors/pending-count')
+  async pendingVendorsCount() {
+    return { count: await this.admin.pendingVendorsCount() };
+  }
+
   @Get('vendors/:id')
   findVendorDetail(@Param('id') id: string) {
     return this.admin.findVendorDetail(id);
@@ -192,6 +199,11 @@ export class AdminController {
   @Get('properties')
   findProperties(@Query('page') page?: string, @Query('pageSize') pageSize?: string, @Query('search') search?: string) {
     return this.admin.findProperties(page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined, search);
+  }
+
+  @Get('properties/:id')
+  findPropertyDetail(@Param('id') id: string) {
+    return this.admin.findPropertyDetail(id);
   }
 
   @Patch('properties/:id/relist')

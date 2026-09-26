@@ -66,6 +66,7 @@ class _VendorMessagesScreenState extends State<VendorMessagesScreen> {
             contactName: order.customerName,
             threadId: thread.id,
             orderItem: item,
+            otherParticipant: thread.otherParticipant,
           ),
         ),
       );

@@ -23,8 +23,15 @@ class ChatSocketService {
   io.Socket? _socket;
   final _controller = StreamController<ChatSocketMessage>.broadcast();
   final _notificationController = StreamController<AppNotification>.broadcast();
+  final _readController = StreamController<String>.broadcast();
 
   Stream<ChatSocketMessage> get onNewMessage => _controller.stream;
+
+  /// Fires with a thread id the instant the *other* participant marks that
+  /// thread read (see backend ChatController.markRead) — lets an already-
+  /// open ChatThreadScreen flip its own sent messages to "Seen" live
+  /// instead of only finding out on the next full reload.
+  Stream<String> get onRead => _readController.stream;
 
   /// Fires the instant a new `Notification` row is created for this user
   /// anywhere on the backend (chat, admin, payments, reports, …) — the
@@ -57,6 +64,12 @@ class ChatSocketService {
         if (threadId != null && message is Map) {
           _controller.add(ChatSocketMessage(threadId: threadId, message: Map<String, dynamic>.from(message)));
         }
+      }
+    });
+    socket.on('message:read', (data) {
+      if (data is Map) {
+        final threadId = data['threadId'] as String?;
+        if (threadId != null) _readController.add(threadId);
       }
     });
     socket.on('notification:new', (data) {

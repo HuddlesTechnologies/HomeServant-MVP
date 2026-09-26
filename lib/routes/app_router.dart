@@ -101,7 +101,18 @@ GoRouter buildAppRouter(AppState appState) {
     initialLocation: '/',
     refreshListenable: appState,
     redirect: (context, state) {
-      if (!appState.isLoaded || !appState.isAuthenticated) return null;
+      if (!appState.isLoaded) return null;
+      if (!appState.isAuthenticated) {
+        // The session just ended (expired refresh token, forced sign-out,
+        // etc.) while sitting on a protected route — without this branch,
+        // the previous screen just stays on-screen underneath the session-
+        // expired modal until the user manually taps "Log In Again" (see
+        // SessionExpiredGate). GoRouter re-runs this the instant
+        // AppState.notifyListeners() fires (refreshListenable: appState
+        // below), so this fires immediately, not on the next navigation.
+        if (!_preAuthPaths.contains(state.matchedLocation)) return '/get-started';
+        return null;
+      }
       if (_preAuthPaths.contains(state.matchedLocation)) {
         return appState.role == UserRole.admin ? '/admin' : '/dashboard';
       }

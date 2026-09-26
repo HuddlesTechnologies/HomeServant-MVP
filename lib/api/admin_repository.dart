@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'models/admin_models.dart';
+import '../features/dashboard/models/property.dart';
 
 class AdminRepository {
   AdminRepository(this._client);
@@ -13,13 +14,25 @@ class AdminRepository {
     });
   }
 
-  Future<AdminPage<AdminUser>> findUsers({String? role, String? search, int page = 1}) {
+  Future<AdminPage<AdminUser>> findUsers({String? role, String? search, int page = 1, bool deactivatedOnly = false}) {
     return _client.call(() async {
       final response = await _client.dio.get(
         '/admin/users',
-        queryParameters: {if (role != null) 'role': role, if (search != null && search.isNotEmpty) 'search': search, 'page': page},
+        queryParameters: {
+          if (role != null) 'role': role,
+          if (search != null && search.isNotEmpty) 'search': search,
+          if (deactivatedOnly) 'deactivatedOnly': true,
+          'page': page,
+        },
       );
       return AdminPage<AdminUser>.fromApi(response.data as Map<String, dynamic>, AdminUser.fromApi);
+    });
+  }
+
+  Future<int> pendingVendorsCount() {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/vendors/pending-count');
+      return response.data['count'] as int;
     });
   }
 
@@ -109,6 +122,17 @@ class AdminRepository {
         queryParameters: {if (search != null && search.isNotEmpty) 'search': search, 'page': page},
       );
       return AdminPage<AdminProperty>.fromApi(response.data as Map<String, dynamic>, AdminProperty.fromApi);
+    });
+  }
+
+  /// Full listing detail — reuses [Property.fromApi] since the admin
+  /// endpoint returns the same shape `GET /properties/:id` does (the raw
+  /// row plus the landlord relation), just without the aggregated
+  /// rating/review fields (which [Property.fromApi] already defaults).
+  Future<Property> propertyDetail(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/admin/properties/$id');
+      return Property.fromApi(response.data as Map<String, dynamic>);
     });
   }
 

@@ -45,8 +45,8 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('google')
   @HttpCode(HttpStatus.OK)
-  googleAuth(@Body() dto: GoogleAuthDto) {
-    return this.auth.googleAuth(dto);
+  googleAuth(@Body() dto: GoogleAuthDto, @Req() req: Request) {
+    return this.auth.googleAuth(dto, req.ip);
   }
 
   @Throttle({ default: { limit: 5, ttl: 60000 } })

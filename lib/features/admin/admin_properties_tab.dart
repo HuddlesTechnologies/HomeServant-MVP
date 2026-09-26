@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
+import 'admin_property_detail_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
@@ -41,6 +42,12 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
       if (!mounted) return;
       setState(() => _error = "Couldn't load properties.");
     }
+  }
+
+  void _openDetail(AdminProperty property) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => AdminPropertyDetailScreen(propertyId: property.id)),
+    ).then((_) => _load());
   }
 
   Future<void> _remove(AdminProperty property) async {
@@ -107,7 +114,10 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                     separatorBuilder: (_, _) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
                       final property = properties[index];
-                      return Container(
+                      return InkWell(
+                        onTap: () => _openDetail(property),
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
                         padding: const EdgeInsets.all(14),
                         decoration: adminCardDecoration,
                         child: Row(
@@ -153,6 +163,7 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                                 icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                               ),
                           ],
+                        ),
                         ),
                       );
                     },

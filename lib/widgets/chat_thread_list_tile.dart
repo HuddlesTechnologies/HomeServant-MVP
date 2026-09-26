@@ -54,9 +54,29 @@ class ChatThreadListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final online = thread.otherParticipant?.isOnline ?? false;
     return Row(
       children: [
-        avatar,
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            avatar,
+            if (online)
+              Positioned(
+                right: -1,
+                bottom: -1,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+          ],
+        ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(

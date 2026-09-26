@@ -121,6 +121,12 @@ class AppState extends ChangeNotifier {
 
   void _handleSessionExpired() {
     sessionExpired = true;
+    // Unlike deactivateAccount()/deleteAccount(), this used to leave the
+    // now-dead refresh token sitting in secure storage until the next cold
+    // start's load() happened to clear it — harmless in practice (the
+    // server already rejects it) but inconsistent with every other
+    // forced-sign-out path.
+    unawaited(_tokens.clear());
     _clearSession();
   }
 

@@ -14,4 +14,11 @@ export class LoginDto {
   @IsOptional()
   @IsBoolean()
   reactivate?: boolean;
+
+  /// Client-supplied phone model (e.g. "iPhone 14 Pro") — persisted to
+  /// `User.lastLoginDeviceModel` so the admin console can show it. Optional
+  /// so an older client build or a web login doesn't fail validation.
+  @IsOptional()
+  @IsString()
+  deviceModel?: string;
 }

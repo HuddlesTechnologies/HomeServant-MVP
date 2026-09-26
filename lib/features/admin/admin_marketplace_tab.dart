@@ -15,14 +15,19 @@ import 'widgets/admin_search_bar.dart';
 enum _MarketplaceView { products, orders }
 
 class AdminMarketplaceTab extends StatefulWidget {
-  const AdminMarketplaceTab({super.key});
+  const AdminMarketplaceTab({super.key, this.initialShowOrders = false});
+
+  /// True to land straight on the Orders segment (e.g. tapping the
+  /// dashboard's "Marketplace Orders" tile) instead of the default Products
+  /// segment.
+  final bool initialShowOrders;
 
   @override
   State<AdminMarketplaceTab> createState() => _AdminMarketplaceTabState();
 }
 
 class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
-  _MarketplaceView _view = _MarketplaceView.products;
+  late _MarketplaceView _view = widget.initialShowOrders ? _MarketplaceView.orders : _MarketplaceView.products;
   List<AdminProduct>? _products;
   List<AdminOrder>? _orders;
   String _search = '';

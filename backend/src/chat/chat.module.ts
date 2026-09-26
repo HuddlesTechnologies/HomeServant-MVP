@@ -5,6 +5,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
+import { SupportChatCleanupService } from './support-chat-cleanup.service';
 
 /// NotificationsModule needs ChatGateway (to emit `notification:new` over
 /// the same socket this module already runs) while this module needs
@@ -14,7 +15,7 @@ import { ChatService } from './chat.service';
 @Module({
   imports: [AuthModule, forwardRef(() => NotificationsModule), MailModule],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway],
+  providers: [ChatService, ChatGateway, SupportChatCleanupService],
   exports: [ChatGateway],
 })
 export class ChatModule {}

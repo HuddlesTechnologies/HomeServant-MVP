@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/models/chat.dart';
@@ -5,6 +7,7 @@ import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
@@ -21,11 +24,23 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   List<ChatThread>? _threads;
+  StreamSubscription<ChatSocketMessage>? _socketSubscription;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // Without this, a message arriving while this screen is open (not the
+    // thread itself, just the list) never updated the preview/ordering/
+    // unread badge until a manual pull-to-refresh or leaving and coming
+    // back — this is what "messaging isn't working" often actually was.
+    _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _socketSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -42,7 +57,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Future<void> _openThread(ChatThread thread) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(theme: widget.theme, contactName: thread.otherParticipantName, threadId: thread.id),
+        builder: (_) => ChatThreadScreen(
+          theme: widget.theme,
+          contactName: thread.otherParticipantName,
+          threadId: thread.id,
+          otherParticipant: thread.otherParticipant,
+        ),
       ),
     );
     if (!mounted) return;

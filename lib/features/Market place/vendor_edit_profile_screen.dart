@@ -282,7 +282,7 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.theme, required this.label, required this.controller, this.hint = ''});
+  const _Field({required this.theme, required this.label, required this.controller, this.hint = '', this.keyboardType});
 
   final DashboardTheme theme;
   final String label;

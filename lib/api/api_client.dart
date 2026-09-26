@@ -48,7 +48,21 @@ class ApiClient {
   /// instead of leaving the app silently logged in with dead tokens.
   void Function()? onSessionExpired;
 
-  Future<String?> _tryRefresh() async {
+  /// Shared by every concurrent 401 so only one actually calls
+  /// `/auth/refresh` at a time. The backend's refresh token is single-use
+  /// (it's rotated and revoked on success — see AuthService.refresh), so
+  /// two requests 401-ing at the same moment and each independently
+  /// calling this used to race: the first to land would rotate the token,
+  /// and the second's attempt would then fail against the now-revoked one
+  /// — spuriously triggering [onSessionExpired] even though the session
+  /// was actually fine and new tokens were already saved by the first.
+  Future<String?>? _refreshInFlight;
+
+  Future<String?> _tryRefresh() {
+    return _refreshInFlight ??= _doRefresh().whenComplete(() => _refreshInFlight = null);
+  }
+
+  Future<String?> _doRefresh() async {
     final refreshToken = await _tokens.readRefreshToken();
     if (refreshToken == null) return null;
     try {

@@ -154,129 +154,146 @@ enum PaymentStatus {
 /// one Payment over time (a renewal charges again), so [bookingId] isn't
 /// unique; an order item is only ever paid for once, so [orderItemId] is.
 model Payment {
-  id                    String         @id @default(uuid())
+  id                    String                @id @default(uuid())
   purpose               PaymentPurpose
   bookingId             String?
-  booking               Booking?       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  orderItemId           String?        @unique
+  booking               Booking?              @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  orderItemId           String?               @unique
   orderItem             MarketplaceOrderItem? @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
   payerId               String
-  payer                 User           @relation("PaymentsMade", fields: [payerId], references: [id], onDelete: Cascade)
+  payer                 User                  @relation("PaymentsMade", fields: [payerId], references: [id], onDelete: Cascade)
   /// The landlord's or vendor's User id — resolved at charge time so the
   /// eventual Transfer always has a fixed target even if, say, the
   /// property changes hands later.
   recipientUserId       String
-  recipient             User           @relation("PaymentsReceived", fields: [recipientUserId], references: [id], onDelete: Cascade)
+  recipient             User                  @relation("PaymentsReceived", fields: [recipientUserId], references: [id], onDelete: Cascade)
   /// Amount actually charged to the payer, in kobo.
   amount                Int
   /// HomeServant's cut, in kobo (already reflected in what the recipient
   /// is transferred — recipient gets amount - platformFeeAmount).
   platformFeeAmount     Int
-  paystackReference     String         @unique
+  paystackReference     String                @unique
   transferRecipientCode String?
-  status                PaymentStatus  @default(INITIATED)
+  status                PaymentStatus         @default(INITIATED)
   paidAt                DateTime?
   releasedAt            DateTime?
   refundedAt            DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
   @@index([bookingId])
   @@index([status])
 }
 
 model User {
-  id               String    @id @default(uuid())
-  email            String    @unique
-  phoneNumber      String?
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  phoneNumber          String?
   /// Null for a Google-only account — nothing to compare a login password
   /// against, so AuthService.login rejects the password grant entirely
   /// for these users instead of hashing/comparing against nothing.
-  passwordHash     String?
+  passwordHash         String?
   /// Google's `sub` claim — stable even if the user's email changes on
   /// their Google account. Null until they've signed in with Google at
   /// least once (including an account originally created by
   /// email/password, if they later link Google to the same email).
-  googleId         String?   @unique
-  role             UserRole
+  googleId             String?        @unique
+  role                 UserRole
   /// Only meaningful when [role] is ADMIN — which admin console actions
   /// this account can take (see AdminLevelGuard). Null for every other
   /// role.
-  adminLevel       AdminLevel?
-  firstName        String?
-  lastName         String?
-  fullName         String?
-  houseAddress     String?
-  dateOfBirth      DateTime?
-  profilePhotoUrl  String?
+  adminLevel           AdminLevel?
+  firstName            String?
+  lastName             String?
+  fullName             String?
+  houseAddress         String?
+  dateOfBirth          DateTime?
+  profilePhotoUrl      String?
   /// Tenant profile fields a landlord can see for someone renting (or
   /// requesting to rent) their property — see BookingsService.findForLandlord,
   /// which is the only place these are exposed to another user. Optional on
   /// every role (not just TENANT) since a landlord/vendor account's own
   /// profile-edit screen can reuse the same fields.
-  gender           Gender?
-  occupation       String?
-  maritalStatus    MaritalStatus?
-  emailVerifiedAt  DateTime?
-  twoFactorEnabled Boolean   @default(false)
+  gender               Gender?
+  occupation           String?
+  maritalStatus        MaritalStatus?
+  emailVerifiedAt      DateTime?
+  twoFactorEnabled     Boolean        @default(false)
   /// Set true for an admin account created via the console's invite-by-
   /// email flow (AdminService.confirmAdminOtp) — signed in with the
   /// one-time password from that invite email. AuthService.changePassword
   /// clears it. The Flutter admin console checks this right after login
   /// and blocks entry into the console behind a mandatory "set your
   /// password" step until it's cleared.
-  mustChangePassword Boolean @default(false)
+  mustChangePassword   Boolean        @default(false)
   /// Set by `PATCH /auth/deactivate` (Settings > Danger Zone). Hides this
   /// landlord's properties from the public feed and every session gets
   /// signed out; cleared automatically the next time this account logs
   /// in successfully (see AuthService.login/googleAuth), matching the
   /// "reactivate any time by logging back in" promise on that screen.
-  deactivatedAt    DateTime?
+  deactivatedAt        DateTime?
+  /// Updated on every successful login (every role, not just ADMIN — see
+  /// AuthService.login/verifyLoginOtp/googleAuth) and again the moment a
+  /// user's last open socket disconnects (see PresenceService/ChatGateway)
+  /// — the "last active" timestamp the admin console and chat participant
+  /// list both read. Null only for an account that's never logged in
+  /// (created by an admin invite, etc.) or connected a chat socket yet.
+  lastActiveAt         DateTime?
+  /// Captured from the request at login time — same data
+  /// ActivityLog already records for ADMIN_LOGIN, just now kept on every
+  /// role's own row instead of only in the (admin-only) activity log.
+  lastLoginIp          String?
+  /// Client-supplied at login (see LoginDto/VerifyLoginOtpDto's
+  /// `deviceModel`) — e.g. "iPhone 14 Pro" or "Pixel 7". Null for a
+  /// session that predates this field or a client that didn't send one
+  /// (web, older app build).
+  lastLoginDeviceModel String?
   /// Landlord payout account — the account a tenant's payment is credited
   /// to. [accountName] is never taken from client input; it's only ever
   /// set from Paystack's own account-resolution response, so it can't be
   /// spoofed to redirect payouts to an unverified account.
-  bankCode         String?
-  bankName         String?
-  accountNumber    String?
-  accountName      String?
+  bankCode             String?
+  bankName             String?
+  accountNumber        String?
+  accountName          String?
   /// This user's own invite code, shown on "Invite Friends" — nullable
   /// only because it's backfilled lazily on first access for accounts
   /// that existed before this field did (see UsersService.findById)
   /// rather than requiring a data migration for every existing row.
-  referralCode     String?   @unique
+  referralCode         String?        @unique
   /// Set the first time this user signs up with someone else's referral
   /// code (via `PATCH /users/me`, see UsersService.updateProfile) — never
   /// overwritten afterward, so a code entered later can't retroactively
   /// steal credit for an account that already has an inviter.
-  referredById     String?
-  referredBy       User?     @relation("Referrals", fields: [referredById], references: [id])
-  referrals        User[]    @relation("Referrals")
+  referredById         String?
+  referredBy           User?          @relation("Referrals", fields: [referredById], references: [id])
+  referrals            User[]         @relation("Referrals")
   /// Set once the referrer's "so-and-so signed up with your code"
   /// notification has actually been sent, guarding against sending it
   /// twice if [fullName] is updated more than once after the referral
   /// link is made.
-  referralNotifiedAt DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  referralNotifiedAt   DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  properties         Property[]          @relation("LandlordProperties")
-  bookings           Booking[]           @relation("TenantBookings")
-  favorites          Favorite[]
-  refreshTokens      RefreshToken[]
-  otpCodes           OtpCode[]
-  reviews            Review[]
-  threadMemberships  ThreadParticipant[]
-  messages           Message[]
-  vendorProfile      VendorProfile?
-  marketplaceOrders  MarketplaceOrder[]
-  notifications      Notification[]
-  activityActions    ActivityLog[]       @relation("ActivityActor")
-  activityTargets    ActivityLog[]       @relation("ActivityTarget")
-  reportsFiled       Report[]            @relation("ReportsFiled")
-  reportsAssigned    Report[]            @relation("ReportsAssigned")
-  paymentsMade       Payment[]           @relation("PaymentsMade")
-  paymentsReceived   Payment[]           @relation("PaymentsReceived")
+  properties             Property[]          @relation("LandlordProperties")
+  bookings               Booking[]           @relation("TenantBookings")
+  favorites              Favorite[]
+  refreshTokens          RefreshToken[]
+  otpCodes               OtpCode[]
+  reviews                Review[]
+  threadMemberships      ThreadParticipant[]
+  messages               Message[]
+  vendorProfile          VendorProfile?
+  marketplaceOrders      MarketplaceOrder[]
+  notifications          Notification[]
+  activityActions        ActivityLog[]       @relation("ActivityActor")
+  activityTargets        ActivityLog[]       @relation("ActivityTarget")
+  reportsFiled           Report[]            @relation("ReportsFiled")
+  reportsAssigned        Report[]            @relation("ReportsAssigned")
+  paymentsMade           Payment[]           @relation("PaymentsMade")
+  paymentsReceived       Payment[]           @relation("PaymentsReceived")
+  supportThreadsAssigned Thread[]            @relation("SupportThreadsAssigned")
 
   @@index([role])
 }
@@ -368,6 +385,9 @@ enum NotificationType {
   /// same thread still gets, since only the first one also triggers an
   /// email to the landlord (see ChatService.sendMessage).
   NEW_LISTING_MESSAGE
+  /// An admin marked a "Contact Support" thread resolved — see
+  /// ChatService.resolveSupportThread.
+  SUPPORT_THREAD_RESOLVED
 }
 
 /// A user-facing notification — modelled generically so
@@ -440,20 +460,20 @@ model PendingAdmin {
 }
 
 model Property {
-  id          String           @id @default(uuid())
-  landlordId  String
-  landlord    User             @relation("LandlordProperties", fields: [landlordId], references: [id], onDelete: Cascade)
-  title       String
-  location    String
-  state       String
-  category    PropertyCategory
-  price       Int
-  priceUnit   PriceUnit
-  bedrooms    Int
-  bathrooms   Int
-  description String
-  imageUrl    String?
-  galleryUrls String[]         @default([])
+  id                 String           @id @default(uuid())
+  landlordId         String
+  landlord           User             @relation("LandlordProperties", fields: [landlordId], references: [id], onDelete: Cascade)
+  title              String
+  location           String
+  state              String
+  category           PropertyCategory
+  price              Int
+  priceUnit          PriceUnit
+  bedrooms           Int
+  bathrooms          Int
+  description        String
+  imageUrl           String?
+  galleryUrls        String[]         @default([])
   /// True once a tenant has moved into an accepted, paid lease on this
   /// property (see BookingsService.confirmMovedIn) — hides it from public
   /// search. Never set for a SHORTLET booking (see [category]); those
@@ -461,7 +481,7 @@ model Property {
   /// whether an active Booking's leaseEndDate is still in the future,
   /// rather than this flag, so the listing itself keeps taking future
   /// bookings around the current stay.
-  isOccupied  Boolean          @default(false)
+  isOccupied         Boolean          @default(false)
   /// Set by the landlord at listing time for every non-Shortlet category
   /// — how long a lease runs once a tenant moves in (6-24 months).
   /// Meaningless for SHORTLET, where a stay's length instead comes from
@@ -470,19 +490,19 @@ model Property {
   /// Off hides the "Message" action on this specific listing and blocks
   /// starting a new thread from it — replaces the old device-local,
   /// unsynced AppState toggle of the same intent.
-  messagingEnabled   Boolean   @default(true)
+  messagingEnabled   Boolean          @default(true)
   /// Shortlet-only — the unit's exact address/room within [location],
   /// since one shortlet listing is a single bookable unit.
-  unitAddress String?
-  roomNumber  String?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  unitAddress        String?
+  roomNumber         String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
-  bookings    Booking[]
-  favorites   Favorite[]
-  reviews     Review[]
-  threads     Thread[]
-  reports     Report[]
+  bookings  Booking[]
+  favorites Favorite[]
+  reviews   Review[]
+  threads   Thread[]
+  reports   Report[]
 
   @@index([landlordId])
   @@index([state, category])
@@ -512,24 +532,47 @@ model Review {
 /// this isn't locked to exactly two people if group threads are ever
 /// needed.
 model Thread {
-  id         String            @id @default(uuid())
-  propertyId String?
-  property   Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  id              String            @id @default(uuid())
+  propertyId      String?
+  property        Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   /// Set instead of propertyId for a marketplace pickup-coordination
   /// thread (buyer <-> vendor about a specific order) — mutually
   /// exclusive with propertyId in practice, though nothing enforces that
   /// at the schema level since a thread with neither is also valid (not
   /// used today, but not wrong).
-  orderId    String?
-  order      MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  orderId         String?
+  order           MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  /// True for a "Contact Support" thread (started via `POST
+  /// /threads/support`, not the normal `POST /threads`) — these show up in
+  /// every admin's shared Support Queue rather than only for a specific
+  /// participant, and are the only threads the 30-day cleanup cron and the
+  /// "hide once resolved" rule (see [status]) apply to.
+  isSupport       Boolean           @default(false)
+  status          ThreadStatus      @default(OPEN)
+  /// The admin who claimed this support thread — set automatically the
+  /// first time any admin replies (see ChatService.sendMessage), the same
+  /// "first responder claims it" idea Report.assignedAdminId already uses.
+  /// Always null for a non-support thread.
+  assignedAdminId String?
+  assignedAdmin   User?             @relation("SupportThreadsAssigned", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  /// Set once an admin marks a support thread resolved — from that point
+  /// [findForUser] hides it from the *user's* inbox (not the admin's; the
+  /// 30-day cleanup cron is what eventually removes it for everyone).
+  resolvedAt      DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 
   participants ThreadParticipant[]
   messages     Message[]
 
   @@index([propertyId])
   @@index([orderId])
+  @@index([isSupport, status])
+}
+
+enum ThreadStatus {
+  OPEN
+  RESOLVED
 }
 
 model ThreadParticipant {
@@ -564,66 +607,66 @@ enum MessageType {
 /// instead of vanishing — matching this model's own "history survives"
 /// intent, which a straight Cascade would have silently violated.
 model Message {
-  id        String      @id @default(uuid())
-  threadId  String
-  thread    Thread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  senderId  String?
-  sender    User?       @relation(fields: [senderId], references: [id], onDelete: SetNull)
-  type      MessageType @default(TEXT)
-  body      String
+  id                       String      @id @default(uuid())
+  threadId                 String
+  thread                   Thread      @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderId                 String?
+  sender                   User?       @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  type                     MessageType @default(TEXT)
+  body                     String
   previewPropertyTitle     String?
   previewPropertyImageUrl  String?
   previewPropertyPrice     Int?
   previewPropertyPriceUnit PriceUnit?
-  readAt    DateTime?
-  createdAt DateTime    @default(now())
+  readAt                   DateTime?
+  createdAt                DateTime    @default(now())
 
   @@index([threadId, createdAt])
 }
 
 model Booking {
-  id            String        @id @default(uuid())
-  propertyId    String
-  property      Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenantId      String
-  tenant        User          @relation("TenantBookings", fields: [tenantId], references: [id], onDelete: Cascade)
-  status        BookingStatus @default(PENDING)
+  id                      String        @id @default(uuid())
+  propertyId              String
+  property                Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenantId                String
+  tenant                  User          @relation("TenantBookings", fields: [tenantId], references: [id], onDelete: Cascade)
+  status                  BookingStatus @default(PENDING)
   /// The tenant's proposed date — an inspection date for a non-Shortlet
   /// rental, or the requested check-in date for a Shortlet (which has no
   /// inspection step, see BookingStatus). Confirmed by the landlord via
   /// [inspectionConfirmedAt] (non-Shortlet only); nothing here supports
   /// the landlord counter-proposing a different date — they only accept
   /// or decline the one the tenant asked for.
-  requestedDate DateTime?
-  inspectionConfirmedAt DateTime?
+  requestedDate           DateTime?
+  inspectionConfirmedAt   DateTime?
   /// Shortlet-only — number of nights requested/booked (ignored for a
   /// non-Shortlet booking). Combined with [requestedDate] at webhook time
   /// to compute leaseEndDate = requestedDate + nights on instant payment
   /// release — see PaymentsService.
-  nights Int?
+  nights                  Int?
   /// Property.price/priceUnit at the moment this booking was charged — a
   /// later price change on the listing shouldn't retroactively change
   /// what this tenant owes (same convention as
   /// MarketplaceOrderItem.unitPrice). Re-snapshotted on each renewal, since
   /// a landlord may reasonably raise rent at renewal time.
-  priceSnapshot     Int?
-  priceUnitSnapshot PriceUnit?
+  priceSnapshot           Int?
+  priceUnitSnapshot       PriceUnit?
   /// Set together when payment is released (Shortlet: right after instant
   /// payment; a normal rental: when the tenant clicks "Moved In"). [leaseEndDate]
   /// is [leaseStartDate] plus Property.rentDurationMonths (or the
   /// Shortlet's booked night count) — the lease-lifecycle cron reads this
   /// to auto-expire/relist and to send the 30/15/0-day reminders.
-  leaseStartDate DateTime?
-  leaseEndDate   DateTime?
+  leaseStartDate          DateTime?
+  leaseEndDate            DateTime?
   /// De-dupes the lease-lifecycle cron's 30/15/0-day rent-expiry
   /// reminder — set to whichever of 30/15/0 was last sent, so a daily
   /// tick doesn't re-send the same threshold every day it's still true.
   /// Reset to null on a successful renewal (a new leaseEndDate starts a
   /// new reminder cycle).
   lastRentReminderDaysOut Int?
-  message       String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  message                 String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
   payments         Payment[]
   tenancyAgreement TenancyAgreement?
@@ -641,9 +684,9 @@ model Booking {
 /// updates the same Booking's leaseEndDate but does not regenerate this
 /// row, since the original agreement's terms still stand.
 model TenancyAgreement {
-  id               String   @id @default(uuid())
-  bookingId        String   @unique
-  booking          Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  id               String    @id @default(uuid())
+  bookingId        String    @unique
+  booking          Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   propertyTitle    String
   propertyLocation String
   propertyState    String
@@ -657,7 +700,7 @@ model TenancyAgreement {
   tenantName       String
   tenantEmail      String
   tenantPhone      String?
-  generatedAt      DateTime @default(now())
+  generatedAt      DateTime  @default(now())
 }
 
 model Favorite {
@@ -678,32 +721,32 @@ model Favorite {
 /// of the vendor's products from the public catalog — "Deactivate Shop"
 /// in the app.
 model VendorProfile {
-  id            String              @id @default(uuid())
-  userId        String              @unique
-  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  businessName  String
-  category      MarketplaceCategory
-  state         String
-  rcNumber      String?
-  logoUrl       String?
+  id              String                  @id @default(uuid())
+  userId          String                  @unique
+  user            User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName    String
+  category        MarketplaceCategory
+  state           String
+  rcNumber        String?
+  logoUrl         String?
   /// Payout account — mirrors User's landlord payout fields exactly
   /// (bankCode added alongside this comment for parity, since a Transfer
   /// needs the bank code, not just its name). [accountName] must only
   /// ever be set from Paystack's own account-resolution response, never
   /// trusted from client input, same rule as User.accountName.
-  bankCode      String?
-  bankName      String?
-  accountNumber String?
-  accountName   String?
+  bankCode        String?
+  bankName        String?
+  accountNumber   String?
+  accountName     String?
   /// Vendor's own "Deactivate Shop" toggle — distinct from [status] below
   /// (the one-time onboarding moderation gate) and from [suspendedAt]
   /// (admin moderation). A shop is visible only when both this is true
   /// AND [suspendedAt] is null — see MarketplaceProductsService.findMany.
-  isActive      Boolean             @default(true)
+  isActive        Boolean                 @default(true)
   /// Set by an admin via suspendVendor/cleared via unsuspendVendor. Kept
   /// separate from [isActive] so a suspended vendor can't undo the
   /// suspension themselves through the self-service toggle.
-  suspendedAt   DateTime?
+  suspendedAt     DateTime?
   /// New vendors start PENDING and aren't shown in the public product
   /// feed (see MarketplaceProductsService.findMany) until an admin
   /// approves them. Existing vendors from before this field was added
@@ -711,8 +754,8 @@ model VendorProfile {
   /// live went dark.
   status          VendorApplicationStatus @default(PENDING)
   rejectionReason String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
 
   products   Product[]
   orderItems MarketplaceOrderItem[]

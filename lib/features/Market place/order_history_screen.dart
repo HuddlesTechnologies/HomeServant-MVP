@@ -103,7 +103,12 @@ class _OrderCard extends StatelessWidget {
       if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => ChatThreadScreen(theme: theme, contactName: item.vendorName ?? 'Vendor', threadId: thread.id),
+          builder: (_) => ChatThreadScreen(
+            theme: theme,
+            contactName: item.vendorName ?? 'Vendor',
+            threadId: thread.id,
+            otherParticipant: thread.otherParticipant,
+          ),
         ),
       );
     } on ApiException catch (e) {

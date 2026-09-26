@@ -1,14 +1,28 @@
 class ThreadParticipant {
-  const ThreadParticipant({required this.id, this.fullName, this.profilePhotoUrl});
+  const ThreadParticipant({
+    required this.id,
+    this.fullName,
+    this.profilePhotoUrl,
+    this.isOnline = false,
+    this.lastActiveAt,
+  });
 
   final String id;
   final String? fullName;
   final String? profilePhotoUrl;
 
+  /// A live snapshot at the moment `GET /threads` was called (see backend
+  /// ChatService.findForUser/PresenceService) — not a subscription, so it
+  /// only updates on the next refetch.
+  final bool isOnline;
+  final DateTime? lastActiveAt;
+
   factory ThreadParticipant.fromApi(Map<String, dynamic> json) => ThreadParticipant(
     id: json['id'] as String,
     fullName: json['fullName'] as String?,
     profilePhotoUrl: json['profilePhotoUrl'] as String?,
+    isOnline: json['isOnline'] as bool? ?? false,
+    lastActiveAt: json['lastActiveAt'] != null ? DateTime.parse(json['lastActiveAt'] as String) : null,
   );
 }
 
@@ -79,6 +93,8 @@ class ChatThread {
     this.orderId,
     this.orderProductName,
     this.lastMessage,
+    this.isSupport = false,
+    this.resolved = false,
   });
 
   final String id;
@@ -94,8 +110,26 @@ class ChatThread {
   final int unreadCount;
   final DateTime updatedAt;
 
-  String get otherParticipantName =>
-      otherParticipants.isEmpty ? 'User' : (otherParticipants.first.fullName ?? 'User');
+  /// A "Contact Support" thread (see ChatRepository.openSupportThread) —
+  /// unclaimed until an admin replies, so [otherParticipants] may be empty.
+  final bool isSupport;
+
+  /// Once true, this thread is hidden from a non-admin caller's own
+  /// `GET /threads` response entirely (see the backend's findForUser) —
+  /// this field only ever reads `true` on the admin side, which still gets
+  /// it back until the 30-day cleanup cron removes it.
+  final bool resolved;
+
+  String get otherParticipantName {
+    if (otherParticipants.isEmpty) return isSupport ? 'HomeServant Support' : 'User';
+    return otherParticipants.first.fullName ?? 'User';
+  }
+
+  /// "Active now" / "Last active 3h ago" for the other participant, or
+  /// null when there isn't one yet (an unclaimed support thread) — the
+  /// caller decides how/whether to render it (see ChatThreadListTile,
+  /// ChatThreadScreen's app bar subtitle).
+  ThreadParticipant? get otherParticipant => otherParticipants.isEmpty ? null : otherParticipants.first;
 
   factory ChatThread.fromApi(Map<String, dynamic> json) {
     final property = json['property'] as Map<String, dynamic>?;
@@ -113,6 +147,45 @@ class ChatThread {
       orderProductName: order?['productName'] as String?,
       lastMessage: lastMessage != null ? ChatMessage.fromApi(lastMessage) : null,
       unreadCount: json['unreadCount'] as int? ?? 0,
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      isSupport: json['isSupport'] as bool? ?? false,
+      resolved: json['resolved'] as bool? ?? false,
+    );
+  }
+}
+
+/// One row in the admin console's shared Support Queue
+/// (`GET /threads/support-queue`) — distinct from [ChatThread] since an
+/// unclaimed queue entry has no admin participant yet to derive a name
+/// from; the requester is returned directly instead.
+class SupportQueueThread {
+  const SupportQueueThread({
+    required this.id,
+    required this.createdAt,
+    required this.updatedAt,
+    this.assignedAdminId,
+    this.requesterName,
+    this.lastMessage,
+  });
+
+  final String id;
+  final String? assignedAdminId;
+  final String? requesterName;
+  final ChatMessage? lastMessage;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  bool get isClaimed => assignedAdminId != null;
+
+  factory SupportQueueThread.fromApi(Map<String, dynamic> json) {
+    final requester = json['requester'] as Map<String, dynamic>?;
+    final lastMessage = json['lastMessage'] as Map<String, dynamic>?;
+    return SupportQueueThread(
+      id: json['id'] as String,
+      assignedAdminId: json['assignedAdminId'] as String?,
+      requesterName: requester?['fullName'] as String?,
+      lastMessage: lastMessage != null ? ChatMessage.fromApi(lastMessage) : null,
+      createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
   }

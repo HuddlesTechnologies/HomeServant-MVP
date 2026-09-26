@@ -9,6 +9,7 @@ import '../../state/app_state.dart';
 import '../../widgets/profile_edit_button.dart';
 import '../../widgets/support_sheet.dart';
 import '../../widgets/upload_picker.dart';
+import 'marketplace_auth_screen.dart';
 import 'vendor_edit_profile_screen.dart';
 import 'vendor_transactions_screen.dart';
 import 'widgets/vendor_bottom_nav.dart';
@@ -58,15 +59,23 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     _load();
   }
 
-  /// Distinct from "Go to Tenant Dashboard" below — that keeps this
-  /// vendor session signed in, this ends it. A vendor only needs to
-  /// actually log out to browse the Marketplace as a *different*
-  /// account (a separate tenant/landlord login), not just to see the
-  /// main app.
-  Future<void> _logOut(BuildContext context) async {
-    final navigator = Navigator.of(context);
-    await context.read<AppState>().logout();
-    navigator.popUntil((route) => route.isFirst);
+  /// "Vendor mode" is the *same* account/session as everywhere else in the
+  /// app (see AppState.hasVendorProfile) — there's no separate vendor
+  /// login to sign out of. So this doesn't end the session at all; it
+  /// resets the Marketplace's own nested navigation stack back to
+  /// MarketplaceAuthScreen, the "Proceed as a Customer" / "Go to My Shop"
+  /// choice screen — letting a tenant who's also a vendor step back into
+  /// shopping as a customer without losing their account session (which a
+  /// real sign-out would, since re-login would just route them straight
+  /// back into vendor mode via MarketplaceNavigatorHost's own
+  /// hasVendorProfile check). Ending the whole account session is still
+  /// available via "Go to Tenant Dashboard" below, then that dashboard's
+  /// own Log Out.
+  void _exitVendorMode(BuildContext context) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => MarketplaceAuthScreen(theme: theme)),
+      (route) => false,
+    );
   }
 
   Future<void> _confirmDeactivate(BuildContext context) async {
@@ -216,7 +225,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: () => _logOut(context),
+            onTap: () => _exitVendorMode(context),
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
@@ -225,7 +234,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 children: [
                   Icon(Icons.logout_rounded, color: theme.onSurface, size: 18),
                   const SizedBox(width: 8),
-                  Text('Log Out', style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w700, size: 14)),
+                  Text('Exit Vendor Mode', style: AppTextStyles.body(color: theme.onSurface, weight: FontWeight.w700, size: 14)),
                 ],
               ),
             ),

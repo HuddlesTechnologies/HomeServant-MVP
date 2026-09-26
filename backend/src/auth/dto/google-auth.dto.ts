@@ -18,4 +18,9 @@ export class GoogleAuthDto {
   @IsOptional()
   @IsBoolean()
   reactivate?: boolean;
+
+  /// Same meaning as LoginDto.deviceModel.
+  @IsOptional()
+  @IsString()
+  deviceModel?: string;
 }

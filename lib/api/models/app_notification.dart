@@ -10,7 +10,8 @@ enum NotificationType {
   reportAssigned,
   threadTransferred,
   rentExpiryReminder,
-  newListingMessage;
+  newListingMessage,
+  supportThreadResolved;
 
   static NotificationType fromApi(String value) => switch (value) {
     'REFERRAL_SIGNUP' => NotificationType.referralSignup,
@@ -25,6 +26,7 @@ enum NotificationType {
     'THREAD_TRANSFERRED' => NotificationType.threadTransferred,
     'RENT_EXPIRY_REMINDER' => NotificationType.rentExpiryReminder,
     'NEW_LISTING_MESSAGE' => NotificationType.newListingMessage,
+    'SUPPORT_THREAD_RESOLVED' => NotificationType.supportThreadResolved,
     _ => NotificationType.referralSignup,
   };
 }

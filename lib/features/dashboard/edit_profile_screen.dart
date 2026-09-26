@@ -426,6 +426,8 @@ class _EditableField extends StatelessWidget {
     required this.onToggleEdit,
     this.hint = '',
     this.keyboardType,
+    this.obscureText = false,
+    this.validator,
     this.extraTrailing,
     this.forceReadOnly = false,
     this.onFieldTap,

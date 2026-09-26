@@ -1,10 +1,11 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, UserRole } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { PresenceService } from './presence.service';
 
 const MESSAGE_PAGE_SIZE = 50;
 
@@ -14,6 +15,7 @@ export class ChatService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
+    private readonly presence: PresenceService,
   ) {}
 
   /// Reuses an existing thread between the same two people about the same
@@ -52,11 +54,18 @@ export class ChatService {
     });
   }
 
-  async findForUser(userId: string) {
+  /// [isAdmin] hides a resolved support thread from a non-admin caller's
+  /// own inbox (the "cleared... once the issue is tagged resolved" rule)
+  /// while an admin still sees it — the 30-day cleanup cron is what
+  /// eventually removes it for everyone, not this.
+  async findForUser(userId: string, isAdmin: boolean) {
     const threads = await this.prisma.thread.findMany({
-      where: { participants: { some: { userId } } },
+      where: {
+        participants: { some: { userId } },
+        ...(isAdmin ? {} : { NOT: { isSupport: true, status: 'RESOLVED' } }),
+      },
       include: {
-        participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
+        participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true, lastActiveAt: true } } } },
         property: { select: { id: true, title: true, imageUrl: true } },
         order: { select: { id: true, items: { take: 1, select: { productName: true } } } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -75,15 +84,93 @@ export class ChatService {
       id: thread.id,
       property: thread.property,
       order: thread.order ? { id: thread.order.id, productName: thread.order.items[0]?.productName ?? null } : null,
-      otherParticipants: thread.participants.filter((p) => p.userId !== userId).map((p) => p.user),
+      otherParticipants: thread.participants
+        .filter((p) => p.userId !== userId)
+        .map((p) => ({
+          id: p.user.id,
+          fullName: p.user.fullName,
+          profilePhotoUrl: p.user.profilePhotoUrl,
+          isOnline: this.presence.isOnline(p.user.id),
+          lastActiveAt: p.user.lastActiveAt,
+        })),
       lastMessage: thread.messages[0] ?? null,
       unreadCount: unreadByThread.get(thread.id) ?? 0,
+      updatedAt: thread.updatedAt,
+      isSupport: thread.isSupport,
+      resolved: thread.status === 'RESOLVED',
+    }));
+  }
+
+  /// Finds-or-creates the calling user's own "Contact Support" thread —
+  /// unlike [findOrCreateThread], this takes no `recipientId`: a support
+  /// thread starts with only the user as a participant and is visible to
+  /// every admin via [findSupportQueue] until one of them replies (see
+  /// [sendMessage]'s auto-claim), at which point that admin becomes a real
+  /// participant too. Reopens the same thread on a repeat visit as long as
+  /// it's still OPEN; a RESOLVED one gets a fresh thread instead, so an old
+  /// closed conversation doesn't reopen just because the user tapped "Live
+  /// Chat" again.
+  async openSupportThread(userId: string) {
+    const existing = await this.prisma.thread.findFirst({
+      where: { isSupport: true, status: 'OPEN', participants: { some: { userId } } },
+      include: { participants: true },
+    });
+    if (existing) return existing;
+
+    return this.prisma.thread.create({
+      data: { isSupport: true, participants: { create: [{ userId }] } },
+      include: { participants: true },
+    });
+  }
+
+  /// Every admin's shared queue — open support threads regardless of
+  /// whether they've been claimed yet, oldest first (so the longest-waiting
+  /// user is handled first). Not restricted to threads the calling admin
+  /// happens to be a participant of, unlike [findForUser] — that's the
+  /// whole point of a shared queue.
+  async findSupportQueue() {
+    const threads = await this.prisma.thread.findMany({
+      where: { isSupport: true, status: 'OPEN' },
+      include: {
+        participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return threads.map((thread) => ({
+      id: thread.id,
+      assignedAdminId: thread.assignedAdminId,
+      requester: thread.participants.find((p) => p.userId !== thread.assignedAdminId)?.user ?? null,
+      lastMessage: thread.messages[0] ?? null,
+      createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
     }));
   }
 
-  async findMessages(threadId: string, userId: string, before?: string) {
-    await this.assertParticipant(threadId, userId);
+  /// Sets `status: RESOLVED` — from that point [findForUser] hides this
+  /// thread from the *user's* inbox (see its `isAdmin` param); the admin
+  /// side still shows it until the 30-day cleanup cron purges it. Any admin
+  /// can resolve it, not just whoever's assigned, same as any admin can
+  /// see the shared queue.
+  async resolveSupportThread(threadId: string): Promise<void> {
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, include: { participants: true } });
+    if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
+    if (thread.status === 'RESOLVED') return;
+    await this.prisma.thread.update({ where: { id: threadId }, data: { status: 'RESOLVED', resolvedAt: new Date() } });
+
+    const requester = thread.participants.find((p) => p.userId !== thread.assignedAdminId);
+    if (requester) {
+      await this.notifications.create(
+        requester.userId,
+        NotificationType.SUPPORT_THREAD_RESOLVED,
+        'Your support conversation was resolved',
+        "An admin marked your support conversation as resolved. Reach out again any time if you still need help.",
+      );
+    }
+  }
+
+  async findMessages(threadId: string, userId: string, senderRole?: UserRole, before?: string) {
+    await this.assertParticipant(threadId, userId, senderRole);
     const messages = await this.prisma.message.findMany({
       where: { threadId, ...(before ? { createdAt: { lt: new Date(before) } } : {}) },
       orderBy: { createdAt: 'desc' },
@@ -93,8 +180,8 @@ export class ChatService {
     return messages.reverse();
   }
 
-  async sendMessage(threadId: string, userId: string, dto: SendMessageDto) {
-    await this.assertParticipant(threadId, userId);
+  async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
+    await this.assertParticipant(threadId, userId, senderRole);
     const [message] = await this.prisma.$transaction([
       this.prisma.message.create({
         data: { threadId, senderId: userId, body: dto.body },
@@ -102,6 +189,22 @@ export class ChatService {
       }),
       this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } }),
     ]);
+
+    // First admin to reply to an unclaimed support thread claims it — the
+    // same "first responder owns it" idea Report.assignedAdminId already
+    // uses. Adding them as a real ThreadParticipant (not just
+    // `assignedAdminId`) is what makes the thread show up in their own
+    // inbox (findForUser) from here on, and lets ChatGateway's normal
+    // per-user-room broadcast reach them for later messages.
+    if (senderRole === 'ADMIN') {
+      const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+      if (thread?.isSupport && !thread.assignedAdminId) {
+        await this.prisma.$transaction([
+          this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: userId } }),
+          this.prisma.threadParticipant.create({ data: { threadId, userId } }),
+        ]);
+      }
+    }
 
     const otherParticipants = await this.prisma.threadParticipant.findMany({
       where: { threadId, userId: { not: userId } },
@@ -122,8 +225,8 @@ export class ChatService {
     return message;
   }
 
-  async markRead(threadId: string, userId: string): Promise<void> {
-    await this.assertParticipant(threadId, userId);
+  async markRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
+    await this.assertParticipant(threadId, userId, senderRole);
     await this.prisma.message.updateMany({
       where: { threadId, senderId: { not: userId }, readAt: null },
       data: { readAt: new Date() },
@@ -139,11 +242,20 @@ export class ChatService {
     return participants.map((p) => p.userId);
   }
 
-  private async assertParticipant(threadId: string, userId: string): Promise<void> {
+  /// [senderRole] lets any admin read/reply to an unclaimed support thread
+  /// even before they're a [ThreadParticipant] of it (see [sendMessage]'s
+  /// auto-claim, which is what actually adds them as one) — every other
+  /// thread, and every other role, still requires real participancy.
+  private async assertParticipant(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
     const membership = await this.prisma.threadParticipant.findUnique({
       where: { threadId_userId: { threadId, userId } },
     });
-    if (!membership) throw new ForbiddenException('Not a participant of this thread');
+    if (membership) return;
+    if (senderRole === 'ADMIN') {
+      const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+      if (thread?.isSupport) return;
+    }
+    throw new ForbiddenException('Not a participant of this thread');
   }
 
   /// Hands a console conversation off to another admin, "the way Namecheap

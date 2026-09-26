@@ -1,8 +1,32 @@
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import '../models/user_role.dart';
 import 'api_client.dart';
 import 'models/auth_user.dart';
 import 'token_storage.dart';
+
+/// Best-effort phone model string sent at login (see `LoginDto.deviceModel`
+/// on the backend) so the admin console can show which device an account
+/// last signed in from — null on web or if the platform plugin throws,
+/// since neither should ever block a login.
+Future<String?> _deviceModel() async {
+  try {
+    final info = DeviceInfoPlugin();
+    if (kIsWeb) return null;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      final android = await info.androidInfo;
+      return '${android.manufacturer} ${android.model}'.trim();
+    }
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      final ios = await info.iosInfo;
+      return ios.utsname.machine;
+    }
+  } catch (_) {
+    // Best-effort only.
+  }
+  return null;
+}
 
 class LoginResult {
   const LoginResult({this.tokens, this.user, this.requiresTwoFactor = false, this.requiresReactivation = false});
@@ -51,9 +75,15 @@ class AuthRepository {
 
   Future<LoginResult> login({required String email, required String password, bool reactivate = false}) {
     return _client.call(() async {
+      final deviceModel = await _deviceModel();
       final response = await _client.dio.post(
         '/auth/login',
-        data: {'email': email, 'password': password, if (reactivate) 'reactivate': true},
+        data: {
+          'email': email,
+          'password': password,
+          if (reactivate) 'reactivate': true,
+          if (deviceModel != null) 'deviceModel': deviceModel,
+        },
         options: Options(extra: {'skipAuth': true}),
       );
       final data = response.data as Map<String, dynamic>;
@@ -75,9 +105,15 @@ class AuthRepository {
   /// with it set to true once the user confirms.
   Future<LoginResult> googleAuth({required String idToken, required UserRole role, bool reactivate = false}) {
     return _client.call(() async {
+      final deviceModel = await _deviceModel();
       final response = await _client.dio.post(
         '/auth/google',
-        data: {'idToken': idToken, 'role': role.apiValue, if (reactivate) 'reactivate': true},
+        data: {
+          'idToken': idToken,
+          'role': role.apiValue,
+          if (reactivate) 'reactivate': true,
+          if (deviceModel != null) 'deviceModel': deviceModel,
+        },
         options: Options(extra: {'skipAuth': true}),
       );
       final data = response.data as Map<String, dynamic>;
@@ -91,9 +127,10 @@ class AuthRepository {
 
   Future<AuthUser> verifyLoginTwoFactor({required String email, required String code}) {
     return _client.call(() async {
+      final deviceModel = await _deviceModel();
       final response = await _client.dio.post(
         '/auth/verify-2fa',
-        data: {'email': email, 'code': code},
+        data: {'email': email, 'code': code, if (deviceModel != null) 'deviceModel': deviceModel},
         options: Options(extra: {'skipAuth': true}),
       );
       return _saveTokensAndUser(response.data);

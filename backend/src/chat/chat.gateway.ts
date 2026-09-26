@@ -12,6 +12,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
+import { PresenceService } from './presence.service';
 
 /// Same allow-list `main.ts` builds from CORS_ORIGINS for the REST API —
 /// duplicated here because `@WebSocketGateway`'s options are evaluated at
@@ -41,6 +42,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly presence: PresenceService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -53,13 +55,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = await this.jwt.verifyAsync<JwtPayload>(token, { secret: this.config.getOrThrow('JWT_ACCESS_SECRET') });
       client.data.userId = payload.sub;
       await client.join(this.userRoom(payload.sub));
+      this.presence.markOnline(payload.sub);
     } catch {
       client.disconnect();
     }
   }
 
-  handleDisconnect(): void {
-    // Nothing to clean up — socket.io drops room membership automatically.
+  async handleDisconnect(client: Socket): Promise<void> {
+    const userId = client.data.userId as string | undefined;
+    if (userId) await this.presence.markOffline(userId);
   }
 
   /// A client can optionally ping this while a specific thread is open,

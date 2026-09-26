@@ -50,6 +50,7 @@ dependencies:
   mime: ^1.0.6
   google_sign_in: ^6.3.0
   socket_io_client: ^3.1.2
+  device_info_plus: ^11.2.0
 
 dev_dependencies:
   flutter_test:

@@ -64,6 +64,9 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
             theme: DashboardTheme.midnight,
             contactName: user.fullName?.isNotEmpty == true ? user.fullName! : user.email,
             threadId: thread.id,
+            adminViewOfUserId: user.id,
+            showExportAction: true,
+            otherParticipant: thread.otherParticipant,
           ),
         ),
       );
@@ -219,6 +222,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.navy,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Text('User Details', style: AppTextStyles.heading(color: Colors.white, size: 18)),
         actions: [
           if (user != null) ...[
@@ -272,6 +276,16 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                         _Field('Two-Factor Auth', user.twoFactorEnabled ? 'Enabled' : 'Disabled'),
                         _Field('Referral Code', user.referralCode ?? '—'),
                         _Field('Joined', formatShortDate(user.createdAt)),
+                        _Field(
+                          'Status',
+                          user.isOnline
+                              ? 'Active now'
+                              : user.lastActiveAt != null
+                                  ? 'Last active ${formatRelativeTime(user.lastActiveAt!)}'
+                                  : 'Never connected',
+                        ),
+                        _Field('Last Login IP', user.lastLoginIp ?? '—'),
+                        _Field('Device', user.lastLoginDeviceModel ?? '—'),
                       ],
                     ),
                   ),

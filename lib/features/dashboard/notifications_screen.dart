@@ -22,6 +22,7 @@ IconData _iconForType(NotificationType type) => switch (type) {
   NotificationType.threadTransferred => Icons.forward_to_inbox_rounded,
   NotificationType.rentExpiryReminder => Icons.event_busy_rounded,
   NotificationType.newListingMessage => Icons.chat_bubble_outline_rounded,
+  NotificationType.supportThreadResolved => Icons.check_circle_outline_rounded,
 };
 
 class NotificationsScreen extends StatefulWidget {

@@ -61,6 +61,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
             contactName: booking.tenantName ?? 'Tenant',
             threadId: thread.id,
             property: booking.property,
+            otherParticipant: thread.otherParticipant,
           ),
         ),
       );
