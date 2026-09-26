@@ -1,4 +1,4 @@
-package com.example.homeservant
+package com.homeservant.app
 
 import android.content.ComponentName
 import android.content.pm.PackageManager
@@ -39,7 +39,7 @@ class MainActivity : FlutterActivity() {
 
         // Enable exactly the matching alias, disable the rest.
         for (alias in aliases.values) {
-            setComponentEnabled(pm, ComponentName(this, "com.example.homeservant$alias"), alias == targetAlias)
+            setComponentEnabled(pm, ComponentName(this, "com.homeservant.app$alias"), alias == targetAlias)
         }
     }
 

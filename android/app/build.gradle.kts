@@ -21,7 +21,7 @@ if (hasReleaseSigning) {
 }
 
 android {
-    namespace = "com.example.homeservant"
+    namespace = "com.homeservant.app"
     compileSdk = flutter.compileSdkVersion
     // Pinned above flutter.ndkVersion: several plugins (audioplayers,
     // device_info_plus, file_picker, google_sign_in, printing,
@@ -39,8 +39,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.homeservant"
+        applicationId = "com.homeservant.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
