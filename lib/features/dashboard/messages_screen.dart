@@ -10,6 +10,7 @@ import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
+import '../../widgets/contact_avatar.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
 import 'chat_thread_screen.dart';
 
@@ -114,10 +115,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
                             ),
                             child: ChatThreadListTile(
                               thread: thread,
-                              avatar: CircleAvatar(
+                              avatar: ContactAvatar(
+                                participant: thread.otherParticipant,
                                 radius: 24,
                                 backgroundColor: theme.accent.withValues(alpha: 0.25),
-                                child: Icon(Icons.person, color: theme.accent),
+                                iconColor: theme.accent,
                               ),
                               nameStyle: AppTextStyles.body(
                                 color: theme.onSurface,

@@ -27,4 +27,23 @@ class AppTheme {
       splashFactory: InkRipple.splashFactory,
     );
   }
+
+  /// `builder:` for [showDatePicker] calls. Without this, the calendar
+  /// dialog falls back to [light]'s seed-derived `ColorScheme`, which
+  /// computes its own `onPrimary`/`onSurface` rather than honoring the
+  /// app's hardcoded navy/white pairing — this pins the dialog to the same
+  /// explicit navy-on-white convention every other widget in the app uses.
+  static Widget datePickerBuilder(BuildContext context, Widget? child) {
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: const ColorScheme.light(
+          primary: AppColors.navy,
+          onPrimary: AppColors.white,
+          surface: AppColors.white,
+          onSurface: AppColors.navy,
+        ),
+      ),
+      child: child!,
+    );
+  }
 }

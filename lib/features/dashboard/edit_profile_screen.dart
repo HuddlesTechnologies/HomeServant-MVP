@@ -7,6 +7,7 @@ import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/theme/app_theme.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
@@ -150,6 +151,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       initialDate: _dateOfBirth ?? DateTime(now.year - 25),
       firstDate: DateTime(now.year - 100),
       lastDate: now,
+      builder: AppTheme.datePickerBuilder,
     );
     if (picked != null) {
       setState(() {

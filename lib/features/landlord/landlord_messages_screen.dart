@@ -9,8 +9,8 @@ import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
+import '../../widgets/contact_avatar.dart';
 import '../dashboard/chat_thread_screen.dart';
-import 'widgets/landlord_widgets.dart';
 
 /// Messages tab of the redesigned landlord dashboard — real conversations
 /// from the API, filterable by unread. "Deleted"/"Archived" have no backend
@@ -233,7 +233,12 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                                 padding: const EdgeInsets.symmetric(vertical: 12),
                                 child: ChatThreadListTile(
                                   thread: thread,
-                                  avatar: const LandlordAvatar(radius: 26),
+                                  avatar: ContactAvatar(
+                                    participant: thread.otherParticipant,
+                                    radius: 26,
+                                    backgroundColor: theme.accent.withValues(alpha: 0.25),
+                                    iconColor: theme.accent,
+                                  ),
                                   nameMessageSpacing: 3,
                                   nameStyle: AppTextStyles.body(
                                     color: theme.foreground,

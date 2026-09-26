@@ -50,7 +50,7 @@ class Property {
       bedrooms: json['bedrooms'] as int,
       bathrooms: json['bathrooms'] as int,
       description: json['description'] as String,
-      landlordName: (json['landlord'] as Map<String, dynamic>?)?['fullName'] as String? ?? 'Landlord',
+      landlordName: (json['landlord'] as Map<String, dynamic>?)?['fullName'] as String? ?? 'User',
       landlordId: (json['landlord'] as Map<String, dynamic>?)?['id'] as String? ?? json['landlordId'] as String?,
       listingNumber: json['listingNumber'] as int?,
       galleryImages: ((json['galleryUrls'] as List?)?.cast<String>()) ?? const [],

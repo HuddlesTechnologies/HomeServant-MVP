@@ -88,6 +88,8 @@ const _preAuthPaths = {
   '/signup-tenant',
   '/verify-otp',
   '/admin-login',
+  '/forgot-password',
+  '/reset-password',
 };
 
 /// Narrower subset of [_preAuthPaths]: genuine entry screens that should

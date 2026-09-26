@@ -120,7 +120,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
         MaterialPageRoute(
           builder: (_) => ChatThreadScreen(
             theme: widget.theme,
-            contactName: property.landlordName,
+            contactName: thread.otherParticipantName,
             property: property,
             threadId: thread.id,
             otherParticipant: thread.otherParticipant,

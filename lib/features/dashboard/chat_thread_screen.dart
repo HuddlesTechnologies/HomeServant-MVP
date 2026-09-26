@@ -13,6 +13,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
+import '../../widgets/contact_avatar.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
 import '../Market place/models/order_options.dart';
@@ -449,15 +450,30 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         backgroundColor: theme.background,
         elevation: 0,
         iconTheme: IconThemeData(color: theme.foreground),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        titleSpacing: 0,
+        title: Row(
           children: [
-            Text(
-              widget.contactName,
-              style: AppTextStyles.heading(color: theme.foreground, size: 18),
+            ContactAvatar(
+              participant: widget.otherParticipant,
+              radius: 18,
+              backgroundColor: theme.accent.withValues(alpha: 0.25),
+              iconColor: theme.accent,
             ),
-            if (widget.otherParticipant != null) _presenceLabel(widget.otherParticipant!, theme),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.contactName,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.heading(color: theme.foreground, size: 18),
+                  ),
+                  if (widget.otherParticipant != null) _presenceLabel(widget.otherParticipant!, theme),
+                ],
+              ),
+            ),
           ],
         ),
         actions: [
