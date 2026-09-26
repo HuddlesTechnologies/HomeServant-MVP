@@ -198,20 +198,26 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
-    final refreshToken = await _tokens.readRefreshToken();
-    if (refreshToken != null) {
-      try {
-        await _client.dio.post(
-          '/auth/logout',
-          data: {'refreshToken': refreshToken},
-          options: Options(extra: {'skipAuth': true}),
-        );
-      } on DioException {
-        // Best-effort — the server-side token gets cleaned up on its own
-        // expiry even if this call fails; local logout must still proceed.
+    try {
+      final refreshToken = await _tokens.readRefreshToken();
+      if (refreshToken != null) {
+        try {
+          await _client.dio.post(
+            '/auth/logout',
+            data: {'refreshToken': refreshToken},
+            options: Options(extra: {'skipAuth': true}),
+          );
+        } on DioException {
+          // Best-effort — the server-side token gets cleaned up on its own
+          // expiry even if this call fails; local logout must still proceed.
+        }
       }
+    } finally {
+      // Local tokens must always be cleared, even if the server call throws
+      // something other than DioException — otherwise the user stays
+      // "logged in" locally and can walk right back in via the login button.
+      await _tokens.clear();
     }
-    await _tokens.clear();
   }
 
   Future<AuthUser> _saveTokensAndUser(Map<String, dynamic> data) async {

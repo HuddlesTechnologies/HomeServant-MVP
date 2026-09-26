@@ -335,9 +335,20 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
-    await _authRepo.logout();
-    unawaited(GoogleAuthService.signOut());
-    _clearSession();
+    try {
+      await _authRepo.logout();
+    } finally {
+      // Local session state must always be torn down, even if the
+      // repo/server call throws — otherwise userId stays set and the login
+      // button just walks the user back into their still-"authenticated"
+      // session without re-entering any credentials.
+      //
+      // Awaited (unlike the other forced-sign-out paths) so a same-browser
+      // "Login with Google" retry right after this can't silently reuse
+      // the plugin's still-cached account.
+      await GoogleAuthService.signOut();
+      _clearSession();
+    }
   }
 
   /// Hides this landlord's listings and signs out every session

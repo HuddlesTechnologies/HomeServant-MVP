@@ -110,7 +110,13 @@ class _AdminShellState extends State<AdminShell> {
   Future<void> _onIdleTimeout() async {
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
-    await context.read<AppState>().logout();
+    try {
+      await context.read<AppState>().logout();
+    } catch (_) {
+      // Local session is torn down in AppState.logout()'s finally block
+      // regardless; still navigate away rather than leaving the user
+      // stranded on a screen that thinks it's logged out.
+    }
     if (!mounted) return;
     context.go('/admin-login');
     messenger.showSnackBar(const SnackBar(content: Text('Signed out after 15 minutes of inactivity')));
@@ -395,7 +401,13 @@ class _AdminShellState extends State<AdminShell> {
   }
 
   Future<void> _logOut(BuildContext context) async {
-    await context.read<AppState>().logout();
+    try {
+      await context.read<AppState>().logout();
+    } catch (_) {
+      // Local session is torn down in AppState.logout()'s finally block
+      // regardless; still navigate away rather than leaving the user
+      // stranded on a screen that thinks it's logged out.
+    }
     if (context.mounted) context.go('/admin-login');
   }
 

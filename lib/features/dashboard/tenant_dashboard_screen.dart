@@ -457,7 +457,13 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
   }
 
   Future<void> _logOut(BuildContext context) async {
-    await context.read<AppState>().logout();
+    try {
+      await context.read<AppState>().logout();
+    } catch (_) {
+      // Local session is torn down in AppState.logout()'s finally block
+      // regardless; still navigate away rather than leaving the user
+      // stranded on a dashboard that thinks it's logged out.
+    }
     if (context.mounted) context.go('/get-started');
   }
 
