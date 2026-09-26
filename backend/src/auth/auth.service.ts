@@ -341,17 +341,24 @@ export class AuthService {
   /// days is permanently deleted (see AccountCleanupService); logging
   /// back in and confirming the reactivation prompt (see [login]) is the
   /// only way to undo this before then.
-  async deactivate(userId: string): Promise<void> {
+  /// [adminReason] is only ever passed by AdminService.deactivateUser — its
+  /// presence, not just its content, is what switches the email's wording
+  /// from "as requested" (this account's own owner did it) to "by an
+  /// admin" (they didn't), since it'd otherwise misleadingly claim self-
+  /// service on every admin-triggered suspension.
+  async deactivate(userId: string, adminReason?: string): Promise<void> {
     const user = await this.prisma.user.update({ where: { id: userId }, data: { deactivatedAt: new Date() } });
     await this.prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    const byAdmin = adminReason !== undefined;
+    const reasonLine = byAdmin && adminReason ? ` Reason: ${adminReason}` : '';
     await this.mail.send(
       user.email,
       'Your HomeServant account has been deactivated',
       `<p>Hi${user.fullName ? ` ${user.fullName}` : ''},</p>
-       <p>Your HomeServant account has been deactivated, as requested. Your listings (if any) are hidden and you've been signed out everywhere.</p>
+       <p>Your HomeServant account has been deactivated${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Your listings (if any) are hidden and you've been signed out everywhere.</p>
        <p>You can reactivate any time within the next 30 days simply by logging back in — after that, your account and its data will be permanently deleted.</p>
-       <p>If you didn't request this, please log in and reactivate your account, then change your password.</p>`,
-      `Your HomeServant account has been deactivated, as requested. Your listings (if any) are hidden and you've been signed out everywhere.\n\nYou can reactivate any time within the next 30 days simply by logging back in — after that, your account and its data will be permanently deleted.\n\nIf you didn't request this, please log in and reactivate your account, then change your password.`,
+       <p>${byAdmin ? 'If you believe this was a mistake, contact HomeServant support.' : "If you didn't request this, please log in and reactivate your account, then change your password."}</p>`,
+      `Your HomeServant account has been deactivated${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Your listings (if any) are hidden and you've been signed out everywhere.\n\nYou can reactivate any time within the next 30 days simply by logging back in — after that, your account and its data will be permanently deleted.\n\n${byAdmin ? 'If you believe this was a mistake, contact HomeServant support.' : "If you didn't request this, please log in and reactivate your account, then change your password."}`,
     );
   }
 
@@ -377,7 +384,24 @@ export class AuthService {
   /// `onDelete: Cascade` in the schema, so this one call is enough; there's
   /// no soft-delete flag to half-honor the "permanently removed" promise
   /// on the confirmation dialog.
-  async deleteAccount(userId: string): Promise<void> {
+  /// [adminReason] is only ever passed by AdminService.deleteUser/
+  /// removeAdmin — same convention as [deactivate]. Fetched and emailed
+  /// *before* the delete: there's no user row left to look up an address
+  /// from afterward.
+  async deleteAccount(userId: string, adminReason?: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user) {
+      const byAdmin = adminReason !== undefined;
+      const reasonLine = byAdmin && adminReason ? ` Reason: ${adminReason}` : '';
+      await this.mail.send(
+        user.email,
+        'Your HomeServant account has been deleted',
+        `<p>Hi${user.fullName ? ` ${user.fullName}` : ''},</p>
+         <p>Your HomeServant account has been permanently deleted${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Everything tied to it — listings, bookings, orders, and messages — has been removed, and this can't be undone.</p>
+         ${byAdmin ? '<p>If you believe this was a mistake, contact HomeServant support.</p>' : ''}`,
+        `Your HomeServant account has been permanently deleted${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Everything tied to it — listings, bookings, orders, and messages — has been removed, and this can't be undone.${byAdmin ? '\n\nIf you believe this was a mistake, contact HomeServant support.' : ''}`,
+      );
+    }
     await this.prisma.user.delete({ where: { id: userId } });
   }
 

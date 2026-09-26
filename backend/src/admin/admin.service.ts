@@ -628,7 +628,7 @@ export class AdminService {
   /// auditability, same as [updateUser].
   async deactivateUser(id: string, reason: string, actorId: string): Promise<void> {
     await this.requireUser(id);
-    await this.auth.deactivate(id);
+    await this.auth.deactivate(id, reason);
     await this.activityLog.log(ActivityLogType.ADMIN_USER_DEACTIVATED, { actorId, targetId: id, reason });
   }
 
@@ -638,7 +638,7 @@ export class AdminService {
   async deleteUser(id: string, reason: string, actorId: string): Promise<void> {
     await this.requireUser(id);
     await this.activityLog.log(ActivityLogType.ADMIN_USER_DELETED, { actorId, targetId: id, reason });
-    await this.auth.deleteAccount(id);
+    await this.auth.deleteAccount(id, reason);
   }
 
   private async requireUser(id: string) {
