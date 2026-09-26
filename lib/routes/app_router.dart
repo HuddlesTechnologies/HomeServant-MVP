@@ -126,6 +126,32 @@ const _returningUserBouncePaths = {
 /// does from every dashboard's own NotificationBell.
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// True once a tenant/landlord's basics (name, phone — collected on
+/// signup-*-1) are in. An authenticated account can end up with these
+/// still blank if the app is closed, or a web tab reloaded, in the window
+/// between OTP verification (which already saves a real access token,
+/// authenticating the account) and actually submitting that screen — the
+/// account is fully "logged in" at that point even though the wizard was
+/// never finished. See Guard C in [buildAppRouter]'s `redirect`.
+bool _needsProfileBasics(AppState appState) =>
+    appState.fullName.trim().isEmpty || appState.phoneNumber.trim().isEmpty;
+
+/// Same idea as [_needsProfileBasics] but for gender/occupation/marital
+/// status (collected on signup-*-2), which are required fields there.
+bool _needsProfileDetails(AppState appState) =>
+    appState.gender == null ||
+    appState.occupation == null ||
+    appState.occupation!.trim().isEmpty ||
+    appState.maritalStatus == null;
+
+/// The two routes that represent "actually using the app" rather than a
+/// step of getting signed in — the only places Guard C below steps in.
+/// Deliberately not a block-list of every in-between auth screen (verify-
+/// otp, login-2fa, app-lock-verify, the signup-*-1/2 screens themselves):
+/// an allow-list here is safer, since it can't accidentally intercept some
+/// other authenticated route this router grows later.
+const _dashboardLikePaths = {'/dashboard', '/marketplace'};
+
 GoRouter buildAppRouter(AppState appState) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -152,6 +178,25 @@ GoRouter buildAppRouter(AppState appState) {
       // home screen that role has.
       if (appState.role == UserRole.admin && state.matchedLocation == '/dashboard') {
         return '/admin';
+      }
+      // Guard C: catches an authenticated tenant/landlord who never
+      // actually finished the signup wizard's required screens (see
+      // _needsProfileBasics/_needsProfileDetails above) from reaching the
+      // real app — without this, closing the app (or reloading the
+      // browser tab, on web) right after OTP verification but before
+      // submitting signup-*-1/2 leaves a fully-authenticated account with
+      // no name/phone/gender/occupation/marital status, and every launch
+      // after that lands straight on /dashboard via Guard B above,
+      // permanently skipping those required screens. Vendor/admin aren't
+      // routed through this wizard at all, so they're excluded.
+      if ((appState.role == UserRole.tenant || appState.role == UserRole.landlord) &&
+          _dashboardLikePaths.contains(state.matchedLocation)) {
+        if (_needsProfileBasics(appState)) {
+          return appState.role == UserRole.landlord ? '/signup-landlord-1' : '/signup-tenant-1';
+        }
+        if (_needsProfileDetails(appState)) {
+          return appState.role == UserRole.landlord ? '/signup-landlord-2' : '/signup-tenant-2';
+        }
       }
       return null;
     },

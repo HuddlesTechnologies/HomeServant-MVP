@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show TextInput;
 import 'package:provider/provider.dart';
@@ -151,7 +152,14 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                     hint: 'Password',
                     controller: _password,
                     obscureText: true,
-                    autofillHints: const [AutofillHints.newPassword],
+                    // On mobile web, AutofillHints.newPassword makes the
+                    // browser (Chrome/Safari) throw up its own "suggest a
+                    // strong password" bar over/instead of the keyboard,
+                    // which can leave users unable to type their own
+                    // password at all. Native apps use the OS-level
+                    // autofill service instead, which doesn't have this
+                    // problem, so the hint is kept there.
+                    autofillHints: kIsWeb ? null : const [AutofillHints.newPassword],
                     validator: (value) {
                       if (value == null || value.length < 8) {
                         return 'At least 8 characters';
@@ -164,7 +172,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                     hint: 'Confirm password',
                     controller: _confirmPassword,
                     obscureText: true,
-                    autofillHints: const [AutofillHints.newPassword],
+                    autofillHints: kIsWeb ? null : const [AutofillHints.newPassword],
                     validator: (value) {
                       if (value != _password.text) return "Passwords don't match";
                       return null;
@@ -200,7 +208,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Text(
-                    'Sign in with social media',
+                    'Continue Signup With',
                     style: AppTextStyles.body(
                       color: _role.foreground.withValues(alpha: 0.7),
                       size: 13,

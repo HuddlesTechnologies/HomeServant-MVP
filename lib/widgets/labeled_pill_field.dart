@@ -24,6 +24,7 @@ class LabeledPillField extends StatelessWidget {
     this.labelSize = 15,
     this.fillColor = AppColors.white,
     this.textColor = AppColors.navy,
+    this.validator,
   });
 
   final String label;
@@ -40,6 +41,7 @@ class LabeledPillField extends StatelessWidget {
   final double labelSize;
   final Color fillColor;
   final Color textColor;
+  final String? Function(String?)? validator;
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +65,7 @@ class LabeledPillField extends StatelessWidget {
           maxLines: obscureText ? 1 : maxLines,
           fillColor: fillColor,
           textColor: textColor,
+          validator: validator,
         ),
       ],
     );
