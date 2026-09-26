@@ -20,6 +20,7 @@ import '../api/paystack_repository.dart';
 import '../api/properties_repository.dart';
 import '../api/reviews_repository.dart';
 import '../api/token_storage.dart';
+import '../api/web_session_storage_stub.dart' if (dart.library.html) '../api/web_session_storage_web.dart' as web_storage;
 import '../api/uploads_repository.dart';
 import '../api/users_repository.dart';
 import '../api/vendors_repository.dart';
@@ -127,6 +128,7 @@ class AppState extends ChangeNotifier {
     // server already rejects it) but inconsistent with every other
     // forced-sign-out path.
     unawaited(_tokens.clear());
+    unawaited(GoogleAuthService.signOut());
     _clearSession();
   }
 
@@ -334,6 +336,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> logout() async {
     await _authRepo.logout();
+    unawaited(GoogleAuthService.signOut());
     _clearSession();
   }
 
@@ -343,6 +346,7 @@ class AppState extends ChangeNotifier {
   Future<void> deactivateAccount() async {
     await _authRepo.deactivate();
     await _tokens.clear();
+    unawaited(GoogleAuthService.signOut());
     _clearSession();
   }
 
@@ -352,6 +356,7 @@ class AppState extends ChangeNotifier {
   Future<void> deleteAccount() async {
     await _authRepo.deleteAccount();
     await _tokens.clear();
+    unawaited(GoogleAuthService.signOut());
     _clearSession();
   }
 
@@ -819,6 +824,15 @@ class AppState extends ChangeNotifier {
   // signed-in user (profile, favorites, bookings, listings) is re-fetched
   // from the API on launch instead, so it can never drift stale against the
   // server the way a locally-cached copy could.
+  //
+  // On web, [SharedPreferences] falls back to browser `localStorage`, which
+  // is shared by every tab/window on the same origin — so one user's theme
+  // and notification toggles would silently apply to whoever opened the app
+  // next in another tab on the same browser. [_clearSession] already resets
+  // these to defaults on an explicit logout, but that does nothing for a
+  // second tab open concurrently, or for a browser closed without logging
+  // out first. So on web this blob goes to `sessionStorage` instead (via
+  // [web_storage], isolated per tab) rather than through [SharedPreferences].
 
   @override
   void notifyListeners() {
@@ -856,16 +870,20 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _save() async {
+    final encoded = jsonEncode(_toJson());
+    if (kIsWeb) {
+      web_storage.write(_prefsKey, encoded);
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(_toJson()));
+    await prefs.setString(_prefsKey, encoded);
   }
 
   /// Restores local prefs, then — if a session token exists — the real
   /// session from the API (profile, favorites, bookings, listings). Call
   /// once, right after construction.
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_prefsKey);
+    final raw = kIsWeb ? web_storage.read(_prefsKey) : (await SharedPreferences.getInstance()).getString(_prefsKey);
     Map<String, dynamic>? decoded;
     if (raw != null) {
       try {
