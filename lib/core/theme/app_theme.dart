@@ -44,9 +44,24 @@ class AppTheme {
   /// beats inferred: every role a user can actually see text/icons in is
   /// named here, so there's nothing left for a fallback chain to get
   /// wrong.
+  ///
+  /// The dialog's own text theme is also pinned to the bundled Givonic
+  /// font. The month/year toggle ("September 2026"), the OK/Cancel labels
+  /// and the text-entry field all draw from [ThemeData.textTheme], which
+  /// otherwise has no font family and falls back to Roboto — on web that's
+  /// downloaded from fonts.gstatic.com at runtime, and whenever that
+  /// download is blocked (e.g. by the site's Content-Security-Policy in
+  /// vercel.json) Flutter draws that text with no glyphs at all, i.e.
+  /// invisible, while the explicitly-Givonic day numbers still show.
   static Widget datePickerBuilder(BuildContext context, Widget? child) {
+    final base = Theme.of(context);
     return Theme(
-      data: Theme.of(context).copyWith(
+      data: base.copyWith(
+        textTheme: base.textTheme.apply(
+          fontFamily: AppTextStyles.bodyFont,
+          bodyColor: AppColors.navy,
+          displayColor: AppColors.navy,
+        ),
         colorScheme: const ColorScheme.light(
           primary: AppColors.navy,
           onPrimary: AppColors.white,
