@@ -199,6 +199,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                             decoration: InputDecoration(
                               prefixText: '₦ ',
                               labelText: 'Min',
+                              labelStyle: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55)),
                               filled: true,
                               fillColor: theme.onSurface.withValues(
                                 alpha: 0.06,
@@ -241,6 +242,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                             decoration: InputDecoration(
                               prefixText: '₦ ',
                               labelText: 'Max',
+                              labelStyle: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55)),
                               filled: true,
                               fillColor: theme.onSurface.withValues(
                                 alpha: 0.06,
@@ -392,6 +394,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                         style: AppTextStyles.body(color: theme.onSurface),
                         decoration: InputDecoration(
                           hintText: 'e.g. Ikeja, Lekki, Yaba…',
+                          hintStyle: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.45)),
                           filled: true,
                           fillColor: theme.onSurface.withValues(alpha: 0.06),
                           contentPadding: const EdgeInsets.symmetric(
