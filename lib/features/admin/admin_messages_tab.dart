@@ -101,8 +101,12 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
       MaterialPageRoute(
         builder: (_) => ChatThreadScreen(
           theme: DashboardTheme.midnight,
-          contactName: thread.requesterName?.isNotEmpty == true ? thread.requesterName! : 'HomeServant Support',
+          // The *requester* is the customer, not "HomeServant Support" —
+          // that label belongs on the user's own side of this
+          // conversation (see support_sheet.dart), never the admin's.
+          contactName: thread.requesterName?.isNotEmpty == true ? thread.requesterName! : 'A user',
           threadId: thread.id,
+          adminViewOfUserId: thread.requesterId,
           showExportAction: true,
         ),
       ),

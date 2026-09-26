@@ -341,6 +341,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final theme = widget.theme;
     final orderItem = widget.orderItem;
     final orderStatus = _orderStatus;
+    final lastFromMeIndex = _messages.lastIndexWhere((m) => m.fromMe);
     return Scaffold(
       backgroundColor: theme.background,
       appBar: AppBar(
@@ -416,7 +417,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     // Only the last message we sent ever shows "Seen" — the
                     // same convention every mainstream chat app uses, since
                     // a receipt on every past bubble would be noise.
-                    final showSeen = message.fromMe && message.read && !_messages.skip(index + 1).any((m) => m.fromMe);
+                    // `lastFromMeIndex` is computed once per build (above),
+                    // not rescanned per item, so this stays O(n) over the
+                    // whole list instead of O(n²) as history grows.
+                    final showSeen = message.fromMe && message.read && index == lastFromMeIndex;
                     final Widget bubble;
                     if (message.type == MessageType.propertyPreview) {
                       bubble = Align(

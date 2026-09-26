@@ -1,8 +1,9 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { NotificationType, UserRole } from '@prisma/client';
+import { NotificationType, Prisma, UserRole } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatGateway } from './chat.gateway';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { PresenceService } from './presence.service';
@@ -16,6 +17,7 @@ export class ChatService {
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
     private readonly presence: PresenceService,
+    private readonly gateway: ChatGateway,
   ) {}
 
   /// Reuses an existing thread between the same two people about the same
@@ -111,16 +113,38 @@ export class ChatService {
   /// closed conversation doesn't reopen just because the user tapped "Live
   /// Chat" again.
   async openSupportThread(userId: string) {
-    const existing = await this.prisma.thread.findFirst({
-      where: { isSupport: true, status: 'OPEN', participants: { some: { userId } } },
-      include: { participants: true },
-    });
-    if (existing) return existing;
-
-    return this.prisma.thread.create({
-      data: { isSupport: true, participants: { create: [{ userId }] } },
-      include: { participants: true },
-    });
+    // Serializable, not the default isolation level, so a double-tap (two
+    // calls landing at nearly the same moment) can't both see "no existing
+    // thread" and both create one — Postgres aborts the loser with a
+    // serialization failure instead of letting it silently create a
+    // duplicate OPEN support thread for the same user.
+    try {
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.thread.findFirst({
+            where: { isSupport: true, status: 'OPEN', participants: { some: { userId } } },
+            include: { participants: true },
+          });
+          if (existing) return existing;
+          return tx.thread.create({
+            data: { isSupport: true, participants: { create: [{ userId }] } },
+            include: { participants: true },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        // Lost the race — the other call's thread already exists now.
+        const existing = await this.prisma.thread.findFirst({
+          where: { isSupport: true, status: 'OPEN', participants: { some: { userId } } },
+          orderBy: { createdAt: 'asc' },
+          include: { participants: true },
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
   }
 
   /// Every admin's shared queue — open support threads regardless of
@@ -189,6 +213,7 @@ export class ChatService {
       }),
       this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } }),
     ]);
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
 
     // First admin to reply to an unclaimed support thread claims it — the
     // same "first responder owns it" idea Report.assignedAdminId already
@@ -196,13 +221,20 @@ export class ChatService {
     // `assignedAdminId`) is what makes the thread show up in their own
     // inbox (findForUser) from here on, and lets ChatGateway's normal
     // per-user-room broadcast reach them for later messages.
-    if (senderRole === 'ADMIN') {
-      const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
-      if (thread?.isSupport && !thread.assignedAdminId) {
-        await this.prisma.$transaction([
-          this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: userId } }),
-          this.prisma.threadParticipant.create({ data: { threadId, userId } }),
-        ]);
+    //
+    // The claim itself is a conditional `updateMany` (not a plain
+    // read-then-write) so two admins replying within milliseconds of each
+    // other can't both win it — Postgres serializes the two UPDATEs via
+    // row locking, so only the one that actually finds `assignedAdminId:
+    // null` still true when it runs gets `count: 1`; the loser's `count`
+    // is 0 and it doesn't add itself as a participant.
+    if (senderRole === 'ADMIN' && thread?.isSupport && !thread.assignedAdminId) {
+      const claim = await this.prisma.thread.updateMany({
+        where: { id: threadId, assignedAdminId: null },
+        data: { assignedAdminId: userId },
+      });
+      if (claim.count > 0) {
+        await this.prisma.threadParticipant.create({ data: { threadId, userId } });
       }
     }
 
@@ -221,6 +253,26 @@ export class ChatService {
         ),
       ),
     );
+
+    // An unclaimed support thread has no admin participant for the loop
+    // above to notify — without this, a brand-new "Contact Support"
+    // message (or any message on it before an admin picks it up) alerted
+    // nobody until an admin happened to manually reopen the Support Queue
+    // tab, which defeated the point of this whole feature.
+    if (senderRole !== 'ADMIN' && thread?.isSupport && otherParticipants.length === 0) {
+      const admins = await this.prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+      await Promise.all(
+        admins.map((admin) =>
+          this.notifications.create(
+            admin.id,
+            NotificationType.NEW_MESSAGE,
+            'New support conversation',
+            `${senderName}: ${dto.body.length > 140 ? `${dto.body.slice(0, 140)}…` : dto.body}`,
+          ),
+        ),
+      );
+      this.gateway.broadcastToAdmins('message:new', { threadId, message });
+    }
 
     return message;
   }

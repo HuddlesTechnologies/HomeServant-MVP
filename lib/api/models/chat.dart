@@ -164,12 +164,19 @@ class SupportQueueThread {
     required this.createdAt,
     required this.updatedAt,
     this.assignedAdminId,
+    this.requesterId,
     this.requesterName,
     this.lastMessage,
   });
 
   final String id;
   final String? assignedAdminId;
+
+  /// Needed to pass as `ChatThreadScreen.adminViewOfUserId` when opening a
+  /// ticket straight from the queue — without it, the collapsible user-info
+  /// panel had no id to fetch a profile for and never appeared for a
+  /// support conversation opened this way.
+  final String? requesterId;
   final String? requesterName;
   final ChatMessage? lastMessage;
   final DateTime createdAt;
@@ -183,6 +190,7 @@ class SupportQueueThread {
     return SupportQueueThread(
       id: json['id'] as String,
       assignedAdminId: json['assignedAdminId'] as String?,
+      requesterId: requester?['id'] as String?,
       requesterName: requester?['fullName'] as String?,
       lastMessage: lastMessage != null ? ChatMessage.fromApi(lastMessage) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),

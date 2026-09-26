@@ -55,6 +55,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = await this.jwt.verifyAsync<JwtPayload>(token, { secret: this.config.getOrThrow('JWT_ACCESS_SECRET') });
       client.data.userId = payload.sub;
       await client.join(this.userRoom(payload.sub));
+      // Lets [broadcastToAdmins] reach every connected admin at once — used
+      // for events with no single-user room to target yet, like a brand-new
+      // unclaimed "Contact Support" message (see ChatService.sendMessage).
+      if (payload.role === 'ADMIN') {
+        await client.join(this.adminRoom());
+      }
       this.presence.markOnline(payload.sub);
     } catch {
       client.disconnect();
@@ -96,11 +102,24 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(this.userRoom(userId)).emit(event, payload);
   }
 
+  /// Every currently-connected admin at once — for an event with no
+  /// specific admin participant to target yet, like a support thread no
+  /// admin has claimed. Offline admins still get the DB-backed Notification
+  /// row created alongside this; this just makes an already-open Support
+  /// Queue tab update live instead of waiting for a manual refresh.
+  broadcastToAdmins(event: string, payload: unknown): void {
+    this.server.to(this.adminRoom()).emit(event, payload);
+  }
+
   private userRoom(userId: string): string {
     return `user:${userId}`;
   }
 
   private threadRoom(threadId: string): string {
     return `thread:${threadId}`;
+  }
+
+  private adminRoom(): string {
+    return 'admins';
   }
 }
