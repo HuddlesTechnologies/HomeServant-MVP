@@ -51,6 +51,23 @@ export class BookingsService {
       include: { property: true },
     });
 
+    // Without this, a landlord's Bookings tab only ever picked up a brand
+    // new request on next app restart (AppState fetches it once, at
+    // login) — every *subsequent* status change already notifies (see
+    // `respond`/`proposeInspection`/`respondToInspection` below and
+    // PaymentsService), but creation itself never did, so this was the
+    // one gap in that chain. NotificationsService.create is also what
+    // pushes the `notification:new` socket event the Flutter client
+    // reuses to refetch the bookings list live.
+    await this.notifications.create(
+      property.landlordId,
+      NotificationType.BOOKING_STATUS,
+      isShortlet ? 'New booking request' : 'New booking',
+      isShortlet
+        ? `A tenant requested to book ${property.title}.`
+        : `A tenant booked ${property.title}.`,
+    );
+
     if (isShortlet) {
       return booking;
     }

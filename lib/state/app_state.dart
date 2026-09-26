@@ -61,6 +61,17 @@ class AppState extends ChangeNotifier {
     _paystackRepo = PaystackRepository(_apiClient);
     _notificationsRepo = NotificationsRepository(_apiClient);
     _adminRepo = AdminRepository(_apiClient);
+    // Keeps the bookings lists (landlord/tenant) live instead of only ever
+    // being fetched once at login — every booking mutation (a new request,
+    // an accept/decline, an inspection date, a payment) already passes
+    // through NotificationsService.create on the backend, which is also
+    // what NotificationBannerOverlay's toast reuses, so this piggybacks on
+    // the same `notification:new` socket event rather than needing a
+    // separate push channel. Subscribed once, for the app's whole
+    // lifetime — _chatSocket itself is a single long-lived instance that
+    // reconnects under the hood across login/logout, so this stays valid
+    // the same way NotificationBannerOverlay's own subscription does.
+    _chatSocket.onNotification.listen(_handleRealtimeNotification);
   }
 
   static const _prefsKey = 'app_state_v2';
@@ -674,6 +685,20 @@ class AppState extends ChangeNotifier {
     if (userId == null) return;
     landlordBookings = await _bookingsRepo.forLandlord();
     notifyListeners();
+  }
+
+  /// See the subscription set up in the constructor — refetches whichever
+  /// bookings list this session's role actually has, live, whenever a
+  /// BOOKING_STATUS notification arrives for this user (new request,
+  /// accept/decline, inspection date, payment, etc.), instead of only
+  /// picking it up on the next login.
+  void _handleRealtimeNotification(AppNotification notification) {
+    if (notification.type != NotificationType.bookingStatus) return;
+    if (role == UserRole.landlord) {
+      unawaited(loadLandlordBookings());
+    } else if (role == UserRole.tenant) {
+      unawaited(loadMyBookings());
+    }
   }
 
   Future<void> respondToBooking(String id, {required bool accepted}) async {
