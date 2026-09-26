@@ -47,7 +47,14 @@ class _MarketplaceProductGalleryScreenState extends State<MarketplaceProductGall
           return InteractiveViewer(
             minScale: 1,
             maxScale: 4,
-            child: Center(child: Image(image: widget.images[index], fit: BoxFit.contain)),
+            child: Center(
+              child: Image(
+                image: widget.images[index],
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) =>
+                    const Icon(Icons.broken_image_outlined, color: Colors.white54, size: 64),
+              ),
+            ),
           );
         },
       ),

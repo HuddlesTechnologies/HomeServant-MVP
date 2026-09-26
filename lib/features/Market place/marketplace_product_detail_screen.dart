@@ -85,11 +85,12 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(20),
                         child: images.isNotEmpty
-                            ? Image(image: images.first, fit: BoxFit.cover)
-                            : DecoratedBox(
-                                decoration: BoxDecoration(color: theme.surface),
-                                child: Icon(product.category.icon, color: theme.onSurface.withValues(alpha: 0.5), size: 64),
-                              ),
+                            ? Image(
+                                image: images.first,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => _imageFallback(theme, product),
+                              )
+                            : _imageFallback(theme, product),
                       ),
                     ),
                   ),
@@ -238,3 +239,9 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
     );
   }
 }
+
+/// Shown when this product has no photos, or its first one fails to load.
+Widget _imageFallback(DashboardTheme theme, MarketplaceProductApi product) => DecoratedBox(
+  decoration: BoxDecoration(color: theme.surface),
+  child: Icon(product.category.icon, color: theme.onSurface.withValues(alpha: 0.5), size: 64),
+);

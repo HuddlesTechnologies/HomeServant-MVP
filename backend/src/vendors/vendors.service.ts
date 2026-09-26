@@ -1,6 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { CreateVendorProfileDto } from './dto/create-vendor-profile.dto';
 import { UpdateVendorProfileDto } from './dto/update-vendor-profile.dto';
 
@@ -9,9 +10,11 @@ export class VendorsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly paystack: PaystackService,
+    private readonly storage: StorageService,
   ) {}
 
   async create(userId: string, dto: CreateVendorProfileDto) {
+    if (dto.logoUrl) await this.storage.assertIsOwnImage(dto.logoUrl);
     const existing = await this.prisma.vendorProfile.findUnique({ where: { userId } });
     if (existing) {
       throw new ConflictException('This account already has a vendor profile');
@@ -32,6 +35,7 @@ export class VendorsService {
   /// every other field on the DTO (businessName/category/state/etc.)
   /// updates independently of whether bank details were also sent.
   async update(userId: string, dto: UpdateVendorProfileDto) {
+    if (dto.logoUrl) await this.storage.assertIsOwnImage(dto.logoUrl);
     await this.findMine(userId);
     const { bankCode, accountNumber, ...rest } = dto;
 

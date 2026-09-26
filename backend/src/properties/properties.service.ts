@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { BookingStatus, Prisma, PropertyCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReviewsService } from '../reviews/reviews.service';
+import { StorageService } from '../storage/storage.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { QueryPropertiesDto } from './dto/query-properties.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
@@ -19,7 +20,13 @@ export class PropertiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reviews: ReviewsService,
+    private readonly storage: StorageService,
   ) {}
+
+  private async verifyImages(dto: { imageUrl?: string; galleryUrls?: string[] }): Promise<void> {
+    if (dto.imageUrl) await this.storage.assertIsOwnImage(dto.imageUrl);
+    if (dto.galleryUrls) await this.storage.assertAreOwnImages(dto.galleryUrls);
+  }
 
   async findMany(query: QueryPropertiesDto) {
     const where: Prisma.PropertyWhereInput = {
@@ -122,6 +129,7 @@ export class PropertiesService {
   /// payout details first is separate, friendlier frontend work, not the
   /// only line of defense.
   async create(landlordId: string, dto: CreatePropertyDto) {
+    await this.verifyImages(dto);
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: landlordId } });
     if (!landlord.bankCode || !landlord.accountNumber) {
       throw new BadRequestException('Please add your Payout Account details in Settings');
@@ -134,6 +142,7 @@ export class PropertiesService {
 
   async update(id: string, landlordId: string, dto: UpdatePropertyDto) {
     await this.assertOwnership(id, landlordId);
+    await this.verifyImages(dto);
     return this.prisma.property.update({ where: { id }, data: dto });
   }
 

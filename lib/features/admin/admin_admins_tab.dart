@@ -522,9 +522,12 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                             children: [
                               Row(
                                 children: [
-                                  Text(
-                                    admin.fullName?.isNotEmpty == true ? admin.fullName! : admin.email,
-                                    style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
+                                  Flexible(
+                                    child: Text(
+                                      admin.fullName?.isNotEmpty == true ? admin.fullName! : admin.email,
+                                      style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
                                   if (isSelf) ...[
                                     const SizedBox(width: 6),

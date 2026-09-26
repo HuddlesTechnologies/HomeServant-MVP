@@ -39,14 +39,24 @@ class ProductThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final url = imageUrl;
     final content = url == null
-        ? Container(
-            alignment: Alignment.center,
-            color: backgroundColor ?? iconColor.withValues(alpha: 0.12),
-            child: Icon(icon, color: iconColor, size: iconSize ?? (size != null ? size! * 0.5 : 24)),
-          )
-        : Image(image: imageProviderForPath(url), fit: BoxFit.cover, width: size, height: size);
+        ? _fallback()
+        : Image(
+            image: imageProviderForPath(url),
+            fit: BoxFit.cover,
+            width: size,
+            height: size,
+            errorBuilder: (context, error, stackTrace) => _fallback(),
+          );
 
     final clipped = ClipRRect(borderRadius: BorderRadius.circular(borderRadius), child: content);
     return size == null ? clipped : SizedBox(width: size, height: size, child: clipped);
   }
+
+  /// Shown for a missing [imageUrl], or one that failed to load — same
+  /// tinted-icon placeholder either way.
+  Widget _fallback() => Container(
+    alignment: Alignment.center,
+    color: backgroundColor ?? iconColor.withValues(alpha: 0.12),
+    child: Icon(icon, color: iconColor, size: iconSize ?? (size != null ? size! * 0.5 : 24)),
+  );
 }

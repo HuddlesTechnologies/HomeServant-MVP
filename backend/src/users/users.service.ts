@@ -3,6 +3,7 @@ import { NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { UpdateBankDetailsDto } from './dto/update-bank-details.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -39,6 +40,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly paystack: PaystackService,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
   ) {}
 
   async findById(id: string) {
@@ -54,6 +56,10 @@ export class UsersService {
   }
 
   async updateProfile(id: string, dto: UpdateProfileDto) {
+    if (dto.profilePhotoUrl) {
+      await this.storage.assertIsOwnImage(dto.profilePhotoUrl);
+    }
+
     const before = await this.prisma.user.findUniqueOrThrow({ where: { id } });
 
     let referredById = before.referredById;

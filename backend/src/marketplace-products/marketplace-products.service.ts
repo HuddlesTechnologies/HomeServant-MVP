@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { VendorsService } from '../vendors/vendors.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { QueryProductsDto } from './dto/query-products.dto';
@@ -13,6 +14,7 @@ export class MarketplaceProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly vendors: VendorsService,
+    private readonly storage: StorageService,
   ) {}
 
   /// Public catalog — only what a shopper should see: available products
@@ -72,6 +74,7 @@ export class MarketplaceProductsService {
   /// payment to eventually release to. Mirrors the same gate on
   /// PropertiesService.create.
   async create(userId: string, dto: CreateProductDto) {
+    await this.storage.assertAreOwnImages(dto.imageUrls);
     const vendor = await this.vendors.requireOwn(userId);
     if (!vendor.bankCode || !vendor.accountNumber) {
       throw new BadRequestException('Please add your Payout Account details in Settings');
@@ -80,6 +83,7 @@ export class MarketplaceProductsService {
   }
 
   async update(userId: string, id: string, dto: UpdateProductDto) {
+    if (dto.imageUrls) await this.storage.assertAreOwnImages(dto.imageUrls);
     const vendor = await this.vendors.requireOwn(userId);
     await this.assertOwnership(id, vendor.id);
     return this.prisma.product.update({ where: { id }, data: dto });

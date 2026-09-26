@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { StorageModule } from '../storage/storage.module';
 import { VendorsModule } from '../vendors/vendors.module';
 import { MarketplaceProductsController } from './marketplace-products.controller';
 import { MarketplaceProductsService } from './marketplace-products.service';
 
 @Module({
-  imports: [AuthModule, VendorsModule],
+  imports: [AuthModule, VendorsModule, StorageModule],
   controllers: [MarketplaceProductsController],
   providers: [MarketplaceProductsService],
   exports: [MarketplaceProductsService],
