@@ -334,6 +334,22 @@ enum ActivityLogType {
   /// delete happens so the FK to the (about-to-be-gone) user still
   /// resolves at insert time.
   ADMIN_USER_DELETED
+  /// A moderator/super admin changed a user's email address from the
+  /// console — see AdminService.updateUserEmail. [reason] holds why.
+  ADMIN_USER_EMAIL_CHANGED
+  /// A moderator/super admin triggered a password-reset code email to a
+  /// user from the console — see AdminService.sendUserPasswordReset.
+  /// [reason] holds why.
+  ADMIN_USER_PASSWORD_RESET_SENT
+  /// A moderator/super admin directly set a user's password from the
+  /// console (extreme-condition override) — see
+  /// AdminService.setUserPassword. [reason] holds why.
+  ADMIN_USER_PASSWORD_CHANGED
+  /// A super admin disabled a user's two-factor authentication from the
+  /// console — see AdminService.disableUserTwoFactor. SUPER_ADMIN only,
+  /// unlike the other user-security actions above (MODERATOR+). [reason]
+  /// holds why.
+  ADMIN_USER_2FA_DISABLED
 }
 
 /// Site-wide admin audit trail (Activity Log console section) — every

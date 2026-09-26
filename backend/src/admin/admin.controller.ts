@@ -20,7 +20,9 @@ import { RejectVendorDto } from './dto/reject-vendor.dto';
 import { RequestAdminDto } from './dto/request-admin.dto';
 import { SetAdminLevelDto } from './dto/set-admin-level.dto';
 import { SetAdminTwoFactorDto } from './dto/set-admin-two-factor.dto';
+import { SetUserPasswordDto } from './dto/set-user-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserEmailDto } from './dto/update-user-email.dto';
 
 /// Every route here requires an authenticated ADMIN account at minimum
 /// (SUPPORT tier or above); routes that need more than that carry their
@@ -187,6 +189,40 @@ export class AdminController {
     @Body() dto: DelistReasonDto,
   ): Promise<void> {
     await this.admin.deleteUser(id, dto.reason, actingAdmin.sub);
+  }
+
+  @Patch('users/:id/email')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  updateUserEmail(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: UpdateUserEmailDto) {
+    return this.admin.updateUserEmail(id, dto, actingAdmin.sub);
+  }
+
+  @Post('users/:id/send-password-reset')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  sendUserPasswordReset(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: DelistReasonDto) {
+    return this.admin.sendUserPasswordReset(id, dto.reason, actingAdmin.sub);
+  }
+
+  @Patch('users/:id/password')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  async setUserPassword(
+    @CurrentUser() actingAdmin: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: SetUserPasswordDto,
+  ): Promise<void> {
+    await this.admin.setUserPassword(id, dto, actingAdmin.sub);
+  }
+
+  /// SUPER_ADMIN only — unlike the email/password actions above, which are
+  /// MODERATOR+. See AdminService.disableUserTwoFactor.
+  @Patch('users/:id/disable-2fa')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  async disableUserTwoFactor(
+    @CurrentUser() actingAdmin: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() dto: DelistReasonDto,
+  ): Promise<void> {
+    await this.admin.disableUserTwoFactor(id, dto.reason, actingAdmin.sub);
   }
 
   // --- Vendors ---------------------------------------------------------

@@ -18,7 +18,9 @@ import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
 import { RequestAdminDto } from './dto/request-admin.dto';
+import { SetUserPasswordDto } from './dto/set-user-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserEmailDto } from './dto/update-user-email.dto';
 
 /// Mirrors AdminLevelGuard's RANK map — declaration order in the Prisma
 /// schema is the rank (SUPPORT < MODERATOR < SUPER_ADMIN). Used here (not
@@ -646,6 +648,99 @@ export class AdminService {
     if (!user) throw new NotFoundException('User not found');
     if (user.role === 'ADMIN') throw new ForbiddenException("Can't moderate another admin account from here");
     return user;
+  }
+
+  /// Moderator+. Email is the login identifier, so every active session
+  /// is signed out the same way a password change would be — the old
+  /// email might be compromised or abandoned, which is often exactly why
+  /// this is being changed. `emailVerifiedAt` is stamped fresh rather than
+  /// cleared: there's no self-service "verify new email" flow to hand the
+  /// user afterwards, so the admin performing this is what vouches for it.
+  async updateUserEmail(id: string, dto: UpdateUserEmailDto, actorId: string) {
+    const user = await this.requireUser(id);
+    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (existing && existing.id !== id) {
+      throw new ConflictException('An account with this email already exists');
+    }
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: { email: dto.email, emailVerifiedAt: new Date() },
+      select: { id: true, email: true },
+    });
+    await this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_EMAIL_CHANGED, { actorId, targetId: id, reason: dto.reason });
+
+    await this.mail.send(
+      updated.email,
+      'Your HomeServant account email was changed',
+      `<p>A super admin or moderator changed the email on your HomeServant account to this address.</p>` +
+        `<p>Reason: ${dto.reason}</p>` +
+        `<p>You've been signed out everywhere — sign back in with this email to continue.</p>`,
+      `A super admin or moderator changed the email on your HomeServant account to this address.\n\nReason: ${dto.reason}\n\nYou've been signed out everywhere — sign back in with this email to continue.`,
+    );
+
+    return updated;
+  }
+
+  /// Moderator+. Admin-triggered equivalent of AuthService.forgotPassword
+  /// — same OTP purpose/email template, just skipping the "does this
+  /// account even exist" ambiguity that self-service reset needs (the
+  /// admin already knows). The user finishes it on the existing reset-
+  /// password screen with the emailed code.
+  async sendUserPasswordReset(id: string, reason: string, actorId: string): Promise<{ message: string }> {
+    const user = await this.requireUser(id);
+    if (!user.passwordHash) {
+      throw new BadRequestException('This account signed up with Google and has no password to reset');
+    }
+    await this.otp.issue(user.email, OtpPurpose.PASSWORD_RESET, user.id);
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_PASSWORD_RESET_SENT, { actorId, targetId: id, reason });
+    return { message: `Password reset code sent to ${user.email}` };
+  }
+
+  /// Moderator+. Extreme-condition override — the admin sets the new
+  /// password directly rather than a random temp one, so (unlike
+  /// [confirmAdminPasswordReset]'s emailed temp password) it must never be
+  /// echoed back in the notification email, since the admin already knows
+  /// it. `mustChangePassword: true` forces the user off it on their next
+  /// login.
+  async setUserPassword(id: string, dto: SetUserPasswordDto, actorId: string): Promise<void> {
+    const user = await this.requireUser(id);
+    if (!user.passwordHash) {
+      throw new BadRequestException('This account signed up with Google and has no password to change');
+    }
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({ where: { id }, data: { passwordHash, mustChangePassword: true } });
+    await this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: new Date() } });
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_PASSWORD_CHANGED, { actorId, targetId: id, reason: dto.reason });
+
+    await this.mail.send(
+      user.email,
+      'Your HomeServant password was changed',
+      `<p>A super admin or moderator changed your HomeServant account password.</p>` +
+        `<p>Reason: ${dto.reason}</p>` +
+        `<p>You've been signed out everywhere — sign in with your new password and you'll be asked to set one only you know.</p>`,
+      `A super admin or moderator changed your HomeServant account password.\n\nReason: ${dto.reason}\n\nYou've been signed out everywhere — sign in with your new password and you'll be asked to set one only you know.`,
+    );
+  }
+
+  /// SUPER_ADMIN only (see AdminController) — every other tier can act on
+  /// a user's email/password, but 2FA removal is reserved for the top
+  /// tier, unlike the MODERATOR+ actions above.
+  async disableUserTwoFactor(id: string, reason: string, actorId: string): Promise<void> {
+    const user = await this.requireUser(id);
+    if (!user.twoFactorEnabled) {
+      throw new BadRequestException('Two-factor authentication is already disabled for this account');
+    }
+    await this.prisma.user.update({ where: { id }, data: { twoFactorEnabled: false } });
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_2FA_DISABLED, { actorId, targetId: id, reason });
+
+    await this.mail.send(
+      user.email,
+      'Two-factor authentication was disabled on your account',
+      `<p>A super admin disabled two-factor authentication on your HomeServant account.</p><p>Reason: ${reason}</p>` +
+        `<p>If you believe this was a mistake, contact HomeServant support.</p>`,
+      `A super admin disabled two-factor authentication on your HomeServant account.\n\nReason: ${reason}\n\nIf you believe this was a mistake, contact HomeServant support.`,
+    );
   }
 
   // --- Vendors ---------------------------------------------------------

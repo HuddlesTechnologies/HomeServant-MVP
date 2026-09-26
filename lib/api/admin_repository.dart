@@ -85,6 +85,39 @@ class AdminRepository {
     });
   }
 
+  /// Moderator+. Signs the account out everywhere — email is the login
+  /// identifier, so every existing session is invalidated.
+  Future<void> updateUserEmail(String id, {required String newEmail, required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/users/$id/email', data: {'email': newEmail, 'reason': reason});
+    });
+  }
+
+  /// Moderator+. Sends the same 4-digit reset code email the self-service
+  /// "forgot password" flow uses — the user finishes it on the existing
+  /// reset-password screen.
+  Future<void> sendUserPasswordReset(String id, {required String reason}) {
+    return _client.call(() async {
+      await _client.dio.post('/admin/users/$id/send-password-reset', data: {'reason': reason});
+    });
+  }
+
+  /// Moderator+. Extreme-condition override — sets the password directly
+  /// rather than emailing a reset code. Forces the user to set their own
+  /// password on next login.
+  Future<void> setUserPassword(String id, {required String newPassword, required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/users/$id/password', data: {'newPassword': newPassword, 'reason': reason});
+    });
+  }
+
+  /// Super admin only.
+  Future<void> disableUserTwoFactor(String id, {required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/users/$id/disable-2fa', data: {'reason': reason});
+    });
+  }
+
   Future<AdminPage<AdminVendor>> findVendors({String? status, String? search, int page = 1}) {
     return _client.call(() async {
       final response = await _client.dio.get(

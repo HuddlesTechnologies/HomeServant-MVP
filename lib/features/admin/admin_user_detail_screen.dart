@@ -220,6 +220,93 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     }
   }
 
+  /// Moderator+ (see `context.canModerate` gate at the button). Email is
+  /// the login identifier, so this signs the account out everywhere —
+  /// same reasoning as [_changePassword].
+  Future<void> _changeEmail(AdminUserDetail user) async {
+    final result = await showAdminValueReasonSheet(
+      context,
+      title: 'Change email for ${user.email}?',
+      body: 'They will be signed out everywhere and must sign back in with the new email.',
+      actionLabel: 'Change Email',
+      valueLabel: 'New email',
+      initialValue: user.email,
+      valueValidator: (value) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value) ? null : 'Enter a valid email address',
+    );
+    if (result == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.updateUserEmail(user.id, newEmail: result.value, reason: result.reason);
+      messenger.showSnackBar(SnackBar(content: Text('Email changed to ${result.value} — account signed out everywhere')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Moderator+. Sends the same reset-code email the self-service "forgot
+  /// password" flow uses — the user finishes it themselves.
+  Future<void> _sendPasswordReset(AdminUserDetail user) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Send a password reset to ${user.email}?',
+      body: 'They will be emailed a reset code to use on the existing reset-password screen.',
+      actionLabel: 'Send Reset',
+      hint: 'Reason (recorded in the admin activity log)',
+    );
+    if (reason == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.sendUserPasswordReset(user.id, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text('Password reset code sent to ${user.email}')));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Moderator+. Extreme-condition override — sets the password directly
+  /// instead of emailing a reset code. Forces the user to set their own
+  /// password on next login.
+  Future<void> _changePassword(AdminUserDetail user) async {
+    final result = await showAdminValueReasonSheet(
+      context,
+      title: 'Directly set a new password for ${user.email}?',
+      body: 'For extreme cases only — they will be signed out everywhere and forced to set their own password on next login.',
+      actionLabel: 'Change Password',
+      valueLabel: 'New password',
+      obscureValue: true,
+      valueValidator: (value) => value.length >= 8 ? null : 'At least 8 characters',
+    );
+    if (result == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.setUserPassword(user.id, newPassword: result.value, reason: result.reason);
+      messenger.showSnackBar(SnackBar(content: Text('Password changed for ${user.email} — account signed out everywhere')));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Super admin only (see `context.isSuperAdmin` gate at the button).
+  Future<void> _disable2fa(AdminUserDetail user) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Disable two-factor authentication for ${user.email}?',
+      body: 'They will be able to sign in with just their password from now on.',
+      actionLabel: 'Disable 2FA',
+      hint: 'Reason (recorded in the admin activity log)',
+    );
+    if (reason == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.disableUserTwoFactor(user.id, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text('Two-factor authentication disabled for ${user.email}')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _delete(AdminUserDetail user) async {
     final reason = await showAdminReasonSheet(
       context,
@@ -533,6 +620,50 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                     ),
                   ],
                   const SizedBox(height: 20),
+                  if (context.canModerate) ...[
+                    OutlinedButton(
+                      onPressed: () => _sendPasswordReset(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.navy),
+                        foregroundColor: AppColors.navy,
+                      ),
+                      child: Text('Send Password Reset', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: () => _changePassword(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.navy),
+                        foregroundColor: AppColors.navy,
+                      ),
+                      child: Text('Change Password', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton(
+                      onPressed: () => _changeEmail(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.navy),
+                        foregroundColor: AppColors.navy,
+                      ),
+                      child: Text('Change Email', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  if (context.isSuperAdmin && user.twoFactorEnabled) ...[
+                    OutlinedButton(
+                      onPressed: () => _disable2fa(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.navy),
+                        foregroundColor: AppColors.navy,
+                      ),
+                      child: Text('Disable Two-Factor Authentication', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
                   if (!user.isDeactivated)
                     OutlinedButton(
                       onPressed: () => _deactivate(user),

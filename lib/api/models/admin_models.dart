@@ -839,7 +839,13 @@ enum ActivityLogType {
   adminActivityLogCleared,
   supportThreadClaimed,
   supportThreadTransferred,
-  supportThreadResolved;
+  supportThreadResolved,
+  adminUserDeactivated,
+  adminUserDeleted,
+  adminUserEmailChanged,
+  adminUserPasswordResetSent,
+  adminUserPasswordChanged,
+  adminUser2faDisabled;
 
   static ActivityLogType fromApi(String value) => switch (value) {
     'ADMIN_LOGIN' => ActivityLogType.adminLogin,
@@ -850,6 +856,12 @@ enum ActivityLogType {
     'SUPPORT_THREAD_CLAIMED' => ActivityLogType.supportThreadClaimed,
     'SUPPORT_THREAD_TRANSFERRED' => ActivityLogType.supportThreadTransferred,
     'SUPPORT_THREAD_RESOLVED' => ActivityLogType.supportThreadResolved,
+    'ADMIN_USER_DEACTIVATED' => ActivityLogType.adminUserDeactivated,
+    'ADMIN_USER_DELETED' => ActivityLogType.adminUserDeleted,
+    'ADMIN_USER_EMAIL_CHANGED' => ActivityLogType.adminUserEmailChanged,
+    'ADMIN_USER_PASSWORD_RESET_SENT' => ActivityLogType.adminUserPasswordResetSent,
+    'ADMIN_USER_PASSWORD_CHANGED' => ActivityLogType.adminUserPasswordChanged,
+    'ADMIN_USER_2FA_DISABLED' => ActivityLogType.adminUser2faDisabled,
     _ => ActivityLogType.adminLogin,
   };
 
@@ -865,6 +877,12 @@ enum ActivityLogType {
     ActivityLogType.supportThreadClaimed => 'SUPPORT_THREAD_CLAIMED',
     ActivityLogType.supportThreadTransferred => 'SUPPORT_THREAD_TRANSFERRED',
     ActivityLogType.supportThreadResolved => 'SUPPORT_THREAD_RESOLVED',
+    ActivityLogType.adminUserDeactivated => 'ADMIN_USER_DEACTIVATED',
+    ActivityLogType.adminUserDeleted => 'ADMIN_USER_DELETED',
+    ActivityLogType.adminUserEmailChanged => 'ADMIN_USER_EMAIL_CHANGED',
+    ActivityLogType.adminUserPasswordResetSent => 'ADMIN_USER_PASSWORD_RESET_SENT',
+    ActivityLogType.adminUserPasswordChanged => 'ADMIN_USER_PASSWORD_CHANGED',
+    ActivityLogType.adminUser2faDisabled => 'ADMIN_USER_2FA_DISABLED',
   };
 
   String get label => switch (this) {
@@ -876,6 +894,12 @@ enum ActivityLogType {
     ActivityLogType.supportThreadClaimed => 'Claimed a support chat',
     ActivityLogType.supportThreadTransferred => 'Transferred a chat',
     ActivityLogType.supportThreadResolved => 'Resolved a support chat',
+    ActivityLogType.adminUserDeactivated => 'Deactivated a user',
+    ActivityLogType.adminUserDeleted => 'Deleted a user',
+    ActivityLogType.adminUserEmailChanged => "Changed a user's email",
+    ActivityLogType.adminUserPasswordResetSent => 'Sent a user a password reset',
+    ActivityLogType.adminUserPasswordChanged => "Changed a user's password",
+    ActivityLogType.adminUser2faDisabled => "Disabled a user's two-factor authentication",
   };
 }
 
