@@ -98,6 +98,73 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
   List<AdminAccount>? _admins;
   String? _error;
 
+  /// Search by name or email, and filter by level (null = every level).
+  final _search = TextEditingController();
+  AdminLevel? _levelFilter;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  List<AdminAccount> _visible(List<AdminAccount> admins) {
+    final query = _search.text.trim().toLowerCase();
+    return [
+      for (final a in admins)
+        if ((_levelFilter == null || a.level == _levelFilter) &&
+            (query.isEmpty ||
+                (a.fullName ?? '').toLowerCase().contains(query) ||
+                a.email.toLowerCase().contains(query)))
+          a,
+    ];
+  }
+
+  /// Search box and level chips (white card, navy text — explicit colours).
+  Widget _searchAndFilter(List<AdminAccount> admins) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _search,
+          onChanged: (_) => setState(() {}),
+          style: AppTextStyles.body(color: AppColors.navy, size: 14),
+          cursorColor: AppColors.navy,
+          decoration: InputDecoration(
+            hintText: 'Search admins by name or email',
+            hintStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 14),
+            prefixIcon: const Icon(Icons.search_rounded, color: AppColors.hintGrey),
+            suffixIcon: _search.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close_rounded, color: AppColors.hintGrey),
+                    tooltip: 'Clear search',
+                    onPressed: () => setState(_search.clear),
+                  ),
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            AdminFilterChip(label: 'All (${admins.length})', selected: _levelFilter == null, onTap: () => setState(() => _levelFilter = null)),
+            for (final level in [AdminLevel.superAdmin, AdminLevel.moderator, AdminLevel.support])
+              AdminFilterChip(
+                label: '${level == AdminLevel.support ? 'Support' : '${level.label}s'} (${admins.where((a) => a.level == level).length})',
+                selected: _levelFilter == level,
+                onTap: () => setState(() => _levelFilter = level),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -602,6 +669,7 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
   @override
   Widget build(BuildContext context) {
     final admins = _admins;
+    final visible = admins == null ? const <AdminAccount>[] : _visible(admins);
     final myId = context.select<AppState, String?>((s) => s.userId);
     final myLevel = context.select<AppState, AdminLevel?>((s) => s.adminLevel);
     final isSuperAdmin = myLevel?.isSuperAdmin ?? false;
@@ -621,12 +689,25 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
               onRefresh: _load,
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-                // A headcount by level above the list.
-                itemCount: admins.length + 1,
+                // Headcount by level, then search and level filter, then
+                // the matching admins (or a "no matches" line).
+                itemCount: 2 + (visible.isEmpty ? 1 : visible.length),
                 separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (context, rawIndex) {
                   if (rawIndex == 0) return _AdminCounts(admins: admins);
-                  final admin = admins[rawIndex - 1];
+                  if (rawIndex == 1) return _searchAndFilter(admins);
+                  if (visible.isEmpty) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          'No admins match your search.',
+                          style: AppTextStyles.body(color: AppColors.hintGrey, size: 14),
+                        ),
+                      ),
+                    );
+                  }
+                  final admin = visible[rawIndex - 2];
                   final isSelf = admin.id == myId;
                   return InkWell(
                     borderRadius: BorderRadius.circular(14),
@@ -752,7 +833,10 @@ class _AdminCounts extends StatelessWidget {
       ),
     );
     int count(AdminLevel level) => admins.where((a) => a.level == level).length;
-    return Row(
+    // Equal-height tiles even when a label wraps on a narrow screen.
+    return IntrinsicHeight(
+      child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         tile('All admins', admins.length),
         const SizedBox(width: 8),
@@ -762,6 +846,7 @@ class _AdminCounts extends StatelessWidget {
         const SizedBox(width: 8),
         tile('Support', count(AdminLevel.support)),
       ],
+      ),
     );
   }
 }

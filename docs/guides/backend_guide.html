@@ -78,6 +78,7 @@
 <h2>Sign-up and login flows</h2>
 <ul>
   <li><strong>Signup:</strong> <code>POST /auth/signup</code> creates an unverified user and emails a code; <code>POST /auth/verify-signup</code> verifies it and returns tokens. Signing up again with an email that was never verified takes over the unverified record and sends a fresh code.</li>
+  <li><strong>Sign-in pages:</strong> the client sends <code>portal</code> (<code>ADMIN</code> from the admin console, <code>APP</code> otherwise). Right after the password check, <code>ADMIN</code> refuses non-admin accounts and <code>APP</code> refuses admin accounts. Google sign-in always refuses admin accounts and never links Google to one, since it would skip their password, 2FA and the admin sign-in log.</li>
   <li><strong>Login:</strong> <code>POST /auth/login</code> can return:
     <ul>
       <li>tokens;</li>
