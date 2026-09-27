@@ -17,6 +17,8 @@ import 'landlord_add_property_screen.dart';
 import 'landlord_properties_screen.dart';
 import 'landlord_tenants_screen.dart';
 import 'landlord_property_status.dart';
+import '../profile/verification_submit_screen.dart';
+import '../../api/models/verification.dart';
 import 'widgets/landlord_widgets.dart';
 
 /// Home tab of the redesigned landlord dashboard: greeting header, the four
@@ -161,6 +163,29 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                             'HomeServant only shows listings from verified landlords. Yours will appear as soon as your identity is verified.',
                             style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.75), size: 12.5),
                           ),
+                          if (canSubmitVerification(context.watch<AppState>().verificationStatus)) ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 36,
+                              child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.navy,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                ),
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const VerificationSubmitScreen()),
+                                ),
+                                child: Text('Get verified', style: AppTextStyles.body(color: Colors.white, size: 13, weight: FontWeight.w700)),
+                              ),
+                            ),
+                          ] else if (context.watch<AppState>().verificationStatus == VerificationStatus.pending) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Your documents are with us for review.',
+                              style: AppTextStyles.body(color: AppColors.navy, size: 12.5, weight: FontWeight.w600),
+                            ),
+                          ],
                         ],
                       ),
                     ),

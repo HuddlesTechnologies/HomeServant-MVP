@@ -8,6 +8,7 @@ import 'edit_profile_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
 import '../../widgets/verified_badge.dart';
+import '../profile/verification_submit_screen.dart';
 import 'wishlist_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -28,6 +29,9 @@ class ProfileScreen extends StatelessWidget {
       status: VerificationStatusCard(
         status: context.watch<AppState>().verificationStatus,
         note: context.watch<AppState>().verificationNote,
+        onGetVerified: canSubmitVerification(context.watch<AppState>().verificationStatus)
+            ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationSubmitScreen()))
+            : null,
       ),
       backgroundColor: theme.background,
       iconColor: theme.accent,

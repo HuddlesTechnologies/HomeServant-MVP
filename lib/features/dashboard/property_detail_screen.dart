@@ -15,6 +15,7 @@ import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
 import 'widgets/property_video_player.dart';
 import '../../widgets/verified_badge.dart';
+import '../../widgets/hidden_listing_notice.dart';
 import 'widgets/shortlet_unavailable_countdown.dart';
 
 /// Every [BookingStatus] from the moment a tenant's payment clears onward —
@@ -255,6 +256,19 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             ],
                           ),
                           const SizedBox(height: 26),
+                          if (property.hiddenUntilLandlordVerified) ...[
+                            HiddenListingNotice(
+                              ownerView: isOwner,
+                              isShortlet: property.category == 'Shortlet',
+                              hasBooking: context.watch<AppState>().myBookings.any(
+                                (b) =>
+                                    b.property.id == property.id &&
+                                    b.status != BookingStatus.declined &&
+                                    b.status != BookingStatus.refunded,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                          ],
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,

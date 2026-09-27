@@ -26,11 +26,12 @@ type WithLandlordVerification = {
   landlord: { id: string; fullName: string | null; identityVerification: { status: VerificationStatus } | null };
 };
 
-/// Flattens the landlord's verification into `landlordVerified`, and drops
-/// the nested record from the response.
-function withLandlordVerified<T extends WithLandlordVerification>(p: T) {
+/// Flattens the landlord's verification into the listing flags
+/// (`landlordVerified`, `hiddenUntilLandlordVerified`) and drops the nested
+/// record from the response.
+function withLandlordVerified<T extends WithLandlordVerification>(p: T, requireVerified: boolean) {
   const { identityVerification, ...landlord } = p.landlord;
-  return { ...p, landlord, landlordVerified: identityVerification?.status === VerificationStatus.APPROVED };
+  return { ...p, landlord, ...PlatformSettingsService.listingFlags(identityVerification?.status, requireVerified) };
 }
 
 @Injectable()
@@ -65,7 +66,8 @@ export class PropertiesService {
     // Platform Controls: only verified landlords' listings in general
     // browsing. A landlord fetching their own listings (landlordId) still
     // sees them all.
-    if (!query.landlordId && (await this.platform.requireVerifiedLandlords())) {
+    const requireVerified = await this.platform.requireVerifiedLandlords();
+    if (!query.landlordId && requireVerified) {
       where.landlord = { deactivatedAt: null, ...PlatformSettingsService.verifiedLandlordFilter() };
     }
 
@@ -86,7 +88,7 @@ export class PropertiesService {
     const ratings = await this.reviews.summaryForProperties(items.map((p) => p.id));
     const shortletAvailability = await this.shortletAvailabilityForProperties(items);
     return {
-      items: items.map(withLandlordVerified).map((p) => ({
+      items: items.map((p) => withLandlordVerified(p, requireVerified)).map((p) => ({
         ...p,
         ...(ratings.get(p.id) ?? { avgRating: 0, reviewCount: 0 }),
         ...(shortletAvailability.get(p.id) ?? {}),
@@ -106,7 +108,7 @@ export class PropertiesService {
     const ratings = await this.reviews.summaryForProperties([id]);
     const shortletAvailability = await this.shortletAvailabilityForProperties([property]);
     return {
-      ...withLandlordVerified(property),
+      ...withLandlordVerified(property, await this.platform.requireVerifiedLandlords()),
       ...(ratings.get(id) ?? { avgRating: 0, reviewCount: 0 }),
       ...(shortletAvailability.get(id) ?? {}),
     };

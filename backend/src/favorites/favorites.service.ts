@@ -1,16 +1,29 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class FavoritesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly platform: PlatformSettingsService,
+  ) {}
 
-  findForUser(userId: string) {
-    return this.prisma.favorite.findMany({
-      where: { userId },
-      include: { property: true },
-      orderBy: { createdAt: 'desc' },
-    });
+  /// Saved listings stay in the wishlist even when Platform Controls hides
+  /// them from browsing; the flags say so (see PlatformSettingsService).
+  async findForUser(userId: string) {
+    const [favorites, requireVerified] = await Promise.all([
+      this.prisma.favorite.findMany({
+        where: { userId },
+        include: { property: { include: PlatformSettingsService.landlordStatusInclude } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.platform.requireVerifiedLandlords(),
+    ]);
+    return favorites.map(({ property: { landlord, ...property }, ...favorite }) => ({
+      ...favorite,
+      property: { ...property, ...PlatformSettingsService.listingFlags(landlord.identityVerification?.status, requireVerified) },
+    }));
   }
 
   /// Toggles rather than a plain add — mirrors the Flutter client's

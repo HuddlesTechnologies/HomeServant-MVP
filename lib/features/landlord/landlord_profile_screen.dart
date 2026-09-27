@@ -11,6 +11,7 @@ import '../dashboard/notifications_screen.dart';
 import 'landlord_add_property_screen.dart';
 import 'landlord_tenants_screen.dart';
 import '../../widgets/verified_badge.dart';
+import '../profile/verification_submit_screen.dart';
 import '../../widgets/bank_details_screen.dart';
 
 /// Profile Settings tab of the redesigned landlord dashboard — a fixed
@@ -38,6 +39,9 @@ class LandlordProfileScreen extends StatelessWidget {
       status: VerificationStatusCard(
         status: context.watch<AppState>().verificationStatus,
         note: context.watch<AppState>().verificationNote,
+        onGetVerified: canSubmitVerification(context.watch<AppState>().verificationStatus)
+            ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const VerificationSubmitScreen()))
+            : null,
         listingsHidden: context.watch<AppState>().listingsHiddenUntilVerified,
       ),
       backgroundColor: AppColors.navy,

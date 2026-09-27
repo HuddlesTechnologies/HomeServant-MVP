@@ -7,6 +7,7 @@ import '../models/property.dart';
 import '../property_detail_screen.dart';
 import 'property_image.dart';
 import '../../../widgets/verified_badge.dart';
+import '../../../widgets/hidden_listing_notice.dart';
 import 'shortlet_unavailable_countdown.dart';
 
 class PropertyCard extends StatelessWidget {
@@ -96,6 +97,12 @@ class PropertyCard extends StatelessWidget {
                   // Solid white pill with navy text: legible over any photo.
                   if (property.landlordVerified)
                     const Positioned(right: 12, bottom: 10, child: VerifiedPill()),
+                  if (property.hiddenUntilLandlordVerified)
+                    Positioned(
+                      left: 12,
+                      top: property.category == 'Shortlet' && property.shortletUnavailable ? 46 : 12,
+                      child: const HiddenListingPill(),
+                    ),
                   if (property.category == 'Shortlet' && property.shortletUnavailable)
                     Positioned(
                       left: 12,

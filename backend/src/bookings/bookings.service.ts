@@ -98,12 +98,21 @@ export class BookingsService {
     return { ...booking, ...charge };
   }
 
-  findForTenant(tenantId: string) {
-    return this.prisma.booking.findMany({
-      where: { tenantId },
-      include: { property: true, tenancyAgreement: true },
-      orderBy: { createdAt: 'desc' },
-    });
+  async findForTenant(tenantId: string) {
+    const [bookings, requireVerified] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: { tenantId },
+        include: { property: { include: PlatformSettingsService.landlordStatusInclude }, tenancyAgreement: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.platform.requireVerifiedLandlords(),
+    ]);
+    // Flags let History explain a booked listing that Platform Controls now
+    // hides from browsing; the booking itself carries on unaffected.
+    return bookings.map(({ property: { landlord, ...property }, ...booking }) => ({
+      ...booking,
+      property: { ...property, ...PlatformSettingsService.listingFlags(landlord.identityVerification?.status, requireVerified) },
+    }));
   }
 
   /// Every pending/resolved booking across every property this landlord
