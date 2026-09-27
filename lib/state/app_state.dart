@@ -72,6 +72,11 @@ class AppState extends ChangeNotifier {
     // reconnects under the hood across login/logout, so this stays valid
     // the same way NotificationBannerOverlay's own subscription does.
     _chatSocket.onNotification.listen(_handleRealtimeNotification);
+    _chatRepo.onLocalChange = _chatSocket.notifyThreadsChanged;
+    // Notifications created while the socket was down never arrived live.
+    _chatSocket.onReconnected.listen((_) {
+      if (userId != null) unawaited(loadNotifications());
+    });
   }
 
   static const _prefsKey = 'app_state_v2';
@@ -553,7 +558,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _connectChatSocket() async {
     final token = await _tokens.readAccessToken();
-    if (token != null) _chatSocket.connect(token);
+    if (token != null) _chatSocket.connect(_apiClient.freshAccessToken);
   }
 
   // --- Notifications -----------------------------------------------------

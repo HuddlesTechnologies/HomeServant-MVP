@@ -9,6 +9,7 @@ import '../../state/app_state.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/upload_picker.dart';
 import '../dashboard/chat_thread_screen.dart';
+import '../dashboard/models/property.dart';
 import '../dashboard/notifications_screen.dart';
 import '../dashboard/property_detail_screen.dart';
 import '../dashboard/widgets/property_image.dart';
@@ -321,7 +322,19 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
               ),
             ),
             const SizedBox(height: 22),
-            Text('Uploads', style: AppTextStyles.heading(color: theme.foreground, size: 17)),
+            Row(
+              children: [
+                Expanded(child: Text('Uploads', style: AppTextStyles.heading(color: theme.foreground, size: 17))),
+                if (allProperties.isNotEmpty)
+                  TextButton(
+                    onPressed: () => _openProperties(context, PropertyStatusFilter.all),
+                    child: Text(
+                      'See all',
+                      style: AppTextStyles.body(color: theme.foreground, size: 13.5, weight: FontWeight.w700),
+                    ),
+                  ),
+              ],
+            ),
             const SizedBox(height: 12),
             SizedBox(
               height: 140,
@@ -338,13 +351,64 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(16),
-                    child: PropertyImage(path: allProperties[index].image, width: 180, height: 140),
+                    child: _UploadThumbnail(property: allProperties[index]),
                   ),
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A listing's photo with its key details over a dark scrim — title,
+/// price and whether it's occupied — so the landlord can tell listings
+/// apart without opening each one. White text on a near-black scrim is a
+/// fixed pair regardless of the photo underneath.
+class _UploadThumbnail extends StatelessWidget {
+  const _UploadThumbnail({required this.property});
+
+  final Property property;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 180,
+      height: 140,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          PropertyImage(path: property.image, width: 180, height: 140),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              color: Colors.black.withValues(alpha: 0.62),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    property.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.body(color: Colors.white, size: 12.5, weight: FontWeight.w700),
+                  ),
+                  Text(
+                    '${property.priceLabel} · ${isOccupied(property) ? 'Occupied' : 'Available'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.body(color: Colors.white, size: 11),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

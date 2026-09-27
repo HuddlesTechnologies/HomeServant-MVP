@@ -1,13 +1,17 @@
 import 'api_client.dart';
 import 'models/chat.dart';
 
-/// Wraps `/threads`. There's no push/live layer yet (see
-/// backend/README.md's Chat section) — screens using this poll by
-/// refetching on focus/after sending rather than holding a subscription.
+/// Wraps `/threads`. Live updates come from ChatSocketService; inbox
+/// screens refetch on its onThreadsChanged stream.
 class ChatRepository {
   ChatRepository(this._client);
 
   final ApiClient _client;
+
+  /// Set by AppState: called after this device starts a conversation or
+  /// sends a message, so open inbox screens refresh (the socket only
+  /// pushes the other side's messages) — see ChatSocketService.onThreadsChanged.
+  void Function()? onLocalChange;
 
   Future<List<ChatThread>> myThreads() {
     return _client.call(() async {
@@ -24,6 +28,7 @@ class ChatRepository {
       final response = await _client.dio.post('/threads/support');
       final threadId = response.data['id'] as String;
       final threads = await myThreads();
+      onLocalChange?.call();
       return threads.firstWhere((t) => t.id == threadId);
     });
   }
@@ -71,6 +76,7 @@ class ChatRepository {
       // the same ChatThread shape regardless of which endpoint opened it.
       final threadId = response.data['id'] as String;
       final threads = await myThreads();
+      onLocalChange?.call();
       return threads.firstWhere((t) => t.id == threadId);
     });
   }
@@ -99,6 +105,7 @@ class ChatRepository {
         '/threads/$threadId/messages',
         data: {if (body.isNotEmpty) 'body': body, if (attachmentUrl != null) 'attachmentUrl': attachmentUrl},
       );
+      onLocalChange?.call();
       return ChatMessage.fromApi(response.data as Map<String, dynamic>);
     });
   }

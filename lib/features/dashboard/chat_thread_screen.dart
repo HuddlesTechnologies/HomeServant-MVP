@@ -159,6 +159,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _sendingImage = false;
   StreamSubscription<String>? _claimedSubscription;
   StreamSubscription<String>? _accessRevokedSubscription;
+  StreamSubscription<void>? _reconnectedSubscription;
 
   /// Set once an admin loses the ability to reply here while the screen is
   /// open — another admin took the support conversation over, or it was
@@ -180,6 +181,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       final chatSocket = context.read<AppState>().chatSocket;
       _socketSubscription = chatSocket.onNewMessage.listen(_onSocketMessage);
       _readSubscription = chatSocket.onRead.listen(_onSocketRead);
+      // Messages pushed while the socket was down were missed — refetch.
+      _reconnectedSubscription = chatSocket.onReconnected.listen((_) {
+        unawaited(_loadRemoteMessages(threadId));
+        unawaited(_refreshAccess());
+      });
       // Tenant/landlord threads can be closed by the payment rules (not
       // paid yet, or refunded) — check up front so the composer is
       // replaced by the reason instead of failing on send.
@@ -325,6 +331,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   void dispose() {
     _claimedSubscription?.cancel();
     _accessRevokedSubscription?.cancel();
+    _reconnectedSubscription?.cancel();
     _socketSubscription?.cancel();
     _readSubscription?.cancel();
     _inputController.dispose();
