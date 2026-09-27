@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { AdminPayoutsController } from './admin-payouts.controller';
 import { PlatformSettingsController } from './platform-settings.controller';
 import { PlatformSettingsService } from './platform-settings.service';
 
@@ -20,6 +21,6 @@ export class PlatformSettingsModule {}
 
 @Module({
   imports: [AuthModule, PaymentsModule],
-  controllers: [PlatformSettingsController],
+  controllers: [PlatformSettingsController, AdminPayoutsController],
 })
 export class PlatformControlsModule {}

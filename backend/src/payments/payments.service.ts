@@ -1,5 +1,5 @@
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
-import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
 import { ChatService } from '../chat/chat.service';
@@ -61,6 +61,18 @@ const KOBO_PER_NAIRA = 100;
 /// Payments. Used by both BookingsService (rentals/shortlets) and
 /// MarketplaceOrdersService (order items), so every money-movement rule
 /// lives in one place instead of being re-derived per feature.
+/// How long a payout lock may be held before it's treated as abandoned.
+const PAYOUT_LOCK_MS = 10 * 60 * 1000;
+
+/// Paystack transfer states that mean the money did NOT go out, so a new
+/// attempt (with a fresh reference) is safe. Anything else — success,
+/// pending, processing, otp, queued, received — counts as sent.
+const RETRYABLE_TRANSFER_STATUSES = new Set(['failed', 'reversed', 'abandoned', 'rejected']);
+
+/// What a landlord is told when a transfer didn't go through first time.
+const DELAYED_PAYOUT_LINE =
+  "Your payout is delayed by a problem sending it to your bank. HomeServant has been alerted and will send it shortly; check your bank details in the app.";
+
 /// What a landlord is told when their payout is held for verification.
 const HELD_PAYOUT_LINE =
   "HomeServant is holding your payout until your identity is verified. Open your Profile and tap \"Get verified\"; it's released automatically once you are.";
@@ -182,10 +194,14 @@ export class PaymentsService {
   async refundOrderItemIfHeld(itemId: string): Promise<void> {
     const payment = await this.prisma.payment.findUnique({ where: { orderItemId: itemId } });
     if (!payment || payment.status !== PaymentStatus.PAID_HELD) return;
-    await this.paystack.refundTransaction(payment.paystackReference);
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: { status: PaymentStatus.REFUNDED, refundedAt: new Date(), platformFeeAmount: 0 },
+    // Same guarantees as rent refunds: one money action at a time, and
+    // Paystack is asked first whether it was already refunded.
+    await this.withMoneyLock(payment.id, async () => {
+      await this.refundHeldPayment(payment, payment.amount, 'MARKETPLACE');
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: PaymentStatus.REFUNDED, refundedAt: new Date(), platformFeeAmount: 0, refundLastError: null },
+      });
     });
   }
 
@@ -388,12 +404,20 @@ export class PaymentsService {
     if (!payment) throw new BadRequestException('No held payment found for this booking');
 
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
-    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant rent release — ${booking.property.title}`);
+    const rentDurationMonths = booking.property.rentDurationMonths;
 
-    const leaseStart = new Date();
-    const leaseEnd = addMonths(leaseStart, booking.property.rentDurationMonths);
+    // Under the money lock, so a refund (tenant, landlord or admin) can't
+    // happen at the same moment: whichever comes second is refused.
+    const { outcome, updatedBooking } = await this.withMoneyLock(payment.id, async () => {
+      const now = await this.prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+      if (now.status !== BookingStatus.INSPECTION_CONFIRMED) throw new BadRequestException('This booking is not awaiting move-in');
+      const held = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      const outcome = await this.releaseOrHoldForLandlord(held, landlord, `HomeServant rent release — ${booking.property.title}`, true);
 
-    const [updatedBooking] = await this.prisma.$transaction([
+      const leaseStart = new Date();
+      const leaseEnd = addMonths(leaseStart, rentDurationMonths);
+
+      const [updatedBooking] = await this.prisma.$transaction([
       this.prisma.booking.update({
         where: { id: bookingId },
         data: { status: BookingStatus.MOVED_IN, leaseStartDate: leaseStart, leaseEndDate: leaseEnd },
@@ -417,7 +441,9 @@ export class PaymentsService {
           tenantPhone: booking.tenant.phoneNumber,
         },
       }),
-    ]);
+      ]);
+      return { outcome, updatedBooking };
+    });
 
     await this.notifyBoth(
       booking.tenantId,
@@ -433,6 +459,8 @@ export class PaymentsService {
       'Tenant moved in',
       outcome === 'held'
         ? `Your tenant has moved into ${booking.property.title}. ${HELD_PAYOUT_LINE}`
+        : outcome === 'failed'
+        ? `Your tenant has moved into ${booking.property.title}. ${DELAYED_PAYOUT_LINE}`
         : `Your tenant has moved into ${booking.property.title} and your payout has been released.`,
     );
 
@@ -449,65 +477,7 @@ export class PaymentsService {
   /// Contrast with `rejectBookingByLandlord`, the landlord-initiated
   /// equivalent, which refunds in full.
   async refundBookingBeforeMoveIn(bookingId: string, tenantId: string) {
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: { property: true, tenant: true },
-    });
-    if (!booking) throw new NotFoundException('Booking not found');
-    if (booking.tenantId !== tenantId) throw new ForbiddenException('Not your booking');
-    if (booking.property.category === PropertyCategory.SHORTLET) {
-      throw new BadRequestException('Shortlet payments release instantly and cannot be refunded through this action');
-    }
-    if (!PRE_MOVE_IN_STATUSES.includes(booking.status)) {
-      throw new BadRequestException('Only a paid booking that hasn’t been moved into yet can be refunded');
-    }
-
-    const payment = await this.prisma.payment.findFirst({
-      where: { bookingId, status: PaymentStatus.PAID_HELD },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (!payment) throw new BadRequestException('No held payment found for this booking');
-
-    const refundFeeKobo = this.fee(payment.amount, REFUND_FEE_BPS);
-    const refundAmountKobo = payment.amount - refundFeeKobo;
-    await this.paystack.refundTransaction(payment.paystackReference, refundAmountKobo);
-
-    const [updatedBooking] = await this.prisma.$transaction([
-      this.prisma.booking.update({ where: { id: bookingId }, data: { status: BookingStatus.REFUNDED } }),
-      this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: PaymentStatus.REFUNDED, refundedAt: new Date(), platformFeeAmount: refundFeeKobo },
-      }),
-    ]);
-
-    const landlord = await this.prisma.user.findUnique({ where: { id: booking.property.landlordId }, select: { id: true, email: true } });
-
-    // Messaging between them closes on a refund (ChatService.landlordTenantBlockReason);
-    // say so in their existing chat, if they have one.
-    await this.postBookingSystemMessage(
-      booking,
-      `Refund initiated by the tenant for ${booking.property.title}. Further messaging is no longer available unless the tenant books and pays again.`,
-      false,
-    );
-
-    await this.notifyBoth(
-      booking.tenantId,
-      booking.tenant.email,
-      NotificationType.BOOKING_STATUS,
-      'Refund issued',
-      `Your payment for ${booking.property.title} has been refunded.`,
-    );
-    if (landlord) {
-      await this.notifyBoth(
-        landlord.id,
-        landlord.email,
-        NotificationType.BOOKING_STATUS,
-        'Booking refunded',
-        `The tenant was refunded for ${booking.property.title} before moving in. The listing remains available.`,
-      );
-    }
-
-    return updatedBooking;
+    return this.refundBooking(bookingId, 'TENANT', { actorId: tenantId });
   }
 
   /// `POST /bookings/:id/reject` — the landlord's own distinct
@@ -517,55 +487,220 @@ export class PaymentsService {
   /// which keeps the 0.2% cut), since this is the landlord's decision, not
   /// the tenant's.
   async rejectBookingByLandlord(bookingId: string, landlordId: string) {
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: bookingId },
-      include: { property: true, tenant: true },
-    });
+    return this.refundBooking(bookingId, 'LANDLORD', { actorId: landlordId });
+  }
+
+  /// Super admin refund from the Payouts screen: full refund of money
+  /// HomeServant still holds, for a tenant who hasn't moved in (or whose
+  /// shortlet stay hasn't started). The booking ends as Refunded, so the
+  /// tenant's own Refund is no longer offered — and refused if tried.
+  async adminRefundBooking(paymentId: string, adminId: string, reason: string) {
+    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId }, select: { bookingId: true, purpose: true } });
+    if (!payment?.bookingId || payment.purpose !== PaymentPurpose.RENTAL_BOOKING) throw new NotFoundException('Payment not found');
+    const trimmed = reason.trim();
+    if (trimmed.length < 10) throw new BadRequestException('Give a reason (at least 10 characters); the tenant and landlord see it');
+    return this.refundBooking(payment.bookingId, 'ADMIN', { actorId: adminId, reason: trimmed });
+  }
+
+  /// One refund flow for everyone, so the same guarantees apply to all:
+  ///  - the booking's state and the held payment are re-checked *inside*
+  ///    the money lock, so a refund can't overlap a move-in payout, another
+  ///    refund, or a retry (whoever is second is told it's in progress or
+  ///    already done);
+  ///  - Paystack is asked first whether this charge was already refunded
+  ///    (see [refundHeldPayment]), so it is never refunded twice;
+  ///  - once refunded, the booking is REFUNDED/DECLINED and the payment
+  ///    REFUNDED, which every refund path checks first.
+  /// TENANT: before move-in, keeps the 0.2% fee. LANDLORD: before move-in,
+  /// full refund, booking DECLINED. ADMIN: full refund, before move-in or
+  /// before a shortlet stay starts.
+  private async refundBooking(
+    bookingId: string,
+    kind: 'TENANT' | 'LANDLORD' | 'ADMIN',
+    opts: { actorId: string; reason?: string },
+  ) {
+    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId }, include: { property: true, tenant: true } });
     if (!booking) throw new NotFoundException('Booking not found');
-    if (booking.property.landlordId !== landlordId) {
+    if (kind === 'TENANT' && booking.tenantId !== opts.actorId) throw new ForbiddenException('Not your booking');
+    if (kind === 'LANDLORD' && booking.property.landlordId !== opts.actorId) {
       throw new ForbiddenException('You do not own the property this booking is for');
     }
-    if (booking.property.category === PropertyCategory.SHORTLET) {
-      throw new BadRequestException('Shortlet bookings are handled through accept/decline, not this action');
-    }
-    if (!PRE_MOVE_IN_STATUSES.includes(booking.status)) {
-      throw new BadRequestException('This booking can no longer be rejected');
+    const isShortlet = booking.property.category === PropertyCategory.SHORTLET;
+    if (isShortlet && kind === 'TENANT') throw new BadRequestException('Shortlet payments release instantly and cannot be refunded through this action');
+    if (isShortlet && kind === 'LANDLORD') throw new BadRequestException('Shortlet bookings are handled through accept/decline, not this action');
+
+    const payment = await this.prisma.payment.findFirst({ where: { bookingId }, orderBy: { createdAt: 'desc' } });
+    if (!payment) throw new BadRequestException('No payment found for this booking');
+    if (payment.status === PaymentStatus.REFUNDED) throw new BadRequestException('This payment has already been refunded');
+    if (payment.status !== PaymentStatus.PAID_HELD) {
+      throw new BadRequestException(
+        payment.status === PaymentStatus.RELEASED ? 'This payment has already been paid out to the landlord' : 'No held payment found for this booking',
+      );
     }
 
-    const payment = await this.prisma.payment.findFirst({
-      where: { bookingId, status: PaymentStatus.PAID_HELD },
-      orderBy: { createdAt: 'desc' },
+    const refundAmountKobo = kind === 'TENANT' ? payment.amount - this.fee(payment.amount, REFUND_FEE_BPS) : payment.amount;
+    const updated = await this.withMoneyLock(payment.id, async () => {
+      // Re-check now that nothing else can move this money.
+      const now = await this.prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
+      const stillHeld = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      if (stillHeld.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment has already been refunded or paid out');
+      const refundable = isShortlet
+        ? now.status === BookingStatus.ACCEPTED ||
+          (now.status === BookingStatus.PAID && !!now.leaseStartDate && now.leaseStartDate > new Date())
+        : PRE_MOVE_IN_STATUSES.includes(now.status);
+      if (!refundable) {
+        throw new BadRequestException(
+          kind === 'LANDLORD'
+            ? 'This booking can no longer be rejected'
+            : isShortlet
+              ? 'This stay has already started, so it can no longer be refunded'
+              : 'Only a paid booking that hasn’t been moved into yet can be refunded',
+        );
+      }
+
+      if (kind === 'ADMIN') {
+        // Kept even if the refund fails, so "Retry refund" can reuse it.
+        await this.prisma.payment.update({ where: { id: payment.id }, data: { refundReason: opts.reason, refundedById: opts.actorId } });
+      }
+      await this.refundHeldPayment(stillHeld, refundAmountKobo, kind);
+      const [updatedBooking] = await this.prisma.$transaction([
+        this.prisma.booking.update({
+          where: { id: bookingId },
+          data: { status: kind === 'LANDLORD' ? BookingStatus.DECLINED : BookingStatus.REFUNDED },
+        }),
+        this.prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: PaymentStatus.REFUNDED,
+            refundedAt: new Date(),
+            platformFeeAmount: payment.amount - refundAmountKobo,
+            heldForVerificationAt: null,
+            refundLastError: null,
+            payoutLastError: null,
+            ...(kind === 'ADMIN' ? { refundedById: opts.actorId, refundReason: opts.reason } : {}),
+          },
+        }),
+      ]);
+      return updatedBooking;
     });
-    if (!payment) throw new BadRequestException('No held payment found for this booking');
 
-    await this.paystack.refundTransaction(payment.paystackReference);
+    const landlord = await this.prisma.user.findUnique({ where: { id: booking.property.landlordId }, select: { id: true, email: true } });
+    const title = booking.property.title;
+    if (kind === 'TENANT') {
+      // Messaging between them closes on a refund (ChatService.landlordTenantBlockReason);
+      // say so in their existing chat, if they have one.
+      await this.postBookingSystemMessage(
+        booking,
+        `Refund initiated by the tenant for ${title}. Further messaging is no longer available unless the tenant books and pays again.`,
+        false,
+      );
+      await this.notifyBoth(booking.tenantId, booking.tenant.email, NotificationType.BOOKING_STATUS, 'Refund issued', `Your payment for ${title} has been refunded.`);
+      if (landlord) {
+        await this.notifyBoth(
+          landlord.id,
+          landlord.email,
+          NotificationType.BOOKING_STATUS,
+          'Booking refunded',
+          `The tenant was refunded for ${title} before moving in. The listing remains available.`,
+        );
+      }
+    } else if (kind === 'LANDLORD') {
+      // The tenant hears about it in Messages too (a thread is started if
+      // they never chatted), and the notification opens that chat.
+      const threadId = await this.postBookingSystemMessage(
+        booking,
+        `The landlord rejected this booking for ${title} and the tenant has been fully refunded. Further messaging is no longer available unless the tenant books and pays again.`,
+        true,
+      );
+      await this.notifyBoth(
+        booking.tenantId,
+        booking.tenant.email,
+        NotificationType.BOOKING_STATUS,
+        'Booking rejected',
+        `The landlord was unable to proceed with your booking for ${title}. You've been fully refunded.`,
+        threadId ?? undefined,
+      );
+    } else {
+      const threadId = await this.postBookingSystemMessage(
+        booking,
+        `HomeServant refunded the tenant in full for ${title}. Reason: ${opts.reason}. Further messaging is no longer available unless the tenant books and pays again.`,
+        true,
+      );
+      await this.notifyBoth(
+        booking.tenantId,
+        booking.tenant.email,
+        NotificationType.BOOKING_STATUS,
+        'You have been refunded',
+        `HomeServant has refunded your payment for ${title} in full. Reason: ${opts.reason}`,
+        threadId ?? undefined,
+      );
+      if (landlord) {
+        await this.notifyBoth(
+          landlord.id,
+          landlord.email,
+          NotificationType.BOOKING_STATUS,
+          'Booking refunded by HomeServant',
+          `HomeServant refunded the tenant for ${title}. Reason: ${opts.reason}`,
+        );
+      }
+    }
+    return updated;
+  }
 
-    const [updatedBooking] = await this.prisma.$transaction([
-      this.prisma.booking.update({ where: { id: bookingId }, data: { status: BookingStatus.DECLINED } }),
-      this.prisma.payment.update({
+  /// Sends a refund for a held payment (the caller holds the money lock and
+  /// marks it REFUNDED). Paystack is asked first how much of the charge is
+  /// already refunded: if any is, that refund went through earlier (e.g. our
+  /// own write failed afterwards), so nothing is sent again. A failure is
+  /// kept on the payment (what was asked, by whom, and why it failed) for
+  /// the admin Payouts screen.
+  private async refundHeldPayment(payment: Payment, amountKobo: number, requestedBy: string): Promise<void> {
+    try {
+      const already = await this.paystack.refundedSoFar(payment.paystackReference);
+      if (already > 0) {
+        this.logger.warn(`Refund for payment ${payment.id}: Paystack already has ${already} kobo refunded; not refunding again`);
+        return;
+      }
+      await this.prisma.payment.update({
         where: { id: payment.id },
-        data: { status: PaymentStatus.REFUNDED, refundedAt: new Date(), platformFeeAmount: 0 },
-      }),
-    ]);
+        data: { refundRequestedBy: requestedBy, refundRequestedAmount: amountKobo, refundLastAttemptAt: new Date() },
+      });
+      await this.paystack.refundTransaction(payment.paystackReference, amountKobo === payment.amount ? undefined : amountKobo);
+    } catch (error) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          refundRequestedBy: requestedBy,
+          refundRequestedAmount: amountKobo,
+          refundLastAttemptAt: new Date(),
+          refundLastError: (error as Error).message.slice(0, 500),
+        },
+      });
+      throw error;
+    }
+  }
 
-    // The tenant hears about it in Messages too (a thread is started if
-    // they never chatted), and the notification opens that chat.
-    const threadId = await this.postBookingSystemMessage(
-      booking,
-      `The landlord rejected this booking for ${booking.property.title} and the tenant has been fully refunded. Further messaging is no longer available unless the tenant books and pays again.`,
-      true,
-    );
-
-    await this.notifyBoth(
-      booking.tenantId,
-      booking.tenant.email,
-      NotificationType.BOOKING_STATUS,
-      'Booking rejected',
-      `The landlord was unable to proceed with your booking for ${booking.property.title}. You've been fully refunded.`,
-      threadId ?? undefined,
-    );
-
-    return updatedBooking;
+  /// Runs [fn] while holding this payment's money lock (payout OR refund —
+  /// one at a time). Throws if another money action holds it.
+  private async withMoneyLock<T>(paymentId: string, fn: () => Promise<T>): Promise<T> {
+    const claimed = await this.prisma.payment.updateMany({
+      where: {
+        id: paymentId,
+        status: PaymentStatus.PAID_HELD,
+        OR: [{ moneyLockedAt: null }, { moneyLockedAt: { lt: new Date(Date.now() - PAYOUT_LOCK_MS) } }],
+      },
+      data: { moneyLockedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      const current = await this.prisma.payment.findUnique({ where: { id: paymentId }, select: { status: true } });
+      if (current?.status === PaymentStatus.REFUNDED) throw new BadRequestException('This payment has already been refunded');
+      if (current?.status === PaymentStatus.RELEASED) throw new BadRequestException('This payment has already been paid out');
+      throw new ConflictException('Another payment action is in progress for this booking. Try again in a moment.');
+    }
+    try {
+      return await fn();
+    } finally {
+      await this.prisma.payment.update({ where: { id: paymentId }, data: { moneyLockedAt: null } });
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -664,11 +799,10 @@ export class PaymentsService {
   }
 
   /// Shortlet: no hold, no separate click — release happens the instant
-  /// the charge clears. If the release itself fails (e.g. a transient
-  /// Paystack outage), the Payment is deliberately left at PAID_HELD and
-  /// the booking is *not* advanced — see the class-level note in the
-  /// report on why this fails safe instead of confirming a stay HomeServant
-  /// hasn't actually been able to pay out for yet.
+  /// the charge clears. The stay is confirmed either way: if the payout is
+  /// held for verification or the transfer fails (e.g. a Paystack outage),
+  /// the Payment stays PAID_HELD and shows on the admin Payouts screen for
+  /// a safe retry, rather than leaving a paying guest unconfirmed.
   private async releaseShortletInstant(payment: Payment, booking: { id: string; propertyId: string; requestedDate: Date | null; nights: number | null; property: { landlordId: string; title: string }; tenantId: string; tenant: { email: string } }): Promise<void> {
     if (!booking.requestedDate || !booking.nights) {
       this.logger.error(`Shortlet booking ${booking.id} paid but is missing requestedDate/nights`);
@@ -676,13 +810,7 @@ export class PaymentsService {
     }
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
 
-    let outcome: 'released' | 'held';
-    try {
-      outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant shortlet release — ${booking.property.title}`);
-    } catch (err) {
-      this.logger.error(`Shortlet release failed for booking ${booking.id}, payment ${payment.id}: ${(err as Error).message}. Payment left PAID_HELD for manual follow-up.`);
-      return;
-    }
+    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant shortlet release — ${booking.property.title}`);
 
     const leaseStart = booking.requestedDate;
     const leaseEnd = addDays(leaseStart, booking.nights);
@@ -705,6 +833,8 @@ export class PaymentsService {
       'Shortlet booked and paid',
       outcome === 'held'
         ? `${booking.property.title} was booked and paid. ${HELD_PAYOUT_LINE}`
+        : outcome === 'failed'
+        ? `${booking.property.title} was booked and paid. ${DELAYED_PAYOUT_LINE}`
         : `${booking.property.title} was booked and your payout has been released.`,
     );
   }
@@ -720,13 +850,7 @@ export class PaymentsService {
     }
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
 
-    let outcome: 'released' | 'held';
-    try {
-      outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant rent renewal release — ${booking.property.title}`);
-    } catch (err) {
-      this.logger.error(`Renewal release failed for booking ${booking.id}, payment ${payment.id}: ${(err as Error).message}. Payment left PAID_HELD for manual follow-up; lease NOT extended.`);
-      return;
-    }
+    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant rent renewal release — ${booking.property.title}`);
 
     const newLeaseEnd = addMonths(booking.leaseEndDate, booking.property.rentDurationMonths);
     await this.prisma.booking.update({
@@ -748,6 +872,8 @@ export class PaymentsService {
       'Renewal paid',
       outcome === 'held'
         ? `Your tenant renewed their lease for ${booking.property.title}. ${HELD_PAYOUT_LINE}`
+        : outcome === 'failed'
+        ? `Your tenant renewed their lease for ${booking.property.title}. ${DELAYED_PAYOUT_LINE}`
         : `Your tenant renewed their lease for ${booking.property.title} and your payout has been released.`,
     );
   }
@@ -756,44 +882,111 @@ export class PaymentsService {
   // Shared helpers
   // ---------------------------------------------------------------------
 
-  /// Creates (or reuses, if already done for this Payment) a Paystack
-  /// transfer recipient, then sends the recipient's share
-  /// (amount - platformFeeAmount) and marks the Payment RELEASED. Throws
-  /// if payout details are missing or if Paystack itself rejects the
-  /// transfer — callers decide how to handle that (webhook paths log and
-  /// leave the Payment PAID_HELD; the explicit moved-in/confirm-received
-  /// endpoints let the exception surface as a 500 so the user sees the
-  /// failure and can retry the click).
+  /// Sends the recipient's share (amount - platformFeeAmount) and marks the
+  /// Payment RELEASED — built so a payment can never be paid out twice:
+  ///   1. a database lock lets only one release run per payment;
+  ///   2. Paystack is asked first whether the last transfer for this payment
+  ///      already exists — if it was sent (or is on its way) it's recorded
+  ///      as paid and nothing is sent; a new reference is only used when
+  ///      Paystack confirms the previous one failed or was reversed;
+  ///   3. the reference is saved before sending, so a crash after Paystack
+  ///      accepts it is caught by step 2 next time.
+  /// Throws on failure (the error is kept on the Payment for the admin
+  /// Payouts screen). Rent payouts go through releaseOrHoldForLandlord,
+  /// which turns a failure into 'failed' so the tenant's side still goes
+  /// ahead; marketplace confirm-received still surfaces the error.
   private async releasePaymentToRecipient(
     payment: Payment,
     opts: { bankCode: string | null; accountNumber: string | null; accountName: string | null; reason: string },
+    lockHeld = false,
   ): Promise<void> {
-    if (!opts.bankCode || !opts.accountNumber || !opts.accountName) {
-      throw new InternalServerErrorException('The recipient has no payout account on file — release could not be completed');
+    if (!lockHeld) {
+      const now = await this.prisma.payment.findUnique({ where: { id: payment.id }, select: { status: true } });
+      if (now?.status === PaymentStatus.RELEASED) return; // already paid — nothing to do
+      return this.withMoneyLock(payment.id, () => this.releasePaymentToRecipient(payment, opts, true));
     }
+    try {
+      if (!opts.bankCode || !opts.accountNumber || !opts.accountName) {
+        throw new InternalServerErrorException('No payout bank account on file for the recipient');
+      }
+      const current = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+      if (current.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment is no longer held');
 
-    let recipientCode = payment.transferRecipientCode;
-    if (!recipientCode) {
-      recipientCode = await this.paystack.createTransferRecipient(opts.bankCode, opts.accountNumber, opts.accountName);
-      await this.prisma.payment.update({ where: { id: payment.id }, data: { transferRecipientCode: recipientCode } });
+      // Never pay twice: ask Paystack whether the last transfer for this
+      // payment already exists before sending anything. (Payments released
+      // before this tracking existed used their own id.)
+      const lastReference = current.payoutReference ?? payment.id;
+      const existing = await this.paystack.verifyTransfer(lastReference);
+      if (existing !== 'not_found' && !RETRYABLE_TRANSFER_STATUSES.has(existing)) {
+        // Sent, or on its way (pending/processing/otp...): record it, don't resend.
+        this.logger.warn(`Payout ${payment.id}: transfer ${lastReference} already exists at Paystack (${existing}); not sending again`);
+        await this.markReleased(payment.id, lastReference);
+        return;
+      }
+      // A reference Paystack has never seen can be reused; a failed or
+      // reversed one can't, so the next attempt gets a fresh one.
+      const reference = existing === 'not_found' ? lastReference : `${payment.id}-r${current.payoutAttempts + 1}`;
+
+      let recipientCode = current.transferRecipientCode;
+      if (!recipientCode) {
+        recipientCode = await this.paystack.createTransferRecipient(opts.bankCode, opts.accountNumber, opts.accountName);
+        await this.prisma.payment.update({ where: { id: payment.id }, data: { transferRecipientCode: recipientCode } });
+      }
+
+      // Record the reference BEFORE sending, so if anything goes wrong after
+      // Paystack accepts it, the next attempt finds it above.
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { payoutReference: reference, payoutAttempts: { increment: 1 }, payoutLastAttemptAt: new Date() },
+      });
+      await this.paystack.initiateTransfer(payment.amount - payment.platformFeeAmount, recipientCode, opts.reason, reference);
+      await this.markReleased(payment.id, reference);
+    } catch (error) {
+      await this.prisma.payment.updateMany({
+        where: { id: payment.id, status: PaymentStatus.PAID_HELD },
+        data: { payoutLastError: (error as Error).message.slice(0, 500) },
+      });
+      throw error;
     }
+  }
 
-    const recipientAmountKobo = payment.amount - payment.platformFeeAmount;
-    // `payment.id` as the transfer reference means a retry after our own
-    // RELEASED-marking write fails below can't cause a second real payout
-    // for the same Payment — see initiateTransfer's doc comment.
-    await this.paystack.initiateTransfer(recipientAmountKobo, recipientCode, opts.reason, payment.id);
+  private async markReleased(paymentId: string, reference: string): Promise<void> {
+    await this.prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        status: PaymentStatus.RELEASED,
+        releasedAt: new Date(),
+        payoutReference: reference,
+        heldForVerificationAt: null,
+        payoutLastError: null,
+      },
+    });
+  }
+
+  /// Paystack's `transfer.failed` / `transfer.reversed` webhook: the money
+  /// never reached (or came back from) the landlord, so the payment is
+  /// owed again and shows on the admin Payouts screen. A retry is safe:
+  /// Paystack confirms that reference failed, so a fresh one is used.
+  async handleTransferFailed(reference: string, outcome: 'failed' | 'reversed', reason?: string): Promise<void> {
+    const payment = await this.prisma.payment.findUnique({ where: { payoutReference: reference } });
+    if (!payment || payment.status !== PaymentStatus.RELEASED) return;
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: { status: PaymentStatus.RELEASED, releasedAt: new Date(), heldForVerificationAt: null },
+      data: {
+        status: PaymentStatus.PAID_HELD,
+        releasedAt: null,
+        moneyLockedAt: null,
+        payoutLastError: `Transfer ${outcome} at the bank${reason ? `: ${reason}` : ''}`.slice(0, 500),
+      },
     });
+    this.logger.error(`Payout ${payment.id} (${reference}) ${outcome} after release; back to owed`);
   }
 
   // ---------------------------------------------------------------------
   // Payout hold for unverified landlords (Platform Controls)
   // ---------------------------------------------------------------------
 
-  /// Pays [landlord] now — or, when Platform Controls has "Pay unverified
+  /// Pays [landlord] now (or reports 'failed' — see below) — or, when Platform Controls has "Pay unverified
   /// landlords" off and they aren't verified, leaves the money held with
   /// HomeServant (marked [heldForVerificationAt]) for release later. The
   /// tenant's side (move-in, stay, renewal) goes ahead either way.
@@ -801,7 +994,8 @@ export class PaymentsService {
     payment: Payment,
     landlord: { id: string; bankCode: string | null; accountNumber: string | null; accountName: string | null },
     reason: string,
-  ): Promise<'released' | 'held'> {
+    lockHeld = false,
+  ): Promise<'released' | 'held' | 'failed'> {
     if (!(await this.platform.payUnverifiedLandlords())) {
       const verification = await this.prisma.identityVerification.findUnique({ where: { userId: landlord.id }, select: { status: true } });
       if (verification?.status !== VerificationStatus.APPROVED) {
@@ -810,8 +1004,15 @@ export class PaymentsService {
         return 'held';
       }
     }
-    await this.releasePaymentToRecipient(payment, { ...landlord, reason });
-    return 'released';
+    try {
+      await this.releasePaymentToRecipient(payment, { ...landlord, reason }, lockHeld);
+      return 'released';
+    } catch (err) {
+      // The tenant's side still goes ahead; the payout waits on the admin
+      // Payouts screen (with this error) for a safe retry.
+      this.logger.error(`Payout for payment ${payment.id} failed: ${(err as Error).message}`);
+      return 'failed';
+    }
   }
 
   /// Releases every payout held for [landlordId]'s verification — called when
@@ -866,6 +1067,204 @@ export class PaymentsService {
     let released = 0;
     for (const id of landlordIds) released += await this.releaseHeldPayoutsForLandlord(id);
     return released;
+  }
+
+  // ---------------------------------------------------------------------
+  // Admin: Payouts needing attention
+  // ---------------------------------------------------------------------
+
+  /// Rent payouts owed to a landlord that haven't gone out: held for
+  /// verification, a transfer that failed (or failed/reversed at the bank
+  /// later), or — from before failures were recorded — a shortlet whose
+  /// instant payout failed and whose stay was left unconfirmed. Escrow that
+  /// is simply waiting for a tenant to move in is NOT listed.
+  async stuckPayouts() {
+    const legacyCutoff = new Date(Date.now() - 30 * 60 * 1000);
+    const rows = await this.prisma.payment.findMany({
+      where: {
+        purpose: PaymentPurpose.RENTAL_BOOKING,
+        status: PaymentStatus.PAID_HELD,
+        OR: [
+          { heldForVerificationAt: { not: null } },
+          { payoutLastError: { not: null } },
+          { refundLastError: { not: null } },
+          {
+            paidAt: { lt: legacyCutoff },
+            booking: { status: BookingStatus.ACCEPTED, property: { category: PropertyCategory.SHORTLET } },
+          },
+        ],
+      },
+      include: {
+        booking: {
+          select: {
+            id: true,
+            status: true,
+            leaseStartDate: true,
+            property: { select: { id: true, title: true, category: true } },
+            tenant: { select: { id: true, fullName: true, email: true } },
+          },
+        },
+        recipient: {
+          select: { id: true, fullName: true, email: true, bankName: true, accountNumber: true, identityVerification: { select: { status: true } } },
+        },
+      },
+      orderBy: { paidAt: 'asc' },
+      take: 300,
+    });
+    const payUnverified = await this.platform.payUnverifiedLandlords();
+    return rows.map((p) => {
+      const verified = p.recipient.identityVerification?.status === VerificationStatus.APPROVED;
+      const waitingForVerification = !payUnverified && !verified;
+      const bookingStatus = p.booking?.status;
+      const isShortlet = p.booking?.property.category === PropertyCategory.SHORTLET;
+      // Money still held for a tenant who hasn't moved in / whose stay
+      // hasn't started: an admin may refund them (see refundBooking).
+      const tenantRefundable = isShortlet
+        ? bookingStatus === BookingStatus.ACCEPTED ||
+          (bookingStatus === BookingStatus.PAID && !!p.booking?.leaseStartDate && p.booking.leaseStartDate > new Date())
+        : !!bookingStatus && PRE_MOVE_IN_STATUSES.includes(bookingStatus);
+      if (p.refundLastError) {
+        return {
+          kind: 'REFUND' as const,
+          paymentId: p.id,
+          amountKobo: p.refundRequestedAmount ?? p.amount,
+          paidAt: p.paidAt,
+          heldSince: p.refundLastAttemptAt ?? p.paidAt,
+          reason: 'REFUND_FAILED',
+          lastError: p.refundLastError,
+          requestedBy: p.refundRequestedBy,
+          attempts: 0,
+          lastAttemptAt: p.refundLastAttemptAt,
+          inProgress: !!p.moneyLockedAt && p.moneyLockedAt > new Date(Date.now() - PAYOUT_LOCK_MS),
+          canRetry: false,
+          canRetryRefund: tenantRefundable,
+          canRefundTenant: false,
+          landlord: {
+            id: p.recipient.id,
+            name: p.recipient.fullName || p.recipient.email,
+            email: p.recipient.email,
+            bankName: p.recipient.bankName,
+            accountLast4: p.recipient.accountNumber?.slice(-4) ?? null,
+            verified,
+          },
+          property: p.booking?.property ?? null,
+          tenant: p.booking?.tenant ?? null,
+          bookingId: p.booking?.id ?? null,
+        };
+      }
+      const reason = waitingForVerification
+        ? 'AWAITING_VERIFICATION'
+        : !p.recipient.accountNumber
+          ? 'NO_BANK_ACCOUNT'
+          : p.payoutLastError || !p.heldForVerificationAt
+            ? 'FAILED'
+            : 'READY'; // held for verification, and the rule no longer applies
+      return {
+        kind: 'PAYOUT' as const,
+        paymentId: p.id,
+        amountKobo: p.amount - p.platformFeeAmount,
+        paidAt: p.paidAt,
+        heldSince: p.heldForVerificationAt ?? p.payoutLastAttemptAt ?? p.paidAt,
+        reason,
+        lastError: p.payoutLastError ?? (p.heldForVerificationAt ? null : "The instant payout failed (details weren't recorded at the time)"),
+        attempts: p.payoutAttempts,
+        lastAttemptAt: p.payoutLastAttemptAt,
+        inProgress: !!p.moneyLockedAt && p.moneyLockedAt > new Date(Date.now() - PAYOUT_LOCK_MS),
+        requestedBy: null,
+        canRetry: !waitingForVerification && !!p.recipient.accountNumber,
+        canRetryRefund: false,
+        canRefundTenant: tenantRefundable,
+        landlord: {
+          id: p.recipient.id,
+          name: p.recipient.fullName || p.recipient.email,
+          email: p.recipient.email,
+          bankName: p.recipient.bankName,
+          accountLast4: p.recipient.accountNumber?.slice(-4) ?? null,
+          verified,
+        },
+        property: p.booking?.property ?? null,
+        tenant: p.booking?.tenant ?? null,
+        bookingId: p.booking?.id ?? null,
+      };
+    });
+  }
+
+  async stuckPayoutCount(): Promise<number> {
+    return (await this.stuckPayouts()).length;
+  }
+
+  /// Super admin "Retry refund": repeats exactly the refund that failed
+  /// (same requester, same amount rules), through the same locked,
+  /// check-Paystack-first refund flow.
+  async retryRefund(paymentId: string, adminId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { booking: { include: { property: true } } },
+    });
+    if (!payment?.booking || payment.purpose !== PaymentPurpose.RENTAL_BOOKING) throw new NotFoundException('Payment not found');
+    if (payment.status === PaymentStatus.REFUNDED) return { status: 'ALREADY_REFUNDED' as const };
+    const kind = payment.refundRequestedBy;
+    if (kind === 'TENANT') await this.refundBooking(payment.booking.id, 'TENANT', { actorId: payment.booking.tenantId });
+    else if (kind === 'LANDLORD') await this.refundBooking(payment.booking.id, 'LANDLORD', { actorId: payment.booking.property.landlordId });
+    else if (kind === 'ADMIN') {
+      await this.refundBooking(payment.booking.id, 'ADMIN', { actorId: adminId, reason: payment.refundReason ?? 'Retrying a refund that failed' });
+    } else throw new BadRequestException('There is no failed refund to retry for this payment');
+    return { status: 'REFUNDED' as const };
+  }
+
+  /// Super admin "Retry" on the Payouts screen. Goes through the same
+  /// release as everything else (one at a time, and Paystack is asked first
+  /// whether the transfer already went out), so pressing it twice — or
+  /// while an automatic release runs — can't pay the landlord twice.
+  async retryPayout(paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { booking: { include: { property: true, tenant: true } } },
+    });
+    if (!payment || payment.purpose !== PaymentPurpose.RENTAL_BOOKING || !payment.booking) {
+      throw new NotFoundException('Payout not found');
+    }
+    if (payment.status === PaymentStatus.RELEASED) return { status: 'ALREADY_PAID' as const };
+    if (payment.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment is not waiting for a payout');
+    const booking = payment.booking;
+    const landlord = await this.prisma.user.findUniqueOrThrow({
+      where: { id: booking.property.landlordId },
+      include: { identityVerification: { select: { status: true } } },
+    });
+    if (!(await this.platform.payUnverifiedLandlords()) && landlord.identityVerification?.status !== VerificationStatus.APPROVED) {
+      throw new BadRequestException(
+        'This landlord is not verified and "Pay unverified landlords" is off. Verify them (or turn that switch on) and it is paid automatically.',
+      );
+    }
+    const isLegacyShortlet = booking.property.category === PropertyCategory.SHORTLET && booking.status === BookingStatus.ACCEPTED;
+    if (!isLegacyShortlet && booking.status !== BookingStatus.MOVED_IN && booking.status !== BookingStatus.PAID) {
+      throw new BadRequestException("This rent is still held in escrow until the tenant moves in; it isn't owed to the landlord yet");
+    }
+
+    if (isLegacyShortlet) {
+      // Also confirms the stay that the earlier failure left unconfirmed.
+      await this.releaseShortletInstant(payment, booking);
+    } else {
+      await this.releasePaymentToRecipient(payment, {
+        bankCode: landlord.bankCode,
+        accountNumber: landlord.accountNumber,
+        accountName: landlord.accountName,
+        reason: `HomeServant payout — ${booking.property.title}`,
+      });
+      const naira = ((payment.amount - payment.platformFeeAmount) / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 });
+      await this.notifyBoth(
+        landlord.id,
+        landlord.email,
+        NotificationType.BOOKING_STATUS,
+        'Your payout has been sent',
+        `NGN ${naira} for ${booking.property.title} has been sent to your bank account.`,
+      );
+    }
+    const after = await this.prisma.payment.findUniqueOrThrow({ where: { id: paymentId }, select: { status: true, payoutLastError: true } });
+    if (after.status !== PaymentStatus.RELEASED) {
+      throw new BadRequestException(after.payoutLastError ?? 'The payout did not go through');
+    }
+    return { status: 'PAID' as const };
   }
 
   /// For Platform Controls: how much is currently held.

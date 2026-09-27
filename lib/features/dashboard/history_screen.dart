@@ -336,7 +336,7 @@ class _HistoryTileState extends State<_HistoryTile> {
       return 'Rejected by the landlord — refunded in full, no fee withheld';
     }
     if (booking.status == BookingStatus.refunded) {
-      return 'Refunded (0.2% platform fee withheld)';
+      return booking.refundedByHomeServant ? 'Refunded in full by HomeServant' : 'Refunded (0.2% platform fee withheld)';
     }
     if (booking.status == BookingStatus.inspectionProposed && booking.requestedDate != null) {
       return 'Inspection proposed for ${formatShortDate(booking.requestedDate!)} — awaiting landlord';

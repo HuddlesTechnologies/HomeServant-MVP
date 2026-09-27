@@ -178,6 +178,28 @@ model Payment {
   /// aren't verified and PlatformSettings.payUnverifiedLandlords is off.
   /// Cleared when it's released.
   heldForVerificationAt DateTime?
+  /// Payout bookkeeping — see PaymentsService.releasePaymentToRecipient.
+  /// [payoutReference] is the Paystack transfer reference of the latest
+  /// attempt, saved *before* the transfer is sent, so any retry first asks
+  /// Paystack whether that transfer already went out (never paying twice).
+  payoutReference       String?               @unique
+  payoutAttempts        Int                   @default(0)
+  payoutLastError       String?
+  payoutLastAttemptAt   DateTime?
+  /// Set while money is moving for this payment (a payout OR a refund).
+  /// Only one such action may run at a time, so a payment can never be both
+  /// paid out and refunded, or refunded twice — see PaymentsService.withMoneyLock.
+  moneyLockedAt         DateTime?
+  /// Refund bookkeeping. A failed refund keeps what was asked for, so an
+  /// admin can retry exactly that; Paystack is always asked first whether a
+  /// refund already exists for the charge (never refunding twice).
+  refundRequestedBy     String?
+  refundRequestedAmount Int?
+  refundLastError       String?
+  refundLastAttemptAt   DateTime?
+  /// Set when an admin refunded the tenant from the console, with why.
+  refundedById          String?
+  refundReason          String?
   status                PaymentStatus         @default(INITIATED)
   paidAt                DateTime?
   releasedAt            DateTime?

@@ -1,0 +1,60 @@
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { IsString, MaxLength, MinLength } from 'class-validator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { AdminLevel, UserRole } from '@prisma/client';
+import { MinAdminLevel } from '../common/decorators/min-admin-level.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { AdminLevelGuard } from '../common/guards/admin-level.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { MustChangePasswordGuard } from '../common/guards/must-change-password.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { PaymentsService } from '../payments/payments.service';
+
+class RefundTenantDto {
+  @IsString()
+  @MinLength(10, { message: 'Give a reason (at least 10 characters); the tenant and landlord see it' })
+  @MaxLength(500)
+  reason!: string;
+}
+
+/// Payouts needing attention (admin console) — SUPER_ADMIN only, since
+/// Retry moves money. Retry uses the same double-payment-safe release as
+/// every automatic payout (see PaymentsService.releasePaymentToRecipient).
+@Controller('admin/payouts')
+@UseGuards(JwtAuthGuard, RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
+@Roles(UserRole.ADMIN)
+@MinAdminLevel(AdminLevel.SUPER_ADMIN)
+export class AdminPayoutsController {
+  constructor(private readonly payments: PaymentsService) {}
+
+  @Get()
+  list() {
+    return this.payments.stuckPayouts();
+  }
+
+  @Get('count')
+  async count() {
+    return { count: await this.payments.stuckPayoutCount() };
+  }
+
+  @Post(':paymentId/retry')
+  @HttpCode(HttpStatus.OK)
+  retry(@Param('paymentId') paymentId: string) {
+    return this.payments.retryPayout(paymentId);
+  }
+
+  /// Retry a refund that failed, exactly as it was first asked for.
+  @Post(':paymentId/retry-refund')
+  @HttpCode(HttpStatus.OK)
+  retryRefund(@CurrentUser() user: AuthenticatedUser, @Param('paymentId') paymentId: string) {
+    return this.payments.retryRefund(paymentId, user.sub);
+  }
+
+  /// Refund the tenant in full (money still held, before move-in / stay).
+  @Post(':paymentId/refund-tenant')
+  @HttpCode(HttpStatus.OK)
+  refundTenant(@CurrentUser() user: AuthenticatedUser, @Param('paymentId') paymentId: string, @Body() dto: RefundTenantDto) {
+    return this.payments.adminRefundBooking(paymentId, user.sub, dto.reason);
+  }
+}

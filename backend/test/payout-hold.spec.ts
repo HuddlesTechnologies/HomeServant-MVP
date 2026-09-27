@@ -29,6 +29,7 @@ describeDb('payout hold for unverified landlords (real Postgres)', () => {
     settings = new PlatformSettingsService(prisma as never, notifier as never, mail as never);
     const paystack = {
       createTransferRecipient: async () => 'RCP_1',
+      verifyTransfer: async (reference: string) => (transfers.includes(reference) ? 'success' : 'not_found'),
       initiateTransfer: async (_amount: number, _code: string, _reason: string, reference: string) => void transfers.push(reference),
     };
     const chat = { postBookingSystemMessage: async () => undefined };

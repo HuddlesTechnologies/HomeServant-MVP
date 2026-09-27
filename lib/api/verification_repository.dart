@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'models/platform_settings.dart';
+import 'models/stuck_payment.dart';
 import 'models/verification.dart';
 
 /// Identity documents (backend VerificationController /
@@ -61,5 +62,33 @@ class VerificationRepository {
   Future<PlatformSettings> setRequireVerifiedLandlords(bool value) => _client.call(() async {
     final response = await _client.dio.patch('/admin/platform-settings', data: {'requireVerifiedLandlords': value});
     return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
+  });
+
+  // --- Payouts & refunds needing attention (super admin) -----------------------
+
+  Future<List<StuckPayment>> stuckPayments() => _client.call(() async {
+    final response = await _client.dio.get('/admin/payouts');
+    return (response.data as List).cast<Map<String, dynamic>>().map(StuckPayment.fromApi).toList();
+  });
+
+  Future<int> stuckPaymentCount() => _client.call(() async {
+    final response = await _client.dio.get('/admin/payouts/count');
+    return (response.data as Map<String, dynamic>)['count'] as int? ?? 0;
+  });
+
+  /// Returns 'PAID' or 'ALREADY_PAID'.
+  Future<String> retryPayout(String paymentId) => _client.call(() async {
+    final response = await _client.dio.post('/admin/payouts/$paymentId/retry');
+    return (response.data as Map<String, dynamic>)['status'] as String? ?? 'PAID';
+  });
+
+  /// Returns 'REFUNDED' or 'ALREADY_REFUNDED'.
+  Future<String> retryRefund(String paymentId) => _client.call(() async {
+    final response = await _client.dio.post('/admin/payouts/$paymentId/retry-refund');
+    return (response.data as Map<String, dynamic>)['status'] as String? ?? 'REFUNDED';
+  });
+
+  Future<void> refundTenant(String paymentId, String reason) => _client.call(() async {
+    await _client.dio.post('/admin/payouts/$paymentId/refund-tenant', data: {'reason': reason});
   });
 }

@@ -92,6 +92,7 @@ class Booking {
     this.tenantEmail,
     this.tenantPhone,
     this.tenantVerified = false,
+    this.refundedByHomeServant = false,
     this.tenantProfilePhotoUrl,
     this.tenantGender,
     this.tenantOccupation,
@@ -124,6 +125,9 @@ class Booking {
 
   /// HomeServant has verified this tenant's identity.
   final bool tenantVerified;
+
+  /// Refunded in full by a HomeServant admin (not the tenant's own refund).
+  final bool refundedByHomeServant;
   final String? tenantProfilePhotoUrl;
   final TenantGender? tenantGender;
   final String? tenantOccupation;
@@ -191,6 +195,7 @@ class Booking {
       tenantEmail: tenant?['email'] as String?,
       tenantPhone: tenant?['phoneNumber'] as String?,
       tenantVerified: (tenant?['identityVerification'] as Map<String, dynamic>?)?['status'] == 'APPROVED',
+      refundedByHomeServant: json['refundedByHomeServant'] as bool? ?? false,
       tenantProfilePhotoUrl: tenant?['profilePhotoUrl'] as String?,
       tenantGender: _genderFromApi(tenant?['gender'] as String?),
       tenantOccupation: tenant?['occupation'] as String?,

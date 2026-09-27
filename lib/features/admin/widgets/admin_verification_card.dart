@@ -10,15 +10,15 @@ import '../../../state/app_state.dart';
 import '../../../widgets/labeled_value_row.dart';
 import 'admin_badge.dart';
 
-const _red = Color(0xFFC53030);
-const _green = Color(0xFF2F855A);
-const _amber = Color(0xFFB7791F);
+const _red = Color(0xFFB42318);
+const _green = Color(0xFF1F6B45);
+const _amber = Color(0xFF8A5A0B);
 
 Color verificationStatusColor(VerificationStatus? status) => switch (status) {
   VerificationStatus.approved => _green,
   VerificationStatus.rejected => _red,
   VerificationStatus.pending => _amber,
-  _ => AppColors.hintGrey,
+  _ => const Color(0xFF5B6170),
 };
 
 /// "Identity verification" on an admin's user detail page: the full ID

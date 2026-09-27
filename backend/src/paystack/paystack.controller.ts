@@ -49,7 +49,10 @@ export class PaystackController {
   /// app had to change its body-parsing setup for this one route.
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  async webhook(@Req() req: RawBodyRequest<Request>, @Body() body: { event?: string; data?: { reference?: string } }) {
+  async webhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Body() body: { event?: string; data?: { reference?: string; reason?: string; gateway_response?: string } },
+  ) {
     const signature = req.headers['x-paystack-signature'];
     if (!req.rawBody || !this.paystack.verifyWebhookSignature(req.rawBody, signature)) {
       throw new UnauthorizedException('Invalid Paystack signature');
@@ -58,11 +61,19 @@ export class PaystackController {
     if (body.event === 'charge.success' && body.data?.reference) {
       await this.payments.handleChargeSuccess(body.data.reference);
     }
-    // Every other event (e.g. transfer.success/failed) is acknowledged but
-    // not acted on — transfer status isn't polled/reconciled by this app
-    // today; initiateTransfer's own synchronous response is what drives
-    // Payment.status = RELEASED. Ack with 200 regardless so Paystack
-    // doesn't keep retrying delivery of an event this app doesn't need.
+    // A payout Paystack accepted but the bank then failed or reversed: put
+    // it back as owed (with the reason) so it shows on the admin Payouts
+    // screen for a safe retry, instead of looking paid.
+    if ((body.event === 'transfer.failed' || body.event === 'transfer.reversed') && body.data?.reference) {
+      await this.payments.handleTransferFailed(
+        body.data.reference,
+        body.event === 'transfer.reversed' ? 'reversed' : 'failed',
+        body.data.gateway_response ?? body.data.reason,
+      );
+    }
+    // Other events (e.g. transfer.success) need nothing: a payout is
+    // already marked released when Paystack accepts it. Ack with 200 so
+    // Paystack doesn't keep retrying delivery.
     return { received: true };
   }
 }

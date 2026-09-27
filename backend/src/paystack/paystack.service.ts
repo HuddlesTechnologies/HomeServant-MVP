@@ -177,6 +177,48 @@ export class PaystackService {
     return { transferCode: body.data.transfer_code, status: body.data.status };
   }
 
+  /// Has a transfer with [reference] already been created at Paystack, and
+  /// in what state? `'not_found'` means Paystack has never seen it, so it
+  /// is safe to send with that reference. Any other outcome is Paystack's
+  /// own status (`success`, `pending`, `processing`, `otp`, `failed`,
+  /// `reversed`, ...). Throws if Paystack can't be asked — callers must
+  /// then NOT send (see PaymentsService.releasePaymentToRecipient).
+  async verifyTransfer(reference: string): Promise<'not_found' | string> {
+    const response = await fetch(`https://api.paystack.co/transfer/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    });
+    const body = (await response.json().catch(() => ({}))) as { status?: boolean; message?: string; data?: { status?: string } };
+    if (response.status === 404 || (body.status === false && /not found/i.test(body.message ?? ''))) return 'not_found';
+    if (!response.ok || !body.status || !body.data?.status) {
+      this.logger.error(`verifyTransfer failed for ${reference}: ${body.message ?? response.status}`);
+      throw new InternalServerErrorException("Couldn't check this payout with Paystack right now — nothing was sent. Try again shortly.");
+    }
+    return body.data.status.toLowerCase();
+  }
+
+  /// How much of the charge with [reference] has already been refunded (or
+  /// is being refunded), in kobo — failed refunds don't count. Asked before
+  /// every refund so a charge is never refunded twice. Throws if Paystack
+  /// can't be asked — callers must then NOT refund.
+  async refundedSoFar(reference: string): Promise<number> {
+    const headers = { Authorization: `Bearer ${this.secretKey}` };
+    const verify = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, { headers });
+    const tx = (await verify.json().catch(() => ({}))) as { status?: boolean; message?: string; data?: { id?: number } };
+    if (!verify.ok || !tx.status || !tx.data?.id) {
+      this.logger.error(`refundedSoFar: couldn't look up transaction ${reference}: ${tx.message ?? verify.status}`);
+      throw new InternalServerErrorException("Couldn't check this payment with Paystack right now — nothing was refunded. Try again shortly.");
+    }
+    const list = await fetch(`https://api.paystack.co/refund?transaction=${tx.data.id}&perPage=100`, { headers });
+    const refunds = (await list.json().catch(() => ({}))) as { status?: boolean; message?: string; data?: { amount?: number; status?: string }[] };
+    if (!list.ok || !refunds.status || !Array.isArray(refunds.data)) {
+      this.logger.error(`refundedSoFar: couldn't list refunds for ${reference}: ${refunds.message ?? list.status}`);
+      throw new InternalServerErrorException("Couldn't check this payment with Paystack right now — nothing was refunded. Try again shortly.");
+    }
+    return refunds.data
+      .filter((r) => !['failed', 'rejected'].includes((r.status ?? '').toLowerCase()))
+      .reduce((sum, r) => sum + (r.amount ?? 0), 0);
+  }
+
   /// Issues a Paystack refund for a previously-charged transaction.
   /// [amountKobo] omitted refunds the full original charge; passed, it
   /// refunds only that much (used for the rental pre-move-in refund path,

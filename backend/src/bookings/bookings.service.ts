@@ -102,15 +102,21 @@ export class BookingsService {
     const [bookings, requireVerified] = await Promise.all([
       this.prisma.booking.findMany({
         where: { tenantId },
-        include: { property: { include: PlatformSettingsService.landlordStatusInclude }, tenancyAgreement: true },
+        include: {
+          property: { include: PlatformSettingsService.landlordStatusInclude },
+          tenancyAgreement: true,
+          payments: { where: { status: 'REFUNDED' }, select: { refundedById: true }, take: 1 },
+        },
         orderBy: { createdAt: 'desc' },
       }),
       this.platform.requireVerifiedLandlords(),
     ]);
     // Flags let History explain a booked listing that Platform Controls now
     // hides from browsing; the booking itself carries on unaffected.
-    return bookings.map(({ property: { landlord, ...property }, ...booking }) => ({
+    return bookings.map(({ property: { landlord, ...property }, payments, ...booking }) => ({
       ...booking,
+      // An admin refund is always in full (the tenant's own keeps 0.2%).
+      refundedByHomeServant: payments.some((p) => !!p.refundedById),
       property: { ...property, ...PlatformSettingsService.listingFlags(landlord.identityVerification?.status, requireVerified) },
     }));
   }
