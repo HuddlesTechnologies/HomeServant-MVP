@@ -38,7 +38,7 @@
   <tr><th style="width:24%">Module</th><th>Responsibility</th></tr>
   <tr><td><code>auth</code></td><td>Signup and verification, login, Google, 2FA, JWT issuing and refresh, password reset and change, deactivate and delete, cleanup of deactivated accounts.</td></tr>
   <tr><td><code>users</code></td><td>Own profile (<code>/users/me</code>), bank details, the <code>profileCompletedAt</code> flag.</td></tr>
-  <tr><td><code>properties</code></td><td>Listings: browse, create, update, delete.</td></tr>
+  <tr><td><code>properties</code></td><td>Listings: browse, create, update, delete. A delete cascades to the listing's bookings and payment records, so <code>PropertiesService.deletionBlockReason</code> refuses it while the property is occupied (an unexpired MOVED_IN lease, a current or upcoming Shortlet stay, or <code>isOccupied</code>), while a tenant's payment is held in escrow before move-in, or while a payment was started in the last two hours. Open reports also block it.</td></tr>
   <tr><td><code>bookings</code></td><td>Rentals and shortlets: requests, payment, inspection, move-in, refund, reject, renew, tenancy agreement; the lease life-cycle job.</td></tr>
   <tr><td><code>payments</code></td><td>The single home for escrow money movement (charge, hold, release, refund).</td></tr>
   <tr><td><code>paystack</code></td><td>Paystack HTTP client, bank list and account-name lookup, webhook route.</td></tr>

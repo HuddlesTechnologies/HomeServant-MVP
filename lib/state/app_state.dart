@@ -686,6 +686,17 @@ class AppState extends ChangeNotifier {
     return updated;
   }
 
+  /// `DELETE /properties/:id`. The server refuses while the property is
+  /// occupied or a tenant's payment is in play (PropertiesService
+  /// .deletionBlockReason) — that ApiException's message says why.
+  Future<void> deleteLandlordProperty(String id) async {
+    await _propertiesRepo.remove(id);
+    _landlordProperties = [for (final p in _landlordProperties) if (p.id != id) p];
+    properties = [for (final p in properties) if (p.id != id) p];
+    _favorites = [for (final p in _favorites) if (p.id != id) p];
+    notifyListeners();
+  }
+
   // --- Wishlist ----------------------------------------------------------
 
   List<Property> _favorites = [];
