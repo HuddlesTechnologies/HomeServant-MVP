@@ -9,6 +9,8 @@ import '../../core/thousands_separator.dart';
 import '../../state/app_state.dart';
 import 'admin_user_detail_screen.dart';
 import 'admin_vendor_detail_screen.dart';
+import '../../widgets/labeled_value_row.dart';
+import 'widgets/admin_badge.dart';
 
 /// Full order detail — reached by tapping an order row (Marketplace tab's
 /// Orders segment or the dashboard's activity feed). Read-only: there's no
@@ -108,9 +110,9 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                           ],
                         ),
                         const SizedBox(height: 14),
-                        _Field('Buyer Email', order.buyerEmail ?? '—'),
-                        _Field('Items', '${order.items.length}'),
-                        _Field('Placed', formatShortDate(order.createdAt)),
+                        _field('Buyer Email', order.buyerEmail ?? '—'),
+                        _field('Items', '${order.items.length}'),
+                        _field('Placed', formatShortDate(order.createdAt)),
                         if (order.buyerId != null) ...[
                           const SizedBox(height: 12),
                           OutlinedButton.icon(
@@ -143,16 +145,16 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              _Badge(text: _titleCase(item.status), color: _statusColor(item.status)),
+                              AdminBadge(size: AdminBadgeSize.large, text: _titleCase(item.status), color: _statusColor(item.status)),
                             ],
                           ),
                           const SizedBox(height: 8),
-                          _Field('Unit Price', '₦${formatWithThousandsSeparator(item.unitPrice)}'),
-                          _Field('Subtotal', '₦${formatWithThousandsSeparator(item.unitPrice * item.quantity)}'),
-                          _Field('Fulfillment', _titleCase(item.fulfillment)),
-                          if (item.trackingNumber != null) _Field('Tracking #', item.trackingNumber!),
-                          if (item.shippedAt != null) _Field('Shipped', formatShortDate(item.shippedAt!)),
-                          _Field('Vendor', item.vendorName ?? 'Unknown vendor'),
+                          _field('Unit Price', '₦${formatWithThousandsSeparator(item.unitPrice)}'),
+                          _field('Subtotal', '₦${formatWithThousandsSeparator(item.unitPrice * item.quantity)}'),
+                          _field('Fulfillment', _titleCase(item.fulfillment)),
+                          if (item.trackingNumber != null) _field('Tracking #', item.trackingNumber!),
+                          if (item.shippedAt != null) _field('Shipped', formatShortDate(item.shippedAt!)),
+                          _field('Vendor', item.vendorName ?? 'Unknown vendor'),
                           if (item.vendorId != null) ...[
                             const SizedBox(height: 8),
                             OutlinedButton.icon(
@@ -177,44 +179,5 @@ class _AdminOrderDetailScreenState extends State<AdminOrderDetailScreen> {
   }
 }
 
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
-          ),
-          Expanded(
-            child: Text(value, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
-      child: Text(text, style: AppTextStyles.body(color: color, size: 11, weight: FontWeight.w700)),
-    );
-  }
-}
+LabeledValueRow _field(String label, String value) =>
+    LabeledValueRow(label, value, labelWidth: 110, verticalPadding: 4);

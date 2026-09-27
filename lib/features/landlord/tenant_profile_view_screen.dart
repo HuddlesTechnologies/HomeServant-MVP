@@ -3,6 +3,7 @@ import '../../api/models/booking.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../widgets/upload_picker.dart';
+import '../../widgets/labeled_value_row.dart';
 
 /// Read-only tenant profile — reached from a landlord's booking row via
 /// "View Tenant Profile". Shows only what `GET /bookings/landlord` already
@@ -77,10 +78,10 @@ class TenantProfileViewScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (age != null) _Field('Age', '$age'),
-                  if (booking.tenantGender != null) _Field('Gender', booking.tenantGender!.label),
-                  if (occupation != null && occupation.isNotEmpty) _Field('Occupation', occupation),
-                  if (booking.tenantMaritalStatus != null) _Field('Marital Status', booking.tenantMaritalStatus!.label),
+                  if (age != null) _field('Age', '$age'),
+                  if (booking.tenantGender != null) _field('Gender', booking.tenantGender!.label),
+                  if (occupation != null && occupation.isNotEmpty) _field('Occupation', occupation),
+                  if (booking.tenantMaritalStatus != null) _field('Marital Status', booking.tenantMaritalStatus!.label),
                   if (!hasAnyDetail)
                     Text(
                       "This tenant hasn't filled in these profile details yet.",
@@ -96,23 +97,5 @@ class TenantProfileViewScreen extends StatelessWidget {
   }
 }
 
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(width: 120, child: Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5))),
-          Expanded(child: Text(value, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600))),
-        ],
-      ),
-    );
-  }
-}
+LabeledValueRow _field(String label, String value) =>
+    LabeledValueRow(label, value, labelWidth: 120);

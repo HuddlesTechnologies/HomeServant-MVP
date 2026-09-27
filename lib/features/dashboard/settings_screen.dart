@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/responsive.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
@@ -13,6 +12,7 @@ import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/support_sheet.dart';
 import 'legal/tenancy_agreements_screen.dart';
 import 'privacy_terms_screen.dart';
+import '../../widgets/confirm_sheet.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.theme, required this.onAccountClosed});
@@ -243,7 +243,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _onToggleTwoFactor(BuildContext context, AppState appState, bool value) async {
-    final confirmed = await _confirmSheet(
+    final confirmed = await showConfirmSheet(
       context,
       title: value ? 'Turn on Two-Factor Authentication?' : 'Turn off Two-Factor Authentication?',
       body: value
@@ -290,7 +290,7 @@ class SettingsScreen extends StatelessWidget {
     required String actionLabel,
     required Future<void> Function() onConfirmed,
   }) async {
-    final confirmed = await _confirmSheet(context, title: title, body: body, actionLabel: actionLabel, destructive: true);
+    final confirmed = await showConfirmSheet(context, title: title, body: body, actionLabel: actionLabel, destructive: true);
     if (!confirmed) return;
     try {
       await onConfirmed();
@@ -300,21 +300,6 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
-  Future<bool> _confirmSheet(
-    BuildContext context, {
-    required String title,
-    required String body,
-    required String actionLabel,
-    bool destructive = false,
-  }) async {
-    final result = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: AppColors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => _ConfirmSheet(title: title, body: body, actionLabel: actionLabel, destructive: destructive),
-    );
-    return result ?? false;
-  }
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -453,61 +438,6 @@ class _NavRow extends StatelessWidget {
         ),
         if (showDivider) Divider(color: theme.onSurface.withValues(alpha: 0.1), height: 1),
       ],
-    );
-  }
-}
-
-class _ConfirmSheet extends StatelessWidget {
-  const _ConfirmSheet({required this.title, required this.body, required this.actionLabel, this.destructive = false});
-
-  final String title;
-  final String body;
-  final String actionLabel;
-  final bool destructive;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: AppTextStyles.heading(color: AppColors.navy, size: 19)),
-            const SizedBox(height: 8),
-            Text(body, style: AppTextStyles.body(color: AppColors.hintGrey, size: 14)),
-            const SizedBox(height: 22),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: AppColors.navy),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    ),
-                    child: Text('Cancel', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: destructive ? Colors.redAccent : AppColors.navy,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    ),
-                    child: Text(actionLabel, style: AppTextStyles.button(color: Colors.white, size: 14)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

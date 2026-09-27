@@ -13,6 +13,8 @@ import '../../widgets/upload_picker.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
+import '../../widgets/labeled_value_row.dart';
+import 'widgets/admin_badge.dart';
 
 /// Full account detail for a single user — reached by tapping a row in
 /// AdminUsersTab. Shows every field the backend will hand back (see
@@ -388,24 +390,24 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                               spacing: 6,
                               runSpacing: 6,
                               children: [
-                                _Badge(text: user.role.adminLabel, color: AppColors.navy),
+                                AdminBadge(text: user.role.adminLabel, color: AppColors.navy),
                                 if (user.role != UserRole.vendor && user.vendorBusinessName != null)
-                                  const _Badge(text: 'Also a Vendor', color: Colors.teal),
-                                if (user.isDeactivated) const _Badge(text: 'Deactivated', color: Colors.redAccent),
+                                  const AdminBadge(text: 'Also a Vendor', color: Colors.teal),
+                                if (user.isDeactivated) const AdminBadge(text: 'Deactivated', color: Colors.redAccent),
                               ],
                             ),
                           ],
                         ),
                         const SizedBox(height: 14),
-                        _Field('Email', user.email),
-                        _Field('Phone Number', user.phoneNumber ?? '—'),
-                        _Field('House Address', user.houseAddress ?? '—'),
-                        _Field('Date of Birth', user.dateOfBirth != null ? formatShortDate(user.dateOfBirth!) : '—'),
-                        _Field('Email Verified', user.emailVerifiedAt != null ? formatShortDate(user.emailVerifiedAt!) : 'Not verified'),
-                        _Field('Two-Factor Auth', user.twoFactorEnabled ? 'Enabled' : 'Disabled'),
-                        _Field('Referral Code', user.referralCode ?? '—'),
-                        _Field('Joined', formatShortDate(user.createdAt)),
-                        _Field(
+                        LabeledValueRow('Email', user.email),
+                        LabeledValueRow('Phone Number', user.phoneNumber ?? '—'),
+                        LabeledValueRow('House Address', user.houseAddress ?? '—'),
+                        LabeledValueRow('Date of Birth', user.dateOfBirth != null ? formatShortDate(user.dateOfBirth!) : '—'),
+                        LabeledValueRow('Email Verified', user.emailVerifiedAt != null ? formatShortDate(user.emailVerifiedAt!) : 'Not verified'),
+                        LabeledValueRow('Two-Factor Auth', user.twoFactorEnabled ? 'Enabled' : 'Disabled'),
+                        LabeledValueRow('Referral Code', user.referralCode ?? '—'),
+                        LabeledValueRow('Joined', formatShortDate(user.createdAt)),
+                        LabeledValueRow(
                           'Status',
                           user.isOnline
                               ? 'Active now'
@@ -413,8 +415,8 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                                   ? 'Last active ${formatRelativeTime(user.lastActiveAt!)}'
                                   : 'Never connected',
                         ),
-                        _Field('Last Login IP', user.lastLoginIp ?? '—'),
-                        _Field('Device', user.lastLoginDeviceModel ?? '—'),
+                        LabeledValueRow('Last Login IP', user.lastLoginIp ?? '—'),
+                        LabeledValueRow('Device', user.lastLoginDeviceModel ?? '—'),
                       ],
                     ),
                   ),
@@ -428,9 +430,9 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                         children: [
                           Text('Payout Account', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
                           const SizedBox(height: 10),
-                          _Field('Bank', user.bankName ?? '—'),
-                          _Field('Account Number', user.accountNumber ?? '—'),
-                          _Field('Account Name', user.accountName ?? '—'),
+                          LabeledValueRow('Bank', user.bankName ?? '—'),
+                          LabeledValueRow('Account Number', user.accountNumber ?? '—'),
+                          LabeledValueRow('Account Name', user.accountName ?? '—'),
                         ],
                       ),
                     ),
@@ -445,9 +447,9 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                         children: [
                           Text('Vendor Shop', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
                           const SizedBox(height: 10),
-                          _Field('Business Name', user.vendorBusinessName!),
-                          _Field('Status', user.vendorStatus ?? '—'),
-                          _Field('Active', (user.vendorIsActive ?? false) ? 'Yes' : 'No'),
+                          LabeledValueRow('Business Name', user.vendorBusinessName!),
+                          LabeledValueRow('Status', user.vendorStatus ?? '—'),
+                          LabeledValueRow('Active', (user.vendorIsActive ?? false) ? 'Yes' : 'No'),
                         ],
                       ),
                     ),
@@ -461,11 +463,11 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                       children: [
                         Text('Activity', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
                         const SizedBox(height: 10),
-                        _Field('Properties Listed', '${user.propertiesCount}'),
-                        _Field('Bookings', '${user.bookingsCount}'),
-                        _Field('Marketplace Orders', '${user.marketplaceOrdersCount}'),
-                        _Field('Favorites', '${user.favoritesCount}'),
-                        _Field('Reviews Written', '${user.reviewsCount}'),
+                        LabeledValueRow('Properties Listed', '${user.propertiesCount}'),
+                        LabeledValueRow('Bookings', '${user.bookingsCount}'),
+                        LabeledValueRow('Marketplace Orders', '${user.marketplaceOrdersCount}'),
+                        LabeledValueRow('Favorites', '${user.favoritesCount}'),
+                        LabeledValueRow('Reviews Written', '${user.reviewsCount}'),
                       ],
                     ),
                   ),
@@ -710,44 +712,3 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   }
 }
 
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
-          ),
-          Expanded(
-            child: Text(value, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: AppTextStyles.body(color: color, size: 10.5, weight: FontWeight.w700)),
-    );
-  }
-}

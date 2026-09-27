@@ -9,6 +9,8 @@ import '../dashboard/models/property.dart';
 import '../dashboard/widgets/property_image.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
+import '../../widgets/labeled_value_row.dart';
+import 'widgets/admin_badge.dart';
 
 /// Every detail an admin can see about a listing — reached by tapping a
 /// row in AdminPropertiesTab, which previously had no detail view at all.
@@ -135,25 +137,25 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
                             Expanded(
                               child: Text(property.title, style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
                             ),
-                            if (property.isOccupied) const _Badge(text: 'Occupied', color: Colors.orange),
+                            if (property.isOccupied) const AdminBadge(text: 'Occupied', color: Colors.orange),
                           ],
                         ),
                         const SizedBox(height: 14),
-                        _Field('Listing #', property.listingNumber?.toString() ?? '—'),
-                        _Field('Location', property.location),
-                        _Field('State', property.state),
-                        _Field('Category', property.category),
-                        _Field('Price', '₦${formatWithThousandsSeparator(property.price)}/${property.priceUnit}'),
-                        _Field('Bedrooms', '${property.bedrooms}'),
-                        _Field('Bathrooms', '${property.bathrooms}'),
+                        LabeledValueRow('Listing #', property.listingNumber?.toString() ?? '—'),
+                        LabeledValueRow('Location', property.location),
+                        LabeledValueRow('State', property.state),
+                        LabeledValueRow('Category', property.category),
+                        LabeledValueRow('Price', '₦${formatWithThousandsSeparator(property.price)}/${property.priceUnit}'),
+                        LabeledValueRow('Bedrooms', '${property.bedrooms}'),
+                        LabeledValueRow('Bathrooms', '${property.bathrooms}'),
                         if (property.rentDurationMonths != null)
-                          _Field('Lease Duration', '${property.rentDurationMonths} months'),
+                          LabeledValueRow('Lease Duration', '${property.rentDurationMonths} months'),
                         if (property.unitAddress != null && property.unitAddress!.isNotEmpty)
-                          _Field('Unit Address', property.unitAddress!),
+                          LabeledValueRow('Unit Address', property.unitAddress!),
                         if (property.roomNumber != null && property.roomNumber!.isNotEmpty)
-                          _Field('Room Number', property.roomNumber!),
-                        _Field('Messaging Enabled', property.messagingEnabled ? 'Yes' : 'No'),
-                        _Field('Landlord', property.landlordName),
+                          LabeledValueRow('Room Number', property.roomNumber!),
+                        LabeledValueRow('Messaging Enabled', property.messagingEnabled ? 'Yes' : 'No'),
+                        LabeledValueRow('Landlord', property.landlordName),
                       ],
                     ),
                   ),
@@ -203,44 +205,3 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
   }
 }
 
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
-          ),
-          Expanded(
-            child: Text(value, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: AppTextStyles.body(color: color, size: 10.5, weight: FontWeight.w700)),
-    );
-  }
-}

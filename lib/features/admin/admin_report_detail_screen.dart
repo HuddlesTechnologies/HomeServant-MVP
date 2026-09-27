@@ -11,6 +11,8 @@ import 'admin_user_detail_screen.dart';
 import 'admin_vendor_detail_screen.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_picker_sheet.dart';
+import '../../widgets/labeled_value_row.dart';
+import 'widgets/report_status_badge.dart';
 
 /// Full report detail — reached by tapping a row in AdminReportsTab or the
 /// dashboard's activity feed. Owns the status/transfer actions that used to
@@ -134,7 +136,7 @@ class _AdminReportDetailScreenState extends State<AdminReportDetailScreen> {
                               child: Text(report.targetLabel, style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
                             ),
                             const SizedBox(width: 8),
-                            _StatusBadge(status: report.status),
+                            ReportStatusBadge(status: report.status),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -143,10 +145,10 @@ class _AdminReportDetailScreenState extends State<AdminReportDetailScreen> {
                           style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5, weight: FontWeight.w600),
                         ),
                         const SizedBox(height: 14),
-                        _Field('Reason', report.reason),
-                        _Field('Filed', formatShortDate(report.createdAt)),
-                        _Field('Reporter', report.reporter?.displayName ?? 'Unknown'),
-                        _Field('Assigned To', report.assignedAdmin?.displayName ?? 'Unassigned'),
+                        _field('Reason', report.reason),
+                        _field('Filed', formatShortDate(report.createdAt)),
+                        _field('Reporter', report.reporter?.displayName ?? 'Unknown'),
+                        _field('Assigned To', report.assignedAdmin?.displayName ?? 'Unassigned'),
                         const SizedBox(height: 12),
                         Wrap(
                           spacing: 8,
@@ -223,49 +225,5 @@ class _AdminReportDetailScreenState extends State<AdminReportDetailScreen> {
   }
 }
 
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
-          ),
-          Expanded(
-            child: Text(value, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-
-  final ReportStatus status;
-
-  Color get _color => switch (status) {
-    ReportStatus.open => Colors.redAccent,
-    ReportStatus.inProgress => Colors.orange,
-    ReportStatus.resolved => Colors.green,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: _color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
-      child: Text(status.label, style: AppTextStyles.body(color: _color, size: 11, weight: FontWeight.w700)),
-    );
-  }
-}
+LabeledValueRow _field(String label, String value) =>
+    LabeledValueRow(label, value, labelWidth: 110);
