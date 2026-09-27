@@ -299,6 +299,7 @@ model User {
   evictionsReviewed      EvictionRequest[]      @relation("EvictionReviewer")
   identityVerification   IdentityVerification?  @relation("VerificationSubject")
   verificationsReviewed  IdentityVerification[] @relation("VerificationReviewer")
+  platformSettingsEdits  PlatformSettings[]     @relation("PlatformSettingsEditor")
   favorites              Favorite[]
   refreshTokens          RefreshToken[]
   otpCodes               OtpCode[]
@@ -1187,4 +1188,18 @@ model IdentityVerification {
   updatedAt       DateTime           @updatedAt
 
   @@index([status])
+}
+
+/// Platform-wide switches super admins control from the console (Platform
+/// Controls). A single row, id 1 — see PlatformSettingsService.
+model PlatformSettings {
+  id                       Int      @id @default(1)
+  /// When on, browse and search only show listings from landlords whose
+  /// identity has been verified (IdentityVerification APPROVED), and new
+  /// bookings on an unverified landlord's property are refused. Landlords
+  /// still see their own listings; existing tenancies are untouched.
+  requireVerifiedLandlords Boolean  @default(false)
+  updatedById              String?
+  updatedBy                User?    @relation("PlatformSettingsEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt                DateTime @updatedAt
 }

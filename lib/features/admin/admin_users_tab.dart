@@ -15,6 +15,8 @@ import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
+import '../../widgets/verified_badge.dart';
+import '../../api/models/verification.dart';
 import 'widgets/admin_badge.dart';
 
 class AdminUsersTab extends StatefulWidget {
@@ -202,6 +204,8 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                                           style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
                                         ),
                                         AdminBadge(text: user.role.adminLabel, color: AppColors.navy),
+                                        if (user.verificationStatus == VerificationStatus.approved)
+                                          const VerifiedBadge(textColor: AppColors.navy, size: 11),
                                         if (user.isVendor && user.role != UserRole.vendor)
                                           const AdminBadge(text: 'Also a Vendor', color: Colors.teal),
                                         if (user.isDeactivated) const AdminBadge(text: 'Deactivated', color: Colors.redAccent),

@@ -137,6 +137,38 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
               ],
             ),
             const SizedBox(height: 20),
+            if (context.watch<AppState>().listingsHiddenUntilVerified) ...[
+              // White card, navy text + dark red warning: fixed pair in every theme.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.visibility_off_outlined, color: Color(0xFFA61B1B), size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Your listings are hidden from tenants',
+                            style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'HomeServant only shows listings from verified landlords. Yours will appear as soon as your identity is verified.',
+                            style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.75), size: 12.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             Row(
               children: [
                 Expanded(

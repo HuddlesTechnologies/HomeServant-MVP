@@ -27,6 +27,7 @@ class Property {
     this.roomNumber,
     this.shortletUnavailable = false,
     this.shortletUnavailableUntil,
+    this.landlordVerified = false,
   });
 
   /// Builds a [Property] from a `GET /properties` / `GET /properties/:id`
@@ -69,6 +70,7 @@ class Property {
           (json['shortletUnavailable'] as bool?) ??
           (json['isShortletUnavailable'] as bool?) ??
           false,
+      landlordVerified: json['landlordVerified'] as bool? ?? false,
       shortletUnavailableUntil: _parseDate(json['availableAgainAt']) ??
           _parseDate(json['shortletUnavailableUntil']) ??
           _parseDate(json['unavailableUntil']),
@@ -149,6 +151,7 @@ class Property {
     roomNumber: roomNumber ?? this.roomNumber,
     shortletUnavailable: shortletUnavailable,
     shortletUnavailableUntil: shortletUnavailableUntil,
+    landlordVerified: landlordVerified,
   );
 
   static String _categoryFromApi(String value) => switch (value) {
@@ -169,6 +172,10 @@ class Property {
 
   /// Stable key used to track this listing in the wishlist — titles alone
   /// aren't guaranteed unique once real listings replace the mock data.
+  /// The landlord's identity has been verified by HomeServant (shows the
+  /// "Verified landlord" badge).
+  final bool landlordVerified;
+
   final String id;
 
   final String title;

@@ -22,6 +22,7 @@ import '../api/evictions_repository.dart';
 import '../api/models/eviction.dart';
 import '../api/push_repository.dart';
 import '../api/verification_repository.dart';
+import '../api/models/verification.dart';
 import '../services/browser_notifications.dart';
 import '../api/support_tools_repository.dart';
 import '../api/reviews_repository.dart';
@@ -189,6 +190,13 @@ class AppState extends ChangeNotifier {
   /// real, from the server (see [_applyUser]); the backend assigns one
   /// lazily on first `GET /users/me` if an account predates this field.
   String myReferralCode = '';
+
+  /// This account's identity verification (see VerificationService); null
+  /// when nothing was submitted. [verificationNote] says what to fix when
+  /// rejected.
+  VerificationStatus? verificationStatus;
+  String? verificationNote;
+  bool listingsHiddenUntilVerified = false;
 
   /// A local file path/blob URL while a freshly-picked photo hasn't been
   /// uploaded yet, or the persisted `https://` URL once it has — see
@@ -466,6 +474,11 @@ class AppState extends ChangeNotifier {
     accountNumber = user.accountNumber;
     accountName = user.accountName;
     if (user.referralCode != null) myReferralCode = user.referralCode!;
+    if (user.verificationStatus != null || user.hasFullProfile) {
+      verificationStatus = user.verificationStatus;
+      verificationNote = user.verificationNote;
+      listingsHiddenUntilVerified = user.listingsHiddenUntilVerified;
+    }
     notifyListeners();
   }
 
@@ -478,6 +491,9 @@ class AppState extends ChangeNotifier {
     phoneNumber = '';
     houseAddress = '';
     myReferralCode = '';
+    verificationStatus = null;
+    verificationNote = null;
+    listingsHiddenUntilVerified = false;
     dateOfBirth = null;
     gender = null;
     occupation = null;
@@ -898,6 +914,9 @@ class AppState extends ChangeNotifier {
   /// picking it up on the next login.
   void _handleRealtimeNotification(AppNotification notification) {
     if (notification.type != NotificationType.bookingStatus) return;
+    // An identity review decision (VerificationService.review) — refresh
+    // so the profile's verification card updates without a reload.
+    if (notification.title.startsWith('Your identity')) unawaited(refreshProfile().catchError((_) {}));
     if (role == UserRole.landlord) {
       unawaited(loadLandlordBookings());
     } else if (role == UserRole.tenant) {

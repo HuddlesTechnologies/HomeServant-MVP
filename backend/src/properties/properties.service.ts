@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, PaymentStatus, Prisma, PropertyCategory } from '@prisma/client';
+import { BookingStatus, PaymentStatus, Prisma, PropertyCategory, VerificationStatus } from '@prisma/client';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { StorageService } from '../storage/storage.service';
@@ -15,12 +16,30 @@ interface ShortletAvailability {
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/// The landlord fields every listing response carries, including whether
+/// their identity is verified (for the "Verified" badge).
+const landlordInclude = {
+  landlord: { select: { id: true, fullName: true, identityVerification: { select: { status: true } } } },
+} as const;
+
+type WithLandlordVerification = {
+  landlord: { id: string; fullName: string | null; identityVerification: { status: VerificationStatus } | null };
+};
+
+/// Flattens the landlord's verification into `landlordVerified`, and drops
+/// the nested record from the response.
+function withLandlordVerified<T extends WithLandlordVerification>(p: T) {
+  const { identityVerification, ...landlord } = p.landlord;
+  return { ...p, landlord, landlordVerified: identityVerification?.status === VerificationStatus.APPROVED };
+}
+
 @Injectable()
 export class PropertiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly reviews: ReviewsService,
     private readonly storage: StorageService,
+    private readonly platform: PlatformSettingsService,
   ) {}
 
   private async verifyImages(dto: { imageUrl?: string; galleryUrls?: string[] }): Promise<void> {
@@ -43,6 +62,12 @@ export class PropertiesService {
       // logging back in" promise on the Settings screen.
       landlord: { deactivatedAt: null },
     };
+    // Platform Controls: only verified landlords' listings in general
+    // browsing. A landlord fetching their own listings (landlordId) still
+    // sees them all.
+    if (!query.landlordId && (await this.platform.requireVerifiedLandlords())) {
+      where.landlord = { deactivatedAt: null, ...PlatformSettingsService.verifiedLandlordFilter() };
+    }
 
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
@@ -50,7 +75,7 @@ export class PropertiesService {
     const [items, total] = await Promise.all([
       this.prisma.property.findMany({
         where,
-        include: { landlord: { select: { id: true, fullName: true } } },
+        include: landlordInclude,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -61,7 +86,7 @@ export class PropertiesService {
     const ratings = await this.reviews.summaryForProperties(items.map((p) => p.id));
     const shortletAvailability = await this.shortletAvailabilityForProperties(items);
     return {
-      items: items.map((p) => ({
+      items: items.map(withLandlordVerified).map((p) => ({
         ...p,
         ...(ratings.get(p.id) ?? { avgRating: 0, reviewCount: 0 }),
         ...(shortletAvailability.get(p.id) ?? {}),
@@ -75,12 +100,16 @@ export class PropertiesService {
   async findOne(id: string) {
     const property = await this.prisma.property.findUnique({
       where: { id },
-      include: { landlord: { select: { id: true, fullName: true } } },
+      include: landlordInclude,
     });
     if (!property) throw new NotFoundException('Property not found');
     const ratings = await this.reviews.summaryForProperties([id]);
     const shortletAvailability = await this.shortletAvailabilityForProperties([property]);
-    return { ...property, ...(ratings.get(id) ?? { avgRating: 0, reviewCount: 0 }), ...(shortletAvailability.get(id) ?? {}) };
+    return {
+      ...withLandlordVerified(property),
+      ...(ratings.get(id) ?? { avgRating: 0, reviewCount: 0 }),
+      ...(shortletAvailability.get(id) ?? {}),
+    };
   }
 
   /// A Shortlet's "unavailable"/countdown state is derived, never stored —

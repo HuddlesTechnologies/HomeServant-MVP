@@ -10,6 +10,7 @@ import '../dashboard/edit_profile_screen.dart';
 import '../dashboard/notifications_screen.dart';
 import 'landlord_add_property_screen.dart';
 import 'landlord_tenants_screen.dart';
+import '../../widgets/verified_badge.dart';
 import '../../widgets/bank_details_screen.dart';
 
 /// Profile Settings tab of the redesigned landlord dashboard — a fixed
@@ -33,6 +34,12 @@ class LandlordProfileScreen extends StatelessWidget {
     final dividerColor = Colors.white.withValues(alpha: 0.15);
 
     return ProfileMenuScaffold(
+      // White card with navy text, readable on every theme's background.
+      status: VerificationStatusCard(
+        status: context.watch<AppState>().verificationStatus,
+        note: context.watch<AppState>().verificationNote,
+        listingsHidden: context.watch<AppState>().listingsHiddenUntilVerified,
+      ),
       backgroundColor: AppColors.navy,
       iconColor: AppColors.gold,
       labelColor: Colors.white,

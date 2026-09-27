@@ -1,5 +1,6 @@
 import '../../models/user_role.dart';
 import 'vendor.dart';
+import 'verification.dart';
 
 /// Ranked low to high — matches the backend's declaration order
 /// (SUPPORT < MODERATOR < SUPER_ADMIN, see AdminLevel in
@@ -148,6 +149,7 @@ class AdminUser {
     this.deactivatedAt,
     required this.createdAt,
     this.isVendor = false,
+    this.verificationStatus,
   });
 
   final String id;
@@ -166,6 +168,9 @@ class AdminUser {
   /// one that doesn't. See AdminService.findUsers.
   final bool isVendor;
 
+  /// Identity verification status (null = never submitted).
+  final VerificationStatus? verificationStatus;
+
   bool get isDeactivated => deactivatedAt != null;
 
   factory AdminUser.fromApi(Map<String, dynamic> json) => AdminUser(
@@ -179,6 +184,7 @@ class AdminUser {
     deactivatedAt: json['deactivatedAt'] != null ? DateTime.parse(json['deactivatedAt'] as String) : null,
     createdAt: DateTime.parse(json['createdAt'] as String),
     isVendor: json['vendorProfile'] != null,
+    verificationStatus: VerificationStatus.fromApi((json['identityVerification'] as Map<String, dynamic>?)?['status'] as String?),
   );
 }
 
@@ -204,6 +210,7 @@ class AdminUserDetail {
     this.accountName,
     this.referralCode,
     required this.createdAt,
+    this.verificationStatus,
     this.vendorBusinessName,
     this.vendorStatus,
     this.vendorIsActive,
@@ -250,6 +257,9 @@ class AdminUserDetail {
   final DateTime? lastActiveAt;
   final String? lastLoginIp;
   final String? lastLoginDeviceModel;
+
+  /// Identity verification status (null = never submitted).
+  final VerificationStatus? verificationStatus;
 
   final String? vendorBusinessName;
   final String? vendorStatus;
@@ -308,6 +318,7 @@ class AdminUserDetail {
       accountName: json['accountName'] as String?,
       referralCode: json['referralCode'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      verificationStatus: VerificationStatus.fromApi((json['identityVerification'] as Map<String, dynamic>?)?['status'] as String?),
       vendorBusinessName: vendorProfile?['businessName'] as String?,
       vendorStatus: vendorProfile?['status'] as String?,
       vendorIsActive: vendorProfile?['isActive'] as bool?,

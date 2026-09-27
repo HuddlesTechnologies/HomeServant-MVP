@@ -15,6 +15,8 @@ import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
 import '../../widgets/labeled_value_row.dart';
 import 'widgets/admin_badge.dart';
+import '../../widgets/verified_badge.dart';
+import '../../api/models/verification.dart';
 import 'widgets/admin_verification_card.dart';
 
 /// Full account detail for a single user — reached by tapping a row in
@@ -392,6 +394,8 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                               runSpacing: 6,
                               children: [
                                 AdminBadge(text: user.role.adminLabel, color: AppColors.navy),
+                                if (user.verificationStatus == VerificationStatus.approved)
+                                  const VerifiedBadge(textColor: AppColors.navy, size: 11),
                                 if (user.role != UserRole.vendor && user.vendorBusinessName != null)
                                   const AdminBadge(text: 'Also a Vendor', color: Colors.teal),
                                 if (user.isDeactivated) const AdminBadge(text: 'Deactivated', color: Colors.redAccent),

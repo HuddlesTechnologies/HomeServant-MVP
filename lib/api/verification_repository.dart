@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'models/platform_settings.dart';
 import 'models/verification.dart';
 
 /// Identity documents (backend VerificationController /
@@ -43,5 +44,17 @@ class VerificationRepository {
       data: {'decision': approve ? 'APPROVE' : 'REJECT', if (note != null && note.trim().isNotEmpty) 'note': note.trim()},
     );
     return VerificationDetail.fromApi(response.data as Map<String, dynamic>);
+  });
+
+  // --- Platform Controls (super admin) ---------------------------------------
+
+  Future<PlatformSettings> platformSettings() => _client.call(() async {
+    final response = await _client.dio.get('/admin/platform-settings');
+    return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
+  });
+
+  Future<PlatformSettings> setRequireVerifiedLandlords(bool value) => _client.call(() async {
+    final response = await _client.dio.patch('/admin/platform-settings', data: {'requireVerifiedLandlords': value});
+    return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
   });
 }

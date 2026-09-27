@@ -38,6 +38,7 @@ class ProfileMenuScaffold extends StatelessWidget {
     required this.onEditProfileTap,
     required this.items,
     this.header,
+    this.status,
     this.footer,
   });
 
@@ -73,6 +74,10 @@ class ProfileMenuScaffold extends StatelessWidget {
   /// Optional content shown above the photo — landlord's profile tab has a
   /// "Profile Settings" heading row here that the tenant one doesn't.
   final Widget? header;
+
+  /// Shown under the Edit Profile button (e.g. identity verification). Must
+  /// carry its own background, since the scaffold's colour varies.
+  final Widget? status;
 
   final List<ProfileMenuItemSpec> items;
 
@@ -111,6 +116,7 @@ class ProfileMenuScaffold extends StatelessWidget {
             color: editButtonColor,
             onTap: onEditProfileTap,
           ),
+          if (status != null) ...[const SizedBox(height: 16), status!],
           const SizedBox(height: 20),
           Divider(color: dividerColor, height: 1),
           for (final item in items)

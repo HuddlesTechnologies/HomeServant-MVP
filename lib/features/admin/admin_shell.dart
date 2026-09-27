@@ -17,6 +17,7 @@ import '../dashboard/notifications_screen.dart';
 import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
 import 'admin_evictions_tab.dart';
+import 'admin_platform_controls_screen.dart';
 import 'admin_support_insights_tab.dart';
 import 'admin_verifications_tab.dart';
 import 'admin_chat_log_screen.dart';
@@ -463,6 +464,8 @@ class _AdminShellState extends State<AdminShell> {
       const _MoreItem(icon: Icons.insights_rounded, label: 'Support Insights', builder: AdminSupportInsightsTab.new),
     if (isSuperAdmin)
       _MoreItem(icon: Icons.gavel_rounded, label: 'Eviction Requests', count: _pendingEvictionsCount, builder: AdminEvictionsTab.new),
+    if (isSuperAdmin)
+      const _MoreItem(icon: Icons.tune_rounded, label: 'Platform Controls', builder: AdminPlatformControlsScreen.new),
   ];
 
   int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>

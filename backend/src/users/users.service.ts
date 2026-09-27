@@ -2,6 +2,7 @@ import { Injectable, InternalServerErrorException, NotFoundException } from '@ne
 import { NotificationType } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UpdateBankDetailsDto } from './dto/update-bank-details.dto';
@@ -29,6 +30,8 @@ const profileSelect = {
   accountNumber: true,
   accountName: true,
   referralCode: true,
+  // For the user's own "Verified" badge / what-to-fix note.
+  identityVerification: { select: { status: true, reviewNote: true } },
 } as const;
 
 /// Unambiguous uppercase alphanumerics — no 0/O or 1/I, since this code
@@ -67,6 +70,7 @@ export class UsersService {
     private readonly paystack: PaystackService,
     private readonly notifications: NotificationsService,
     private readonly storage: StorageService,
+    private readonly platform: PlatformSettingsService,
   ) {}
 
   async findById(id: string) {
@@ -78,7 +82,13 @@ export class UsersService {
     if (!user.referralCode) {
       user.referralCode = await this.assignReferralCode(id);
     }
-    return user;
+    // Lets an unverified landlord see why tenants can't find their
+    // listings while Platform Controls requires verified landlords.
+    const listingsHiddenUntilVerified =
+      user.role === 'LANDLORD' &&
+      user.identityVerification?.status !== 'APPROVED' &&
+      (await this.platform.requireVerifiedLandlords());
+    return { ...user, listingsHiddenUntilVerified };
   }
 
   async updateProfile(id: string, dto: UpdateProfileDto) {

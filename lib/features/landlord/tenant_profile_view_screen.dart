@@ -6,6 +6,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
 import '../../widgets/eviction_widgets.dart';
 import '../../widgets/upload_picker.dart';
+import '../../widgets/verified_badge.dart';
 import '../../widgets/labeled_value_row.dart';
 
 /// Read-only tenant profile — reached from a landlord's booking row via
@@ -75,6 +76,10 @@ class TenantProfileViewScreen extends StatelessWidget {
                 style: AppTextStyles.heading(color: AppColors.navy, size: 20),
               ),
             ),
+            if (all.any((b) => b.tenantVerified)) ...[
+              const SizedBox(height: 6),
+              const Center(child: VerifiedBadge(textColor: AppColors.navy, label: 'Verified tenant')),
+            ],
             if (booking.tenantEmail != null) ...[
               const SizedBox(height: 4),
               Center(
