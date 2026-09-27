@@ -84,7 +84,15 @@ class AuthRepository {
     });
   }
 
-  Future<LoginResult> login({required String email, required String password, bool reactivate = false}) {
+  /// [adminPortal]: sent as `portal` — the admin console's sign-in only
+  /// accepts admin accounts, and the app's sign-in never does (enforced by
+  /// the server, see backend AuthService.login).
+  Future<LoginResult> login({
+    required String email,
+    required String password,
+    bool reactivate = false,
+    bool adminPortal = false,
+  }) {
     return _client.call(() async {
       final deviceModel = await _deviceModel();
       final response = await _client.dio.post(
@@ -94,6 +102,7 @@ class AuthRepository {
           'password': password,
           if (reactivate) 'reactivate': true,
           if (deviceModel != null) 'deviceModel': deviceModel,
+          'portal': adminPortal ? 'ADMIN' : 'APP',
         },
         options: Options(extra: {'skipAuth': true}),
       );

@@ -56,7 +56,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       // admin account just lands on its own dashboard instead, same as a
       // normal login.
       context.read<AppState>().selectRole(UserRole.admin);
-      final outcome = await context.read<AppState>().login(email: _email.text.trim(), password: _password.text);
+      final outcome = await context.read<AppState>().login(
+        email: _email.text.trim(),
+        password: _password.text,
+        adminPortal: true,
+      );
       if (!mounted) return;
       // See LoginRoleScreen — without this, browsers/iOS never learn the
       // form was actually submitted, so they don't offer to save it.

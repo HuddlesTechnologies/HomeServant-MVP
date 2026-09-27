@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
   @IsEmail()
@@ -21,4 +21,12 @@ export class LoginDto {
   @IsOptional()
   @IsString()
   deviceModel?: string;
+
+  /// Which sign-in page this came from: 'ADMIN' (the admin console) only
+  /// accepts admin accounts, 'APP' (tenant/landlord/vendor) never does.
+  /// Checked right after the password, before any code is sent or token
+  /// issued. Optional so an older client build keeps working.
+  @IsOptional()
+  @IsIn(['APP', 'ADMIN'])
+  portal?: 'APP' | 'ADMIN';
 }

@@ -253,8 +253,18 @@ class AppState extends ChangeNotifier {
   /// way. [requiresEmailVerification]: the account never entered its
   /// signup code; a new one was just emailed — route to the signup-code
   /// screen and call [verifySignupOtp].
-  Future<LoginOutcome> login({required String email, required String password, bool reactivate = false}) async {
-    final result = await _authRepo.login(email: email, password: password, reactivate: reactivate);
+  Future<LoginOutcome> login({
+    required String email,
+    required String password,
+    bool reactivate = false,
+    bool adminPortal = false,
+  }) async {
+    final result = await _authRepo.login(
+      email: email,
+      password: password,
+      reactivate: reactivate,
+      adminPortal: adminPortal,
+    );
     this.email = email;
     if (result.requiresEmailVerification) {
       notifyListeners();

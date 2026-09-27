@@ -27,6 +27,9 @@ class AdminFilterChip extends StatelessWidget {
       selectedColor: AppColors.navy,
       labelStyle: AppTextStyles.body(color: selected ? Colors.white : AppColors.navy, size: 12.5, weight: FontWeight.w600),
       side: BorderSide.none,
+      // The navy fill already marks the selected chip; the default dark
+      // checkmark was near-invisible on it.
+      showCheckmark: false,
     );
     final count = badgeCount;
     if (count == null || count <= 0) return chip;

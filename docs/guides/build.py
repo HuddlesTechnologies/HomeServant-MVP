@@ -19,6 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.dirname(HERE)
 
 GUIDES = [
+    ("app_overview.html", "App Overview", "What HomeServant does, for each type of user"),
     ("admin_guide.html", "Admin Guide", "How to run the HomeServant admin console"),
     ("frontend_guide.html", "Frontend Developer Guide", "How the HomeServant Flutter app is built"),
     ("backend_guide.html", "Backend Developer Guide", "How the HomeServant API is built"),

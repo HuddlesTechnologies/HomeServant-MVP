@@ -114,6 +114,14 @@ export class AuthService {
     if (!(await bcrypt.compare(dto.password, user.passwordHash))) {
       throw new UnauthorizedException('Incorrect email or password');
     }
+    // Each sign-in page takes only its own kind of account. (Safe to say
+    // after the password check: only the account's owner learns its role.)
+    if (dto.portal === 'APP' && user.role === 'ADMIN') {
+      throw new ForbiddenException('Admin accounts sign in on the admin console, not here.');
+    }
+    if (dto.portal === 'ADMIN' && user.role !== 'ADMIN') {
+      throw new ForbiddenException('This account is not an admin account.');
+    }
     if (!user.emailVerifiedAt) {
       // Used to be a dead end: a 403 with no way to get a new code, while
       // signup refused the email as taken. The password is already proven
@@ -244,6 +252,14 @@ export class AuthService {
     let user = await this.prisma.user.findFirst({
       where: { OR: [{ googleId: payload.sub }, { email: payload.email }] },
     });
+
+    // Admins never sign in with Google: it would skip their password,
+    // two-factor code and the admin sign-in log — anyone controlling a
+    // Google account with an admin's email could walk into the console.
+    // Checked before linking, so an admin's account is never tied to Google.
+    if (user?.role === 'ADMIN') {
+      throw new ForbiddenException('Admin accounts sign in with email and password on the admin console.');
+    }
 
     if (user) {
       if (!user.googleId) {
