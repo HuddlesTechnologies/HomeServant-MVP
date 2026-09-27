@@ -220,7 +220,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                             if (!item.notificationRead) {
                               await context.read<AppState>().marketplaceOrders.markItemRead(item.id);
                             }
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             await Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => VendorOrderDetailScreen(theme: theme, item: item)),
                             );

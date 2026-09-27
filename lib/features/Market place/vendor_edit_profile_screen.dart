@@ -282,12 +282,11 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
 }
 
 class _Field extends StatelessWidget {
-  const _Field({required this.theme, required this.label, required this.controller, this.hint = '', this.keyboardType});
+  const _Field({required this.theme, required this.label, required this.controller, this.hint = ''});
 
   final DashboardTheme theme;
   final String label;
   final TextEditingController controller;
-  final TextInputType? keyboardType;
   final String hint;
 
   @override
@@ -300,7 +299,6 @@ class _Field extends StatelessWidget {
         PillTextField(
           hint: hint,
           controller: controller,
-          keyboardType: keyboardType,
           fillColor: theme.surface,
           textColor: theme.onSurface,
         ),

@@ -145,7 +145,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                   PillTextField(
                     // Preserved from each original screen: the landlord version
                     // used a lowercase hint, the tenant one capitalised.
-                    hint: _role.isLandlord ? 'enter your email' : 'Enter your email',
+                    hint: 'Enter your email',
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.username, AutofillHints.email],

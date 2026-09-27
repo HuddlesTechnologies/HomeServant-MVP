@@ -12,7 +12,7 @@ import '../../widgets/change_password_sheet.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/support_sheet.dart';
 import 'legal/tenancy_agreements_screen.dart';
-import 'privacy&terms_screen.dart';
+import 'privacy_terms_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.theme, required this.onAccountClosed});

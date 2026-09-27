@@ -179,44 +179,51 @@ String? _profileSetupRoute(AppState appState) {
 /// other authenticated route this router grows later.
 const _dashboardLikePaths = {'/dashboard', '/marketplace'};
 
+/// The router's `redirect` rules, pulled out as a plain function of the
+/// app state and the matched location so they can be unit-tested without
+/// building any screens (see test/router_redirect_test.dart).
+@visibleForTesting
+String? appRedirect(AppState appState, String location) {
+  if (!appState.isLoaded) return null;
+  if (!appState.isAuthenticated) {
+    // The session just ended (expired refresh token, forced sign-out,
+    // etc.) while sitting on a protected route — without this branch,
+    // the previous screen just stays on-screen underneath the session-
+    // expired modal until the user manually taps "Log In Again" (see
+    // SessionExpiredGate). GoRouter re-runs this the instant
+    // AppState.notifyListeners() fires (refreshListenable: appState in
+    // buildAppRouter), so this fires immediately, not on the next
+    // navigation.
+    if (!_preAuthPaths.contains(location)) return '/get-started';
+    return null;
+  }
+  if (_returningUserBouncePaths.contains(location)) {
+    return appState.role == UserRole.admin ? '/admin' : '/dashboard';
+  }
+  // An admin session has no business on the tenant/landlord dashboard
+  // (reached, e.g., by a stale bookmark) — the console is the only
+  // home screen that role has.
+  if (appState.role == UserRole.admin && location == '/dashboard') {
+    return '/admin';
+  }
+  // Guard C: catches an authenticated tenant/landlord who never
+  // actually finished the signup wizard (e.g. closed the app or
+  // reloaded the tab right after OTP verification) from reaching the
+  // real app. See _profileSetupRoute for why this trusts only the
+  // server's profileCompleted flag.
+  if (_dashboardLikePaths.contains(location)) {
+    final setupRoute = _profileSetupRoute(appState);
+    if (setupRoute != null) return setupRoute;
+  }
+  return null;
+}
+
 GoRouter buildAppRouter(AppState appState) {
   return GoRouter(
     navigatorKey: rootNavigatorKey,
     initialLocation: '/',
     refreshListenable: appState,
-    redirect: (context, state) {
-      if (!appState.isLoaded) return null;
-      if (!appState.isAuthenticated) {
-        // The session just ended (expired refresh token, forced sign-out,
-        // etc.) while sitting on a protected route — without this branch,
-        // the previous screen just stays on-screen underneath the session-
-        // expired modal until the user manually taps "Log In Again" (see
-        // SessionExpiredGate). GoRouter re-runs this the instant
-        // AppState.notifyListeners() fires (refreshListenable: appState
-        // below), so this fires immediately, not on the next navigation.
-        if (!_preAuthPaths.contains(state.matchedLocation)) return '/get-started';
-        return null;
-      }
-      if (_returningUserBouncePaths.contains(state.matchedLocation)) {
-        return appState.role == UserRole.admin ? '/admin' : '/dashboard';
-      }
-      // An admin session has no business on the tenant/landlord dashboard
-      // (reached, e.g., by a stale bookmark) — the console is the only
-      // home screen that role has.
-      if (appState.role == UserRole.admin && state.matchedLocation == '/dashboard') {
-        return '/admin';
-      }
-      // Guard C: catches an authenticated tenant/landlord who never
-      // actually finished the signup wizard (e.g. closed the app or
-      // reloaded the tab right after OTP verification) from reaching the
-      // real app. See _profileSetupRoute for why this trusts only the
-      // server's profileCompleted flag.
-      if (_dashboardLikePaths.contains(state.matchedLocation)) {
-        final setupRoute = _profileSetupRoute(appState);
-        if (setupRoute != null) return setupRoute;
-      }
-      return null;
-    },
+    redirect: (context, state) => appRedirect(appState, state.matchedLocation),
     routes: [
       GoRoute(
         path: '/',
