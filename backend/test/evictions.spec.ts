@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaClient, UserRole } from '@prisma/client';
+import { BookingsService } from '../src/bookings/bookings.service';
 import { EvictionsService } from '../src/evictions/evictions.service';
 import { fakeMail, makeProperty, makeUser, resetDb, testDbUrl, testPrisma } from './helpers';
 
@@ -92,5 +93,19 @@ describeDb('eviction requests (real Postgres)', () => {
     const second = await evictions.create(landlord.id, booking.id, reason);
     expect((await evictions.cancel(landlord.id, second.id)).status).toBe('CANCELLED');
     await expect(evictions.review(admin.id, second.id, 'APPROVE')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("landlords see a tenant's phone number only once that tenant has paid", async () => {
+    const { tenant, landlord } = await tenancy();
+    await prisma.user.update({ where: { id: tenant.id }, data: { phoneNumber: '08011112222' } });
+    const requester = await makeUser(prisma, UserRole.TENANT);
+    await prisma.user.update({ where: { id: requester.id }, data: { phoneNumber: '08033334444' } });
+    const other = await makeProperty(prisma, landlord.id, { category: 'SHORTLET' });
+    await prisma.booking.create({ data: { propertyId: other.id, tenantId: requester.id, status: 'PENDING' } });
+
+    const bookings = new BookingsService(prisma as never, {} as never, {} as never);
+    const rows = await bookings.findForLandlord(landlord.id);
+    expect(rows.find((b) => b.tenantId === tenant.id)!.tenant.phoneNumber).toBe('08011112222');
+    expect(rows.find((b) => b.tenantId === requester.id)!.tenant.phoneNumber).toBeNull();
   });
 });

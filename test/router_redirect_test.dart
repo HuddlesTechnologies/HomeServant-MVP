@@ -15,7 +15,10 @@ AppState _signedIn(UserRole role, {bool profileCompleted = true, String name = '
     ..role = role
     ..profileCompleted = profileCompleted
     ..fullName = name
-    ..phoneNumber = phone;
+    ..phoneNumber = phone
+    // Everything else signup step 1 asks for.
+    ..dateOfBirth = DateTime(1995, 5, 20)
+    ..houseAddress = '12 Allen Avenue, Ikeja';
 }
 
 void main() {
@@ -55,6 +58,16 @@ void main() {
     test('an unfinished landlord with name and phone resumes at step 2', () {
       final appState = _signedIn(UserRole.landlord, profileCompleted: false);
       expect(appRedirect(appState, '/dashboard'), '/signup-landlord-2');
+    });
+
+    test('an unfinished account missing its date of birth resumes at step 1', () {
+      final appState = _signedIn(UserRole.landlord, profileCompleted: false)..dateOfBirth = null;
+      expect(appRedirect(appState, '/dashboard'), '/signup-landlord-1');
+    });
+
+    test('an unfinished landlord without a house address resumes at step 1', () {
+      final appState = _signedIn(UserRole.landlord, profileCompleted: false)..houseAddress = '';
+      expect(appRedirect(appState, '/dashboard'), '/signup-landlord-1');
     });
 
     test('the marketplace is guarded too', () {

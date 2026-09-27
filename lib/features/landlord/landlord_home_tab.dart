@@ -15,6 +15,7 @@ import '../dashboard/property_detail_screen.dart';
 import '../dashboard/widgets/property_image.dart';
 import 'landlord_add_property_screen.dart';
 import 'landlord_properties_screen.dart';
+import 'landlord_tenants_screen.dart';
 import 'landlord_property_status.dart';
 import 'widgets/landlord_widgets.dart';
 
@@ -196,22 +197,41 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
               ],
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.accent,
-                  foregroundColor: theme.onAccent,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.accent,
+                      foregroundColor: theme.onAccent,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LandlordAddPropertyScreen()),
+                    ),
+                    icon: Icon(Icons.add_home_work_rounded, color: theme.onAccent, size: 20),
+                    label: Text('Upload a Property', style: AppTextStyles.button(color: theme.onAccent, size: 14.5)),
+                  ),
                 ),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const LandlordAddPropertyScreen()),
+                const SizedBox(width: 10),
+                Expanded(
+                  // Outlined on theme.background, so text is theme.foreground.
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: theme.foreground.withValues(alpha: 0.35)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LandlordTenantsScreen()),
+                    ),
+                    icon: Icon(Icons.groups_rounded, color: theme.foreground, size: 20),
+                    label: Text('My Tenants', style: AppTextStyles.button(color: theme.foreground, size: 14.5)),
+                  ),
                 ),
-                icon: Icon(Icons.add_home_work_rounded, color: theme.onAccent),
-                label: Text('Upload a Property', style: AppTextStyles.button(color: theme.onAccent)),
-              ),
+              ],
             ),
             const SizedBox(height: 26),
             InkWell(

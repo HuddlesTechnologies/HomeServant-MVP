@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../api/models/booking.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../state/app_state.dart';
+import '../../widgets/eviction_widgets.dart';
 import '../../widgets/upload_picker.dart';
 import '../../widgets/labeled_value_row.dart';
 
@@ -20,6 +23,16 @@ class TenantProfileViewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
+    // Every booking this tenant has with this landlord, newest first; the
+    // tenancies section below lists the ones where they paid or moved in.
+    final all = [
+      for (final b in appState.landlordBookings)
+        if (b.tenantId != null && b.tenantId == booking.tenantId) b,
+    ];
+    if (all.isEmpty) all.add(booking);
+    final tenancies = [for (final b in all) if (b.status == BookingStatus.movedIn || b.status == BookingStatus.paid) b];
+    final phone = all.map((b) => b.tenantPhone).firstWhere((p) => p != null && p.isNotEmpty, orElse: () => null);
     final photoUrl = booking.tenantProfilePhotoUrl;
     final age = booking.tenantAge;
     final occupation = booking.tenantOccupation;
@@ -78,18 +91,38 @@ class TenantProfileViewScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  _field('Email', booking.tenantEmail ?? 'Not available'),
+                  _field('Phone', phone ?? 'Shared once they pay for your property'),
                   if (age != null) _field('Age', '$age'),
                   if (booking.tenantGender != null) _field('Gender', booking.tenantGender!.label),
-                  if (occupation != null && occupation.isNotEmpty) _field('Occupation', occupation),
-                  if (booking.tenantMaritalStatus != null) _field('Marital Status', booking.tenantMaritalStatus!.label),
+                  _field('Occupation', occupation != null && occupation.isNotEmpty ? occupation : 'Not provided'),
+                  _field('Marital Status', booking.tenantMaritalStatus?.label ?? 'Not provided'),
                   if (!hasAnyDetail)
                     Text(
-                      "This tenant hasn't filled in these profile details yet.",
+                      "This tenant hasn't filled in the rest of their profile yet.",
                       style: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
                     ),
                 ],
               ),
             ),
+            if (tenancies.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              Text('Tenancies with you', style: AppTextStyles.heading(color: AppColors.navy, size: 17)),
+              const SizedBox(height: 10),
+              for (final t in tenancies)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  // Off-white page, so navy text; the eviction sheet itself
+                  // uses the dashboard theme's surface/onSurface pair.
+                  child: LandlordTenancyCard(
+                    booking: t,
+                    theme: appState.dashboardTheme,
+                    textColor: AppColors.navy,
+                    caption: t.isShortlet ? 'Shortlet stay' : 'Rental',
+                    title: t.property.title,
+                  ),
+                ),
+            ],
           ],
         ),
       ),

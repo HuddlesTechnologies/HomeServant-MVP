@@ -90,6 +90,7 @@ class Booking {
     this.tenantId,
     this.tenantName,
     this.tenantEmail,
+    this.tenantPhone,
     this.tenantProfilePhotoUrl,
     this.tenantGender,
     this.tenantOccupation,
@@ -116,6 +117,9 @@ class Booking {
   /// Only present on a landlord's own view of a booking (`GET
   /// /bookings/landlord`) — the fields below back "View Tenant Profile".
   final String? tenantEmail;
+
+  /// Only sent once this tenant has paid for the landlord's property.
+  final String? tenantPhone;
   final String? tenantProfilePhotoUrl;
   final TenantGender? tenantGender;
   final String? tenantOccupation;
@@ -181,6 +185,7 @@ class Booking {
       tenantId: tenant?['id'] as String? ?? json['tenantId'] as String?,
       tenantName: tenant?['fullName'] as String?,
       tenantEmail: tenant?['email'] as String?,
+      tenantPhone: tenant?['phoneNumber'] as String?,
       tenantProfilePhotoUrl: tenant?['profilePhotoUrl'] as String?,
       tenantGender: _genderFromApi(tenant?['gender'] as String?),
       tenantOccupation: tenant?['occupation'] as String?,

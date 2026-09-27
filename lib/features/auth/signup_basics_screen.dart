@@ -7,6 +7,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
+import '../../widgets/field_error_text.dart';
 import '../../widgets/home_servant_logo.dart';
 import '../../widgets/labeled_pill_field.dart';
 import '../../widgets/pill_button.dart';
@@ -38,6 +39,43 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
   UserRole get _role => widget.role;
   bool _submitting = false;
   String? _error;
+  final _formKey = GlobalKey<FormState>();
+  String? _dobError;
+  String? _certificateError;
+
+  static const _minimumAge = 18;
+
+  static String? _required(String? value, String message) =>
+      value == null || value.trim().isEmpty ? message : null;
+
+  /// Nigerian numbers: 0XXXXXXXXXX (11 digits) or +234XXXXXXXXXX.
+  static String? _validatePhone(String? value) {
+    final digits = (value ?? '').replaceAll(RegExp(r'[\s-]'), '');
+    if (digits.isEmpty) return 'Enter your phone number';
+    if (!RegExp(r'^(0\d{10}|\+?234\d{10})$').hasMatch(digits)) {
+      return 'Enter a valid phone number, e.g. 0801 234 5678';
+    }
+    return null;
+  }
+
+  bool _validateAll() {
+    final formValid = _formKey.currentState?.validate() ?? false;
+    String? dobError;
+    final dob = _dateOfBirth;
+    if (dob == null) {
+      dobError = 'Select your date of birth';
+    } else {
+      final now = DateTime.now();
+      final eighteenth = DateTime(dob.year + _minimumAge, dob.month, dob.day);
+      if (eighteenth.isAfter(now)) dobError = 'You must be at least $_minimumAge to sign up';
+    }
+    final certificateError = _role.isLandlord && _certificate == null ? 'Upload your certificate of ownership' : null;
+    setState(() {
+      _dobError = dobError;
+      _certificateError = certificateError;
+    });
+    return formValid && dobError == null && certificateError == null;
+  }
 
   @override
   void dispose() {
@@ -52,7 +90,10 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
   Future<void> _pickCertificate() async {
     final picked = await pickUpload(context);
     if (picked != null) {
-      setState(() => _certificate = picked);
+      setState(() {
+        _certificate = picked;
+        _certificateError = null;
+      });
     }
   }
 
@@ -69,6 +110,7 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
       setState(() {
         _dateOfBirth = picked;
         _dob.text = formatShortDate(picked);
+        _dobError = null;
       });
     }
   }
@@ -77,6 +119,7 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
   /// the backend has no document-verification model, so it's collected
   /// here for UI completeness but only the profile fields actually save.
   Future<void> _continue() async {
+    if (!_validateAll()) return;
     setState(() {
       _submitting = true;
       _error = null;
@@ -108,7 +151,9 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
   Widget build(BuildContext context) {
     return ThemedScaffold(
       role: _role,
-      child: Column(
+      child: Form(
+        key: _formKey,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 12),
@@ -125,6 +170,8 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
             labelColor: _role.foreground,
             controller: _name,
             hint: 'Full name',
+            errorColor: _role.errorColor,
+            validator: (v) => (v ?? '').trim().length < 2 ? 'Enter your full name' : null,
           ),
           const SizedBox(height: 18),
           LabeledPillField(
@@ -133,6 +180,8 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
             controller: _phone,
             keyboardType: TextInputType.phone,
             hint: 'e.g. 0801 234 5678',
+            errorColor: _role.errorColor,
+            validator: _validatePhone,
           ),
           const SizedBox(height: 18),
           if (_role.isLandlord) ...[
@@ -141,6 +190,8 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
               labelColor: _role.foreground,
               controller: _houseAddress,
               hint: 'Street, area, city',
+              errorColor: _role.errorColor,
+              validator: (v) => _required(v, 'Enter your house address'),
             ),
             const SizedBox(height: 18),
           ],
@@ -153,6 +204,7 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
             onTap: _pickDate,
             trailing: const Icon(Icons.calendar_today_outlined, color: AppColors.navy, size: 18),
           ),
+          FieldErrorText(_dobError, color: _role.errorColor),
           if (_role.isLandlord) ...[
             const SizedBox(height: 22),
             PillOutlineButton(
@@ -161,6 +213,7 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
               icon: Icons.upload_file_rounded,
               onPressed: _pickCertificate,
             ),
+            FieldErrorText(_certificateError, color: _role.errorColor),
           ] else ...[
             const SizedBox(height: 18),
             LabeledPillField(
@@ -170,10 +223,7 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
               hint: 'HS-XXXXXX',
             ),
           ],
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
-          ],
+          FieldErrorText(_error, color: _role.errorColor, textAlign: TextAlign.center),
           const SizedBox(height: 28),
           PillButton(
             label: _submitting ? 'Saving…' : 'Continue',
@@ -184,6 +234,7 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
           ),
           const SizedBox(height: 24),
         ],
+        ),
       ),
     );
   }
