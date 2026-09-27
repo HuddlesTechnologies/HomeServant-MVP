@@ -58,6 +58,13 @@ export class ChatController {
     await this.chat.claimThread(id, user.sub);
   }
 
+  /// A thread's current status for the caller — see
+  /// ChatService.getThreadSummary.
+  @Get(':id/summary')
+  summary(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.chat.getThreadSummary(id, user.sub, user.role);
+  }
+
   @Get(':id/messages')
   messages(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Query('before') before?: string) {
     return this.chat.findMessages(id, user.sub, user.role, before);

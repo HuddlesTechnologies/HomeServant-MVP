@@ -75,6 +75,14 @@ class ChatRepository {
     });
   }
 
+  /// The thread's current status for this user — see [ThreadSummary].
+  Future<ThreadSummary> summary(String threadId) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/threads/$threadId/summary');
+      return ThreadSummary.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
   Future<List<ChatMessage>> messages(String threadId, {DateTime? before}) {
     return _client.call(() async {
       final response = await _client.dio.get(

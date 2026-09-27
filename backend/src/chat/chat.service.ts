@@ -279,8 +279,66 @@ export class ChatService {
         NotificationType.SUPPORT_THREAD_RESOLVED,
         'Your support conversation was resolved',
         "An admin marked your support conversation as resolved. Reach out again any time if you still need help.",
+        threadId,
       );
     }
+  }
+
+  /// Where a thread stands *now*, for the caller — what the client shows
+  /// when someone opens a chat notification: still waiting for an admin,
+  /// being handled (by them or by whom), transferred away, or resolved,
+  /// and whether they can open it ([canView]) and reply ([canReply]).
+  /// Visible to participants, to any admin for a support thread, and to an
+  /// admin who transferred the thread away (so their "new message"
+  /// notification can say where it went, even if they can no longer open
+  /// a non-support thread).
+  async getThreadSummary(threadId: string, userId: string, role: UserRole) {
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      include: {
+        participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
+        assignedAdmin: { select: { id: true, fullName: true } },
+        transferLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { fromAdmin: { select: { id: true, fullName: true } }, toAdmin: { select: { id: true, fullName: true } } },
+        },
+      },
+    });
+    if (!thread) throw new NotFoundException('This conversation no longer exists');
+
+    const isAdmin = role === UserRole.ADMIN;
+    const isParticipant = thread.participants.some((p) => p.userId === userId);
+    const transferredByMe =
+      isAdmin &&
+      (await this.prisma.threadTransferLog.count({ where: { threadId, fromAdminId: userId } })) > 0;
+    const canView = isParticipant || (isAdmin && thread.isSupport);
+    if (!canView && !transferredByMe) throw new ForbiddenException('Not a participant of this thread');
+
+    const resolved = thread.status === 'RESOLVED';
+    const unclaimedSupport = thread.isSupport && !thread.assignedAdminId;
+    const lastTransfer = thread.transferLogs[0];
+    return {
+      id: thread.id,
+      isSupport: thread.isSupport,
+      resolved,
+      resolvedAt: thread.resolvedAt,
+      assignedAdmin: thread.assignedAdmin,
+      lastTransfer: lastTransfer
+        ? { fromAdmin: lastTransfer.fromAdmin, toAdmin: lastTransfer.toAdmin, createdAt: lastTransfer.createdAt }
+        : null,
+      otherParticipants: thread.participants.filter((p) => p.userId !== userId).map((p) => p.user),
+      canView,
+      // Same rule sendMessage enforces (participant, or any admin on an
+      // unclaimed support thread — replying claims it), plus: nobody
+      // replies into a resolved thread, and an admin doesn't reply into a
+      // support thread another admin is now handling.
+      canReply:
+        !resolved &&
+        (isAdmin && thread.isSupport
+          ? unclaimedSupport || thread.assignedAdminId === userId
+          : isParticipant),
+    };
   }
 
   async findMessages(threadId: string, userId: string, senderRole?: UserRole, before?: string) {
@@ -347,6 +405,7 @@ export class ChatService {
           NotificationType.NEW_MESSAGE,
           `New message from ${senderName}`,
           previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText,
+          threadId,
         ),
       ),
     );
@@ -365,6 +424,7 @@ export class ChatService {
             NotificationType.NEW_MESSAGE,
             'New support conversation',
             `${senderName}: ${previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText}`,
+            threadId,
           ),
         ),
       );
@@ -449,6 +509,7 @@ export class ChatService {
       NotificationType.THREAD_TRANSFERRED,
       'A conversation was transferred to you',
       'Another admin handed off a console conversation to you.',
+      threadId,
     );
     await this.mail.send(
       toAdmin.email,

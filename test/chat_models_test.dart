@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:homeservant/api/models/app_notification.dart';
 import 'package:homeservant/api/models/chat.dart';
 
 void main() {
@@ -40,5 +41,51 @@ void main() {
       'resolved': false,
     });
     expect(thread.lastMessage?.body, 'Hello');
+  });
+
+  test('a thread summary parses its transfer and permissions', () {
+    final summary = ThreadSummary.fromApi({
+      'id': 't1',
+      'isSupport': true,
+      'resolved': false,
+      'resolvedAt': null,
+      'assignedAdmin': {'id': 'a2', 'fullName': 'Bola'},
+      'lastTransfer': {
+        'fromAdmin': {'id': 'a1', 'fullName': 'Ada'},
+        'toAdmin': {'id': 'a2', 'fullName': 'Bola'},
+        'createdAt': '2026-09-27T10:00:00Z',
+      },
+      'otherParticipants': [
+        {'id': 'u1', 'fullName': 'Tenant T', 'profilePhotoUrl': null},
+      ],
+      'canView': true,
+      'canReply': false,
+    });
+    expect(summary.assignedAdmin?.displayName, 'Bola');
+    expect(summary.lastTransferFrom?.id, 'a1');
+    expect(summary.otherParticipants.single.fullName, 'Tenant T');
+    expect(summary.canReply, isFalse);
+  });
+
+  test('a transfer from a since-deleted admin still parses', () {
+    final summary = ThreadSummary.fromApi({
+      'id': 't1',
+      'lastTransfer': {'fromAdmin': null, 'toAdmin': null, 'createdAt': '2026-09-27T10:00:00Z'},
+      'otherParticipants': [],
+    });
+    expect(summary.lastTransferFrom, isNull);
+    expect(summary.canView, isFalse);
+  });
+
+  test('notifications carry the thread they are about', () {
+    final n = AppNotification.fromApi({
+      'id': 'n1',
+      'type': 'NEW_MESSAGE',
+      'title': 'New message',
+      'body': 'Hi',
+      'threadId': 't1',
+      'createdAt': '2026-09-27T10:00:00Z',
+    });
+    expect(n.threadId, 't1');
   });
 }

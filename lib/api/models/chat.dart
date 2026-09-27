@@ -223,3 +223,72 @@ class SupportQueueThread {
     );
   }
 }
+
+/// A person reference inside a [ThreadSummary] (an admin, or the other
+/// side of the conversation).
+class ThreadPersonRef {
+  const ThreadPersonRef({required this.id, this.fullName, this.profilePhotoUrl});
+
+  final String id;
+  final String? fullName;
+  final String? profilePhotoUrl;
+
+  String get displayName => fullName?.trim().isNotEmpty == true ? fullName! : 'an admin';
+
+  static ThreadPersonRef? fromApi(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    return ThreadPersonRef(
+      id: json['id'] as String,
+      fullName: json['fullName'] as String?,
+      profilePhotoUrl: json['profilePhotoUrl'] as String?,
+    );
+  }
+}
+
+/// Where a thread stands now, for the signed-in user — `GET
+/// /threads/:id/summary` (see backend ChatService.getThreadSummary). Shown
+/// when a chat notification is opened.
+class ThreadSummary {
+  const ThreadSummary({
+    required this.id,
+    required this.isSupport,
+    required this.resolved,
+    required this.canView,
+    required this.canReply,
+    required this.otherParticipants,
+    this.resolvedAt,
+    this.assignedAdmin,
+    this.lastTransferFrom,
+    this.lastTransferTo,
+  });
+
+  final String id;
+  final bool isSupport;
+  final bool resolved;
+  final DateTime? resolvedAt;
+  final ThreadPersonRef? assignedAdmin;
+  final ThreadPersonRef? lastTransferFrom;
+  final ThreadPersonRef? lastTransferTo;
+  final List<ThreadPersonRef> otherParticipants;
+  final bool canView;
+  final bool canReply;
+
+  factory ThreadSummary.fromApi(Map<String, dynamic> json) {
+    final transfer = json['lastTransfer'] as Map<String, dynamic>?;
+    return ThreadSummary(
+      id: json['id'] as String,
+      isSupport: json['isSupport'] as bool? ?? false,
+      resolved: json['resolved'] as bool? ?? false,
+      resolvedAt: json['resolvedAt'] != null ? DateTime.parse(json['resolvedAt'] as String) : null,
+      assignedAdmin: ThreadPersonRef.fromApi(json['assignedAdmin']),
+      lastTransferFrom: ThreadPersonRef.fromApi(transfer?['fromAdmin']),
+      lastTransferTo: ThreadPersonRef.fromApi(transfer?['toAdmin']),
+      otherParticipants: (json['otherParticipants'] as List? ?? const [])
+          .map(ThreadPersonRef.fromApi)
+          .whereType<ThreadPersonRef>()
+          .toList(),
+      canView: json['canView'] as bool? ?? false,
+      canReply: json['canReply'] as bool? ?? false,
+    );
+  }
+}
