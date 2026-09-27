@@ -53,6 +53,11 @@ class VerificationRepository {
     return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
   });
 
+  Future<PlatformSettings> setPayUnverifiedLandlords(bool value) => _client.call(() async {
+    final response = await _client.dio.patch('/admin/platform-settings', data: {'payUnverifiedLandlords': value});
+    return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
+  });
+
   Future<PlatformSettings> setRequireVerifiedLandlords(bool value) => _client.call(() async {
     final response = await _client.dio.patch('/admin/platform-settings', data: {'requireVerifiedLandlords': value});
     return PlatformSettings.fromApi(response.data as Map<String, dynamic>);

@@ -35,7 +35,7 @@ describeDb('identity verification (real Postgres)', () => {
     mail = fakeMail();
     notes = [];
     const notifications = { create: async (userId: string, _t: unknown, title: string) => void notes.push({ userId, title }) };
-    service = new VerificationService(prisma as never, storage as never, notifications as never, mail as never);
+    service = new VerificationService(prisma as never, storage as never, notifications as never, mail as never, { releaseHeldPayoutsForLandlord: async () => 0 } as never);
   });
 
   it('checks the ID number format for the chosen ID type', async () => {

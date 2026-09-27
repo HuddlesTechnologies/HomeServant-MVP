@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { IdType, NotificationType, Prisma, UserRole, VerificationStatus } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UpdateVerificationDto } from './dto/verification.dto';
@@ -36,6 +37,7 @@ export class VerificationService {
     private readonly storage: StorageService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
+    private readonly payments: PaymentsService,
   ) {}
 
   signUpload(userId: string, fileName: string) {
@@ -186,6 +188,10 @@ export class VerificationService {
       : `HomeServant couldn't verify your identity documents: ${cleanNote}`;
     await this.notifications.create(userId, NotificationType.BOOKING_STATUS, title, body);
     await this.mail.send(user.email, title, `<p>${escapeHtml(body)}</p>`, body);
+    if (approved) {
+      // Any payouts held while they were unverified (Platform Controls).
+      await this.payments.releaseHeldPayoutsForLandlord(userId);
+    }
     return this.detail(userId);
   }
 }

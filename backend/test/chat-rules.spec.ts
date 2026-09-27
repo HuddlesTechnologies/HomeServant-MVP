@@ -120,7 +120,7 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
         },
       });
       const paystack = { refundTransaction: jest.fn().mockResolvedValue(undefined) };
-      const payments = new PaymentsService(prisma as never, paystack as never, notifications, mail as never, chat);
+      const payments = new PaymentsService(prisma as never, paystack as never, notifications, mail as never, chat, { payUnverifiedLandlords: async () => true } as never);
       await payments.rejectBookingByLandlord(booking.id, landlord.id);
 
       const thread = await prisma.thread.findFirstOrThrow({ where: { propertyId: property.id } });

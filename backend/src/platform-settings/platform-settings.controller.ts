@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Patch, UseGuards } from '@nestjs/common';
 import { AdminLevel, UserRole } from '@prisma/client';
 import { IsBoolean, IsOptional } from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -9,12 +9,17 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { MustChangePasswordGuard } from '../common/guards/must-change-password.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { PaymentsService } from '../payments/payments.service';
 import { PlatformSettingsService } from './platform-settings.service';
 
 class UpdatePlatformSettingsDto {
   @IsOptional()
   @IsBoolean()
   requireVerifiedLandlords?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  payUnverifiedLandlords?: boolean;
 }
 
 /// Platform Controls in the admin console — SUPER_ADMIN only.
@@ -23,15 +28,30 @@ class UpdatePlatformSettingsDto {
 @Roles(UserRole.ADMIN)
 @MinAdminLevel(AdminLevel.SUPER_ADMIN)
 export class PlatformSettingsController {
-  constructor(private readonly settings: PlatformSettingsService) {}
+  private readonly logger = new Logger('PlatformControls');
+
+  constructor(
+    private readonly settings: PlatformSettingsService,
+    private readonly payments: PaymentsService,
+  ) {}
 
   @Get()
-  get() {
-    return this.settings.get();
+  async get() {
+    return { ...(await this.settings.get()), heldPayouts: await this.payments.heldPayoutStats() };
   }
 
   @Patch()
-  update(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdatePlatformSettingsDto) {
-    return this.settings.update(user.sub, dto);
+  async update(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdatePlatformSettingsDto) {
+    const wasPaying = await this.settings.payUnverifiedLandlords();
+    await this.settings.update(user.sub, dto);
+    if (!wasPaying && dto.payUnverifiedLandlords === true) {
+      // Paying unverified landlords again: send everything held so far.
+      // Background, so the toggle returns straight away.
+      void this.payments
+        .releaseAllHeldPayouts()
+        .then((n) => this.logger.log(`Released ${n} held payout(s) after "Pay unverified landlords" was switched on`))
+        .catch((error) => this.logger.error(`Releasing held payouts failed: ${(error as Error).message}`));
+    }
+    return this.get();
   }
 }

@@ -1,6 +1,7 @@
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
-import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory } from '@prisma/client';
+import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
 import { ChatService } from '../chat/chat.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -60,6 +61,10 @@ const KOBO_PER_NAIRA = 100;
 /// Payments. Used by both BookingsService (rentals/shortlets) and
 /// MarketplaceOrdersService (order items), so every money-movement rule
 /// lives in one place instead of being re-derived per feature.
+/// What a landlord is told when their payout is held for verification.
+const HELD_PAYOUT_LINE =
+  "HomeServant is holding your payout until your identity is verified. Open your Profile and tap \"Get verified\"; it's released automatically once you are.";
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger('Payments');
@@ -70,6 +75,7 @@ export class PaymentsService {
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
     private readonly chat: ChatService,
+    private readonly platform: PlatformSettingsService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -382,12 +388,7 @@ export class PaymentsService {
     if (!payment) throw new BadRequestException('No held payment found for this booking');
 
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
-    await this.releasePaymentToRecipient(payment, {
-      bankCode: landlord.bankCode,
-      accountNumber: landlord.accountNumber,
-      accountName: landlord.accountName,
-      reason: `HomeServant rent release — ${booking.property.title}`,
-    });
+    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant rent release — ${booking.property.title}`);
 
     const leaseStart = new Date();
     const leaseEnd = addMonths(leaseStart, booking.property.rentDurationMonths);
@@ -430,7 +431,9 @@ export class PaymentsService {
       landlord.email,
       NotificationType.BOOKING_STATUS,
       'Tenant moved in',
-      `Your tenant has moved into ${booking.property.title} and your payout has been released.`,
+      outcome === 'held'
+        ? `Your tenant has moved into ${booking.property.title}. ${HELD_PAYOUT_LINE}`
+        : `Your tenant has moved into ${booking.property.title} and your payout has been released.`,
     );
 
     return updatedBooking;
@@ -673,13 +676,9 @@ export class PaymentsService {
     }
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
 
+    let outcome: 'released' | 'held';
     try {
-      await this.releasePaymentToRecipient(payment, {
-        bankCode: landlord.bankCode,
-        accountNumber: landlord.accountNumber,
-        accountName: landlord.accountName,
-        reason: `HomeServant shortlet release — ${booking.property.title}`,
-      });
+      outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant shortlet release — ${booking.property.title}`);
     } catch (err) {
       this.logger.error(`Shortlet release failed for booking ${booking.id}, payment ${payment.id}: ${(err as Error).message}. Payment left PAID_HELD for manual follow-up.`);
       return;
@@ -704,7 +703,9 @@ export class PaymentsService {
       landlord.email,
       NotificationType.BOOKING_STATUS,
       'Shortlet booked and paid',
-      `${booking.property.title} was booked and your payout has been released.`,
+      outcome === 'held'
+        ? `${booking.property.title} was booked and paid. ${HELD_PAYOUT_LINE}`
+        : `${booking.property.title} was booked and your payout has been released.`,
     );
   }
 
@@ -719,13 +720,9 @@ export class PaymentsService {
     }
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
 
+    let outcome: 'released' | 'held';
     try {
-      await this.releasePaymentToRecipient(payment, {
-        bankCode: landlord.bankCode,
-        accountNumber: landlord.accountNumber,
-        accountName: landlord.accountName,
-        reason: `HomeServant rent renewal release — ${booking.property.title}`,
-      });
+      outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant rent renewal release — ${booking.property.title}`);
     } catch (err) {
       this.logger.error(`Renewal release failed for booking ${booking.id}, payment ${payment.id}: ${(err as Error).message}. Payment left PAID_HELD for manual follow-up; lease NOT extended.`);
       return;
@@ -749,7 +746,9 @@ export class PaymentsService {
       landlord.email,
       NotificationType.BOOKING_STATUS,
       'Renewal paid',
-      `Your tenant renewed their lease for ${booking.property.title} and your payout has been released.`,
+      outcome === 'held'
+        ? `Your tenant renewed their lease for ${booking.property.title}. ${HELD_PAYOUT_LINE}`
+        : `Your tenant renewed their lease for ${booking.property.title} and your payout has been released.`,
     );
   }
 
@@ -784,7 +783,102 @@ export class PaymentsService {
     // RELEASED-marking write fails below can't cause a second real payout
     // for the same Payment — see initiateTransfer's doc comment.
     await this.paystack.initiateTransfer(recipientAmountKobo, recipientCode, opts.reason, payment.id);
-    await this.prisma.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.RELEASED, releasedAt: new Date() } });
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: PaymentStatus.RELEASED, releasedAt: new Date(), heldForVerificationAt: null },
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Payout hold for unverified landlords (Platform Controls)
+  // ---------------------------------------------------------------------
+
+  /// Pays [landlord] now — or, when Platform Controls has "Pay unverified
+  /// landlords" off and they aren't verified, leaves the money held with
+  /// HomeServant (marked [heldForVerificationAt]) for release later. The
+  /// tenant's side (move-in, stay, renewal) goes ahead either way.
+  private async releaseOrHoldForLandlord(
+    payment: Payment,
+    landlord: { id: string; bankCode: string | null; accountNumber: string | null; accountName: string | null },
+    reason: string,
+  ): Promise<'released' | 'held'> {
+    if (!(await this.platform.payUnverifiedLandlords())) {
+      const verification = await this.prisma.identityVerification.findUnique({ where: { userId: landlord.id }, select: { status: true } });
+      if (verification?.status !== VerificationStatus.APPROVED) {
+        await this.prisma.payment.update({ where: { id: payment.id }, data: { heldForVerificationAt: new Date() } });
+        this.logger.log(`Payout for payment ${payment.id} held until landlord ${landlord.id} is verified`);
+        return 'held';
+      }
+    }
+    await this.releasePaymentToRecipient(payment, { ...landlord, reason });
+    return 'released';
+  }
+
+  /// Releases every payout held for [landlordId]'s verification — called when
+  /// they're verified, or for everyone when the rule is switched off. A
+  /// transfer that fails stays held (logged) for the next attempt. Returns
+  /// how many were released.
+  async releaseHeldPayoutsForLandlord(landlordId: string): Promise<number> {
+    const landlord = await this.prisma.user.findUnique({
+      where: { id: landlordId },
+      select: { id: true, email: true, bankCode: true, accountNumber: true, accountName: true },
+    });
+    if (!landlord) return 0;
+    const held = await this.prisma.payment.findMany({
+      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null }, booking: { property: { landlordId } } },
+      include: { booking: { select: { property: { select: { title: true } } } } },
+    });
+    let released = 0;
+    let totalKobo = 0;
+    for (const payment of held) {
+      try {
+        await this.releasePaymentToRecipient(payment, {
+          ...landlord,
+          reason: `HomeServant held payout release — ${payment.booking?.property.title ?? 'rent'}`,
+        });
+        released++;
+        totalKobo += payment.amount - payment.platformFeeAmount;
+      } catch (err) {
+        this.logger.error(`Could not release held payout ${payment.id} for landlord ${landlordId}: ${(err as Error).message}`);
+      }
+    }
+    if (released > 0) {
+      const naira = (totalKobo / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 });
+      await this.notifyBoth(
+        landlord.id,
+        landlord.email,
+        NotificationType.BOOKING_STATUS,
+        'Your held payouts have been released',
+        `${released} payout${released === 1 ? '' : 's'} (NGN ${naira}) held by HomeServant ${released === 1 ? 'has' : 'have'} been sent to your bank account.`,
+      );
+    }
+    return released;
+  }
+
+  /// Every landlord with held payouts — used when "Pay unverified
+  /// landlords" is switched back on.
+  async releaseAllHeldPayouts(): Promise<number> {
+    const rows = await this.prisma.payment.findMany({
+      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null } },
+      select: { booking: { select: { property: { select: { landlordId: true } } } } },
+    });
+    const landlordIds = [...new Set(rows.map((r) => r.booking?.property.landlordId).filter((id): id is string => !!id))];
+    let released = 0;
+    for (const id of landlordIds) released += await this.releaseHeldPayoutsForLandlord(id);
+    return released;
+  }
+
+  /// For Platform Controls: how much is currently held.
+  async heldPayoutStats(): Promise<{ count: number; totalKobo: number; landlords: number }> {
+    const rows = await this.prisma.payment.findMany({
+      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null } },
+      select: { amount: true, platformFeeAmount: true, booking: { select: { property: { select: { landlordId: true } } } } },
+    });
+    return {
+      count: rows.length,
+      totalKobo: rows.reduce((sum, r) => sum + r.amount - r.platformFeeAmount, 0),
+      landlords: new Set(rows.map((r) => r.booking?.property.landlordId)).size,
+    };
   }
 
   private fee(amountKobo: number, bps: number): number {

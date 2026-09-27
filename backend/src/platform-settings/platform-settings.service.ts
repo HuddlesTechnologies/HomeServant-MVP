@@ -35,7 +35,7 @@ export class PlatformSettingsService {
     return { ...settings, stats: { totalListings, unverifiedListings, verifiedLandlords, landlordsWithListings } };
   }
 
-  async update(adminId: string, data: { requireVerifiedLandlords?: boolean }) {
+  async update(adminId: string, data: { requireVerifiedLandlords?: boolean; payUnverifiedLandlords?: boolean }) {
     const before = await this.requireVerifiedLandlords();
     await this.prisma.platformSettings.upsert({
       where: { id: 1 },
@@ -83,6 +83,12 @@ export class PlatformSettingsService {
     }
     this.logger.log(`Told ${landlords.length} unverified landlord(s) their listings are hidden`);
     return landlords.length;
+  }
+
+  /// Default true (pay everyone) when the row doesn't exist yet.
+  async payUnverifiedLandlords(): Promise<boolean> {
+    const row = await this.prisma.platformSettings.findUnique({ where: { id: 1 }, select: { payUnverifiedLandlords: true } });
+    return row?.payUnverifiedLandlords ?? true;
   }
 
   async requireVerifiedLandlords(): Promise<boolean> {
