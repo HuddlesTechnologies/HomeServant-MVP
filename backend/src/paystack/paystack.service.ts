@@ -13,10 +13,6 @@ export interface PaystackInitializedTransaction {
   reference: string;
 }
 
-export interface PaystackTransferRecipient {
-  recipientCode: string;
-}
-
 /// Wraps the handful of Paystack "Miscellaneous"/"Verification" endpoints
 /// used to let a landlord pick a real Nigerian bank and prove they own the
 /// account number they're entering, without this app having to maintain
