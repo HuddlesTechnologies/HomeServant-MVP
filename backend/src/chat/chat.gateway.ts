@@ -81,7 +81,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /// just that thread's room — unused for now beyond acking the join so
   /// the client knows the socket is live.
   ///
-  /// Mirrors ChatService.assertParticipant's membership check (a real
+  /// Mirrors ChatService.assertCanRead (a real
   /// ThreadParticipant row, or an admin allowed into a support thread — see
   /// adminCanAccessSupportThread) — without it,
   /// any authenticated socket could join an arbitrary thread id it merely

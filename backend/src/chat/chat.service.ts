@@ -263,14 +263,14 @@ export class ChatService {
 
   /// Sets `status: RESOLVED` — from that point [findForUser] hides this
   /// thread from the *user's* inbox (see its `isAdmin` param); the admin
-  /// side still shows it until the 30-day cleanup cron purges it. Only an
-  /// admin allowed into the thread can resolve it: the one handling it, any
-  /// admin while it's still unclaimed, or a SUPER_ADMIN (see
-  /// adminCanAccessSupportThread).
+  /// side still shows it until the 30-day cleanup cron purges it. Only the
+  /// admin handling it can resolve it, or any admin while it's still
+  /// unclaimed (see [canWrite]). A SUPER_ADMIN viewing someone else's
+  /// conversation is read-only and can't resolve it.
   async resolveSupportThread(threadId: string, adminId: string): Promise<void> {
     const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, include: { participants: true } });
     if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
-    if (!(await adminCanAccessSupportThread(this.prisma, thread, adminId))) {
+    if (!(await this.canWrite(threadId, adminId, UserRole.ADMIN))) {
       throw new ForbiddenException('Another admin is handling this conversation');
     }
     if (thread.status === 'RESOLVED') return;
@@ -347,7 +347,7 @@ export class ChatService {
   }
 
   async findMessages(threadId: string, userId: string, senderRole?: UserRole, before?: string) {
-    await this.assertParticipant(threadId, userId, senderRole);
+    await this.assertCanRead(threadId, userId, senderRole);
     const messages = await this.prisma.message.findMany({
       where: { threadId, ...(before ? { createdAt: { lt: new Date(before) } } : {}) },
       orderBy: { createdAt: 'desc' },
@@ -358,7 +358,7 @@ export class ChatService {
   }
 
   async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
-    await this.assertParticipant(threadId, userId, senderRole);
+    await this.assertCanWrite(threadId, userId, senderRole);
     const body = dto.body?.trim() ?? '';
     if (!body && !dto.attachmentUrl) {
       throw new BadRequestException('A message needs either text or an image');
@@ -441,7 +441,11 @@ export class ChatService {
   }
 
   async markRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
-    await this.assertParticipant(threadId, userId, senderRole);
+    await this.assertCanRead(threadId, userId, senderRole);
+    // A read-only viewer (a SUPER_ADMIN looking into another admin's
+    // conversation) must not mark messages read on that admin's behalf —
+    // it would silently clear their unread badge.
+    if (!(await this.canWrite(threadId, userId, senderRole))) return;
     await this.prisma.message.updateMany({
       where: { threadId, senderId: { not: userId }, readAt: null },
       data: { readAt: new Date() },
@@ -457,17 +461,33 @@ export class ChatService {
     return participants.map((p) => p.userId);
   }
 
-  /// [senderRole] lets any admin read/reply to an unclaimed support thread
-  /// even before they're a [ThreadParticipant] of it (see [sendMessage]'s
-  /// auto-claim, which is what actually adds them as one). A support thread
-  /// another admin is handling is closed to other admins except a
-  /// SUPER_ADMIN (see adminCanAccessSupportThread) — every other thread,
-  /// and every other role, still requires real participancy.
-  private async assertParticipant(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
+  /// Who may *reply* (send, mark read, resolve): a real [ThreadParticipant],
+  /// or any admin on a support thread nobody has claimed yet (the shared
+  /// Support Queue — [sendMessage]'s auto-claim is what then makes them a
+  /// participant). Every other thread, and every other role, requires real
+  /// participancy.
+  private async canWrite(threadId: string, userId: string, senderRole?: UserRole): Promise<boolean> {
     const membership = await this.prisma.threadParticipant.findUnique({
       where: { threadId_userId: { threadId, userId } },
     });
-    if (membership) return;
+    if (membership) return true;
+    if (senderRole !== 'ADMIN') return false;
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    return !!thread && thread.isSupport && !thread.assignedAdminId;
+  }
+
+  private async assertCanWrite(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
+    if (!(await this.canWrite(threadId, userId, senderRole))) {
+      throw new ForbiddenException('Not a participant of this thread');
+    }
+  }
+
+  /// Who may *read*: everyone who can write, plus a SUPER_ADMIN on a
+  /// support thread another admin is handling — read-only oversight (see
+  /// adminCanAccessSupportThread). No other admin can see into a support
+  /// thread someone else is handling.
+  private async assertCanRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
+    if (await this.canWrite(threadId, userId, senderRole)) return;
     if (senderRole === 'ADMIN') {
       const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
       if (thread && (await adminCanAccessSupportThread(this.prisma, thread, userId))) return;
