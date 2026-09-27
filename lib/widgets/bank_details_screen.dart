@@ -390,46 +390,70 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
         ? widget.banks
         : widget.banks.where((b) => b.name.toLowerCase().contains(query)).toList();
 
-    return SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.75),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Select Bank', style: AppTextStyles.heading(color: palette.sheetText, size: 17)),
-              const SizedBox(height: 14),
-              TextField(
-                controller: _search,
-                onChanged: (_) => setState(() {}),
-                style: AppTextStyles.body(color: palette.sheetText, size: 14),
-                decoration: InputDecoration(
-                  hintText: 'Search banks',
-                  hintStyle: AppTextStyles.body(color: palette.sheetText.withValues(alpha: 0.5), size: 14),
-                  prefixIcon: Icon(Icons.search_rounded, color: palette.sheetText.withValues(alpha: 0.5)),
-                  filled: true,
-                  fillColor: palette.sheetSearchFill,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+    // A fixed height (not sized to its content): the list used to be
+    // shrinkWrap'd inside a min-size Column, so every keystroke in the
+    // search box resized the whole sheet — it jumped around while
+    // filtering and collapsed to nothing on zero matches. The keyboard's
+    // inset is added below so the list isn't hidden under it on mobile web.
+    final media = MediaQuery.of(context);
+    final height = (media.size.height * 0.75).clamp(0.0, 640.0).toDouble();
+    return Padding(
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: SafeArea(
+        child: SizedBox(
+          height: height,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Select Bank', style: AppTextStyles.heading(color: palette.sheetText, size: 17)),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _search,
+                  autofocus: true,
+                  onChanged: (_) => setState(() {}),
+                  style: AppTextStyles.body(color: palette.sheetText, size: 14),
+                  cursorColor: palette.sheetText,
+                  decoration: InputDecoration(
+                    hintText: 'Search banks',
+                    hintStyle: AppTextStyles.body(color: palette.sheetText.withValues(alpha: 0.5), size: 14),
+                    prefixIcon: Icon(Icons.search_rounded, color: palette.sheetText.withValues(alpha: 0.5)),
+                    filled: true,
+                    fillColor: palette.sheetSearchFill,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) {
-                    final bank = filtered[index];
-                    return ListTile(
-                      title: Text(bank.name, style: AppTextStyles.body(color: palette.sheetText)),
-                      onTap: () => Navigator.pop(context, bank),
-                    );
-                  },
+                const SizedBox(height: 8),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No banks match "${_search.text.trim()}"',
+                            textAlign: TextAlign.center,
+                            style: AppTextStyles.body(color: palette.sheetText.withValues(alpha: 0.7), size: 14),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final bank = filtered[index];
+                            return ListTile(
+                              key: ValueKey(bank.code),
+                              title: Text(
+                                bank.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTextStyles.body(color: palette.sheetText),
+                              ),
+                              onTap: () => Navigator.pop(context, bank),
+                            );
+                          },
+                        ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
