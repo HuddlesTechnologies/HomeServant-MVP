@@ -12,6 +12,7 @@ import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { OpenSupportThreadDto } from './dto/support-tools.dto';
 import { TransferThreadDto } from './dto/transfer-thread.dto';
 
 @Controller('threads')
@@ -36,8 +37,8 @@ export class ChatController {
   /// starts) the calling user's own open support thread; see
   /// ChatService.openSupportThread.
   @Post('support')
-  openSupport(@CurrentUser() user: AuthenticatedUser) {
-    return this.chat.openSupportThread(user.sub);
+  openSupport(@CurrentUser() user: AuthenticatedUser, @Body() dto: OpenSupportThreadDto) {
+    return this.chat.openSupportThread(user.sub, dto.topic);
   }
 
   /// The admin console's shared "Support Queue" — every open support

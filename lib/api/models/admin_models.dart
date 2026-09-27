@@ -41,11 +41,19 @@ class AdminAccount {
     required this.createdAt,
     this.twoFactorEnabled = false,
     this.mustChangePassword = false,
+    this.createdById,
+    this.createdByName,
   });
 
   final String id;
   final String email;
   final AdminLevel level;
+
+  /// The super admin who created this account through the console, if
+  /// recorded (null for the first admin, database promotions, and admins
+  /// created before this was tracked). [createdByName] falls back to email.
+  final String? createdById;
+  final String? createdByName;
   final String? fullName;
   final DateTime createdAt;
   final bool twoFactorEnabled;
@@ -59,6 +67,12 @@ class AdminAccount {
     createdAt: DateTime.parse(json['createdAt'] as String),
     twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
     mustChangePassword: json['mustChangePassword'] as bool? ?? false,
+    createdById: (json['createdByAdmin'] as Map<String, dynamic>?)?['id'] as String?,
+    createdByName: () {
+      final creator = json['createdByAdmin'] as Map<String, dynamic>?;
+      final name = creator?['fullName'] as String?;
+      return name?.trim().isNotEmpty == true ? name : creator?['email'] as String?;
+    }(),
   );
 }
 

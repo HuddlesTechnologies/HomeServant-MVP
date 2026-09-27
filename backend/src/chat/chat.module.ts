@@ -9,6 +9,9 @@ import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { SupportAlertsService } from './support-alerts.service';
 import { SupportChatCleanupService } from './support-chat-cleanup.service';
+import { SupportToolsController } from './support-tools.controller';
+import { SupportToolsService } from './support-tools.service';
+import { UnreadMessageEmailService } from './unread-message-email.service';
 
 /// NotificationsModule needs ChatGateway (to emit `notification:new` over
 /// the same socket this module already runs) while this module needs
@@ -17,8 +20,8 @@ import { SupportChatCleanupService } from './support-chat-cleanup.service';
 /// same as PaymentsModule/PaystackModule.
 @Module({
   imports: [AuthModule, forwardRef(() => NotificationsModule), MailModule, ActivityLogModule, StorageModule],
-  controllers: [ChatController],
-  providers: [ChatService, ChatGateway, SupportChatCleanupService, SupportAlertsService],
+  controllers: [ChatController, SupportToolsController],
+  providers: [ChatService, ChatGateway, SupportChatCleanupService, SupportAlertsService, SupportToolsService, UnreadMessageEmailService],
   // ChatService is exported for AdminModule, whose super-admin-only Chat
   // Log endpoint (AdminService.findChatLog) delegates straight into
   // ChatService.findChatLog rather than duplicating its Prisma query.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/notification_offer.dart';
 import '../../state/app_state.dart';
 import '../../widgets/dashboard_tab_scaffold.dart';
 import 'landlord_bookings_screen.dart';
@@ -22,6 +23,14 @@ class LandlordDashboardScreen extends StatefulWidget {
 
 class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
   int _navIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) offerBrowserNotifications(context);
+    });
+  }
 
   Future<void> _logOut(BuildContext context) async {
     try {

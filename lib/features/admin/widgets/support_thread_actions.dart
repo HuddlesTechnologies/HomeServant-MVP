@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../api/api_exception.dart';
-import '../../../api/models/admin_models.dart';
+import '../../../api/models/support_tools.dart';
 import '../../../state/app_state.dart';
-import 'admin_picker_sheet.dart';
+import 'transfer_target_sheet.dart';
 
 /// Marks a support thread resolved and confirms with a snackbar. Returns
 /// whether it succeeded. Shared by the admin Messages tab and the admin
@@ -25,16 +25,16 @@ Future<bool> resolveSupportThread(BuildContext context, String threadId) async {
 Future<bool> transferSupportThread(BuildContext context, String threadId) async {
   final messenger = ScaffoldMessenger.of(context);
   final appState = context.read<AppState>();
-  List<AdminAccount> admins;
+  List<TransferTarget> admins;
   try {
-    admins = await appState.admin.findAdmins();
+    admins = await appState.supportTools.transferTargets();
   } on ApiException catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
     return false;
   }
   if (!context.mounted) return false;
   final myId = appState.userId;
-  final chosen = await showAdminPickerSheet(
+  final chosen = await showTransferTargetSheet(
     context,
     admins: admins,
     title: 'Transfer conversation to',
@@ -43,7 +43,7 @@ Future<bool> transferSupportThread(BuildContext context, String threadId) async 
   if (chosen == null) return false;
   try {
     await appState.chat.transferThread(threadId, chosen.id);
-    messenger.showSnackBar(SnackBar(content: Text('Transferred to ${chosen.email}')));
+    messenger.showSnackBar(SnackBar(content: Text('Transferred to ${chosen.displayName}')));
     return true;
   } on ApiException catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -57,15 +57,15 @@ Future<bool> transferSupportThread(BuildContext context, String threadId) async 
 Future<bool> reassignSupportThread(BuildContext context, String threadId, {String? currentAdminId}) async {
   final messenger = ScaffoldMessenger.of(context);
   final appState = context.read<AppState>();
-  List<AdminAccount> admins;
+  List<TransferTarget> admins;
   try {
-    admins = await appState.admin.findAdmins();
+    admins = await appState.supportTools.transferTargets();
   } on ApiException catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
     return false;
   }
   if (!context.mounted) return false;
-  final chosen = await showAdminPickerSheet(
+  final chosen = await showTransferTargetSheet(
     context,
     admins: admins,
     title: 'Reassign conversation to',
@@ -74,7 +74,7 @@ Future<bool> reassignSupportThread(BuildContext context, String threadId, {Strin
   if (chosen == null) return false;
   try {
     await appState.chat.reassignThread(threadId, chosen.id);
-    messenger.showSnackBar(SnackBar(content: Text('Reassigned to ${chosen.email}')));
+    messenger.showSnackBar(SnackBar(content: Text('Reassigned to ${chosen.displayName}')));
     return true;
   } on ApiException catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(e.message)));

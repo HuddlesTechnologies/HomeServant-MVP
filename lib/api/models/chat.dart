@@ -1,3 +1,5 @@
+import 'support_tools.dart';
+
 class ThreadParticipant {
   const ThreadParticipant({
     required this.id,
@@ -121,10 +123,17 @@ class ChatThread {
     this.lastMessage,
     this.isSupport = false,
     this.resolved = false,
+    this.supportTopic,
+    this.priority = SupportPriority.normal,
   });
 
   final String id;
   final List<ThreadParticipant> otherParticipants;
+
+  /// Support threads only: what it's about and how urgent (see
+  /// SupportTopic/SupportPriority).
+  final SupportTopic? supportTopic;
+  final SupportPriority priority;
   final String? propertyId;
   final String? propertyTitle;
 
@@ -176,6 +185,8 @@ class ChatThread {
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       isSupport: json['isSupport'] as bool? ?? false,
       resolved: json['resolved'] as bool? ?? false,
+      supportTopic: SupportTopic.fromApi(json['supportTopic']),
+      priority: SupportPriority.fromApi(json['priority']),
     );
   }
 }
@@ -193,9 +204,13 @@ class SupportQueueThread {
     this.requesterId,
     this.requesterName,
     this.lastMessage,
+    this.supportTopic,
+    this.priority = SupportPriority.normal,
   });
 
   final String id;
+  final SupportTopic? supportTopic;
+  final SupportPriority priority;
 
   /// Always null in practice — the backend only ever returns unclaimed
   /// threads from this endpoint now (see ChatService.findSupportQueue);
@@ -224,6 +239,8 @@ class SupportQueueThread {
       lastMessage: lastMessage != null ? ChatMessage.fromApi(lastMessage) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      supportTopic: SupportTopic.fromApi(json['supportTopic']),
+      priority: SupportPriority.fromApi(json['priority']),
     );
   }
 }
@@ -262,6 +279,8 @@ class ThreadSummary {
     required this.otherParticipants,
     this.canReassign = false,
     this.lockedReason,
+    this.supportTopic,
+    this.priority = SupportPriority.normal,
     this.resolvedAt,
     this.assignedAdmin,
     this.lastTransferFrom,
@@ -288,6 +307,9 @@ class ThreadSummary {
   /// ChatService.landlordTenantBlockReason. Null when messaging is open.
   final String? lockedReason;
 
+  final SupportTopic? supportTopic;
+  final SupportPriority priority;
+
   factory ThreadSummary.fromApi(Map<String, dynamic> json) {
     final transfer = json['lastTransfer'] as Map<String, dynamic>?;
     return ThreadSummary(
@@ -306,6 +328,8 @@ class ThreadSummary {
       canReply: json['canReply'] as bool? ?? false,
       canReassign: json['canReassign'] as bool? ?? false,
       lockedReason: json['lockedReason'] as String?,
+      supportTopic: SupportTopic.fromApi(json['supportTopic']),
+      priority: SupportPriority.fromApi(json['priority']),
     );
   }
 }

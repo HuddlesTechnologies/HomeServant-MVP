@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { NotificationType } from '@prisma/client';
 import { ChatGateway } from '../chat/chat.gateway';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 
 /// The single choke-point every notification (chat, admin, payments,
 /// reports, …) already passes through — also emitting a `notification:new`
@@ -13,6 +14,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly chatGateway: ChatGateway,
+    private readonly push: PushService,
   ) {}
 
   /// [threadId] links a chat-related notification to its thread (see
@@ -22,6 +24,11 @@ export class NotificationsService {
   async create(userId: string, type: NotificationType, title: string, body: string, threadId?: string, silent = false) {
     const notification = await this.prisma.notification.create({ data: { userId, type, title, body, threadId } });
     this.emit(notification, silent);
+    // Also reaches the user when the site isn't open (Web Push). Silent
+    // alerts stay in-app only. Fire-and-forget: never slows the caller.
+    if (!silent) {
+      void this.push.sendToUser(userId, { title, body, tag: threadId ?? notification.id, url: '/' });
+    }
     return notification;
   }
 

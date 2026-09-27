@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/notification_offer.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -55,6 +56,9 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     // full app restart. Refreshing on entry means at least opening this
     // tab picks up anything new, on top of the pull-to-refresh below.
     context.read<AppState>().loadProperties();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) offerBrowserNotifications(context);
+    });
   }
 
   @override

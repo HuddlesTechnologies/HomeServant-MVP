@@ -185,6 +185,7 @@
 <p>Admin-only extras, all in <code>NotificationBannerOverlay</code>:</p>
 <ul>
   <li><strong>Alert sound</strong> (<code>ChatSoundService</code>): at most one sound per 10 seconds, only if the device's sound setting is on.</li>
+  <li><strong>Web Push</strong> (everyone, web only): <code>offerBrowserNotifications</code> offers to turn notifications on once per page load on each dashboard. <code>AppState.enableWebPush</code> asks the browser from that tap, registers <code>web/push-sw.js</code> (scope <code>./push/</code>, so it never touches Flutter's own files) and sends the subscription to the backend; <code>syncWebPush</code> re-registers after every sign-in, and sign-out unsubscribes this browser. The worker skips showing a push while the app is open and in view, and uses the same tag as the in-tab pop-up so they never double up.</li>
   <li><strong>Browser pop-ups</strong> (<code>services/browser_notifications*.dart</code>): shown only when the console tab isn't in view. They use the browser's own Notification feature, through a web-only file loaded with a conditional import. It does nothing on phones.</li>
 </ul>
 

@@ -200,8 +200,10 @@ class _AdminShellState extends State<AdminShell> {
           label: 'Turn on',
           textColor: AppColors.gold,
           onPressed: () async {
-            final permission = await requestBrowserNotificationPermission();
-            appState.setAdminBrowserNotifications(permission == 'granted');
+            // Also registers this browser for push, so alerts arrive
+            // even when the console isn't open.
+            final granted = await appState.enableWebPush();
+            appState.setAdminBrowserNotifications(granted);
           },
         ),
       ),
