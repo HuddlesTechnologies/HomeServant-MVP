@@ -239,6 +239,7 @@ export class ChatService {
 
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: adminId });
     this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+    await this.gateway.evictUnauthorizedFromThread(threadId);
   }
 
   /// Race-safe "claim this unattended support thread" primitive shared by
@@ -394,6 +395,7 @@ export class ChatService {
       if (claimed) {
         await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: userId });
         this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+        await this.gateway.evictUnauthorizedFromThread(threadId);
       }
     }
 
@@ -509,6 +511,11 @@ export class ChatService {
       this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId, toAdminId } }),
     ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: fromAdminId, targetId: toAdminId });
+    // Same "this thread changed hands" signal a claim sends — lets any
+    // admin with it open (including the one who just handed it off)
+    // re-check their access and go read-only.
+    this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+    await this.gateway.evictUnauthorizedFromThread(threadId);
 
     await this.notifications.create(
       toAdminId,

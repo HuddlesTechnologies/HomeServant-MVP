@@ -26,6 +26,7 @@ class ChatSocketService {
   final _readController = StreamController<String>.broadcast();
   final _claimedController = StreamController<String>.broadcast();
   final _badgesChangedController = StreamController<void>.broadcast();
+  final _accessRevokedController = StreamController<String>.broadcast();
 
   Stream<ChatSocketMessage> get onNewMessage => _controller.stream;
 
@@ -57,6 +58,12 @@ class ChatSocketService {
   /// startup. No payload: cheaper to just refetch the handful of COUNT
   /// queries than to keep track of which specific badge changed.
   Stream<void> get onAdminBadgesChanged => _badgesChangedController.stream;
+
+  /// Fires with a thread id when the server removes this socket from that
+  /// thread's live room because the user lost access to it (another admin
+  /// took over a support conversation — see backend
+  /// ChatGateway.evictUnauthorizedFromThread).
+  Stream<String> get onAccessRevoked => _accessRevokedController.stream;
 
   void connect(String accessToken) {
     disconnect();
@@ -97,6 +104,12 @@ class ChatSocketService {
       }
     });
     socket.on('admin:badges-changed', (_) => _badgesChangedController.add(null));
+    socket.on('thread:access-revoked', (data) {
+      if (data is Map) {
+        final threadId = data['threadId'] as String?;
+        if (threadId != null) _accessRevokedController.add(threadId);
+      }
+    });
     socket.on('notification:new', (data) {
       if (data is Map) {
         try {

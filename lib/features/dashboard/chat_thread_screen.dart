@@ -151,6 +151,16 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _exportingPdf = false;
   bool _resolvingOrTransferring = false;
   bool _sendingImage = false;
+  StreamSubscription<String>? _claimedSubscription;
+  StreamSubscription<String>? _accessRevokedSubscription;
+
+  /// Set once an admin loses the ability to reply here while the screen is
+  /// open — another admin took the support conversation over, or it was
+  /// transferred away or resolved. Turns the screen read-only and explains
+  /// why, instead of leaving a composer whose sends the server now refuses.
+  String? _accessNotice;
+
+  bool get _readOnly => widget.readOnly || _accessNotice != null;
 
   @override
   void initState() {
@@ -164,7 +174,41 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       final chatSocket = context.read<AppState>().chatSocket;
       _socketSubscription = chatSocket.onNewMessage.listen(_onSocketMessage);
       _readSubscription = chatSocket.onRead.listen(_onSocketRead);
+      if (context.read<AppState>().role.isAdmin) {
+        // A claim or transfer of *this* thread may have just taken it away
+        // from this admin — re-check rather than guess from the event.
+        _claimedSubscription = chatSocket.onThreadClaimed.listen((id) {
+          if (id == threadId) _refreshAccess();
+        });
+        _accessRevokedSubscription = chatSocket.onAccessRevoked.listen((id) {
+          if (id == threadId) _refreshAccess();
+        });
+      }
     }
+  }
+
+  /// Admin-only: asks the server whether this admin can still reply here
+  /// (see backend ChatService.getThreadSummary) and updates [_accessNotice].
+  Future<void> _refreshAccess() async {
+    final threadId = widget.threadId;
+    if (threadId == null || widget.readOnly) return;
+    final appState = context.read<AppState>();
+    String? notice;
+    try {
+      final summary = await appState.chat.summary(threadId);
+      if (!summary.canReply) {
+        final assigned = summary.assignedAdmin;
+        notice = summary.resolved
+            ? 'This conversation has been resolved.'
+            : assigned != null && assigned.id != appState.userId
+            ? 'This conversation is now handled by ${assigned.displayName}.'
+            : "You can't reply to this conversation anymore.";
+      }
+    } on ApiException {
+      notice = "You don't have access to this conversation anymore.";
+    }
+    if (!mounted) return;
+    setState(() => _accessNotice = notice);
   }
 
   /// The other participant just read this thread — flip every message we
@@ -253,6 +297,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   @override
   void dispose() {
+    _claimedSubscription?.cancel();
+    _accessRevokedSubscription?.cancel();
     _socketSubscription?.cancel();
     _readSubscription?.cancel();
     _inputController.dispose();
@@ -315,6 +361,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     } finally {
       if (mounted) setState(() => _resolvingOrTransferring = false);
     }
+    // Resolving or handing it off ends this admin's ability to reply.
+    if (mounted) await _refreshAccess();
   }
 
   Future<void> _handleTransfer() async {
@@ -326,6 +374,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     } finally {
       if (mounted) setState(() => _resolvingOrTransferring = false);
     }
+    // Resolving or handing it off ends this admin's ability to reply.
+    if (mounted) await _refreshAccess();
   }
 
   void _scrollToBottom() {
@@ -534,7 +584,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 ),
               if (orderItem != null && orderStatus != null)
                 _OrderStatusBanner(theme: theme, item: orderItem, status: orderStatus),
-              if (widget.showResolveTransferActions && !widget.readOnly)
+              if (widget.showResolveTransferActions && !_readOnly)
                 _ResolveTransferBar(
                   theme: theme,
                   isResolved: widget.isResolved,
@@ -637,7 +687,28 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     ),
                   ),
                 ),
-              if (!widget.readOnly)
+              if (_accessNotice != null)
+                // theme.surface/onSurface: a fixed light-surface/navy-text
+                // pair in every DashboardTheme (see CLAUDE.md).
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_outline_rounded, color: theme.onSurface, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _accessNotice!,
+                          style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (!_readOnly)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Row(

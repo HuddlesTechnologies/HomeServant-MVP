@@ -136,6 +136,35 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(this.adminRoom()).emit(event, payload);
   }
 
+  /// Called whenever a support thread changes hands (claimed from the
+  /// queue, claimed by a first reply, or transferred). Any socket in the
+  /// thread's room that's no longer allowed in — not a participant, and not
+  /// an admin who still passes adminCanAccessSupportThread — is removed
+  /// from the room so it stops receiving that thread's live messages, and
+  /// told why. Without this, a socket that joined while the thread was
+  /// unclaimed stayed in the room after another admin took it over, even
+  /// though every REST call was already refused.
+  async evictUnauthorizedFromThread(threadId: string): Promise<void> {
+    const room = this.threadRoom(threadId);
+    const sockets = await this.server.in(room).fetchSockets();
+    if (sockets.length === 0) return;
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: { isSupport: true, assignedAdminId: true, participants: { select: { userId: true } } },
+    });
+    if (!thread) return;
+    const participantIds = new Set(thread.participants.map((p) => p.userId));
+    for (const socket of sockets) {
+      const userId = socket.data.userId as string | undefined;
+      if (userId && participantIds.has(userId)) continue;
+      if (userId && socket.data.role === 'ADMIN' && (await adminCanAccessSupportThread(this.prisma, thread, userId))) {
+        continue;
+      }
+      socket.leave(room);
+      socket.emit('thread:access-revoked', { threadId });
+    }
+  }
+
   private userRoom(userId: string): string {
     return `user:${userId}`;
   }
