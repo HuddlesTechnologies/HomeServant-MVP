@@ -86,6 +86,15 @@ class ChatRepository {
     });
   }
 
+  /// The customer ends their own support conversation (backend
+  /// ChatService.endSupportThreadByCustomer).
+  Future<void> endSupportThread(String threadId) {
+    return _client.call(() async {
+      await _client.dio.patch('/threads/$threadId/end');
+      onLocalChange?.call();
+    });
+  }
+
   /// The customer's 1–5 rating of a resolved support conversation.
   Future<void> rateSupportThread(String threadId, int rating, {String? comment}) {
     return _client.call(() async {

@@ -103,6 +103,7 @@ class _AdminSupportInsightsTabState extends State<AdminSupportInsightsTab> {
               ),
               _Tile('Transferred', '${m.totals.transferred}'),
               _Tile('Never answered', '${m.totals.neverAnswered}', warn: m.totals.neverAnswered > 0),
+              _Tile('Ended by the customer', '${m.totals.endedByCustomer}', caption: 'included in resolved'),
             ]),
             const SizedBox(height: 18),
             const _SectionTitle('Conversations per day'),

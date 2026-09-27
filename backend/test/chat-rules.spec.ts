@@ -330,6 +330,49 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
     });
   });
 
+  // --- Customer ends the chat -----------------------------------------------------------
+
+  describe('customer ends a support chat', () => {
+    it('closes it for both sides, tells the admin, and a new Contact Support starts fresh', async () => {
+      const ada = await makeUser(prisma, UserRole.ADMIN, { adminLevel: 'SUPPORT' });
+      const customer = await makeUser(prisma, UserRole.TENANT);
+      const thread = await chat.openSupportThread(customer.id, 'ACCOUNT');
+      await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Hi' });
+      await chat.claimThread(thread.id, ada.id);
+      await chat.sendMessage(thread.id, ada.id, UserRole.ADMIN, { body: 'Hello, how can I help?' });
+
+      const stranger = await makeUser(prisma, UserRole.TENANT);
+      await expect(chat.endSupportThreadByCustomer(thread.id, stranger.id)).rejects.toThrow(/not found/);
+
+      await chat.endSupportThreadByCustomer(thread.id, customer.id);
+      await expect(chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Wait' })).rejects.toThrow(/has ended/);
+      await expect(chat.sendMessage(thread.id, ada.id, UserRole.ADMIN, { body: 'Still there?' })).rejects.toThrow(/has ended/);
+
+      const notice = await prisma.message.findFirst({ where: { threadId: thread.id, type: 'SYSTEM' }, orderBy: { createdAt: 'desc' } });
+      expect(notice?.body).toBe('The customer ended this conversation.');
+      expect(await prisma.notification.count({ where: { userId: ada.id, title: 'A customer ended their conversation' } })).toBe(1);
+      const stat = await prisma.supportChatStat.findUniqueOrThrow({ where: { threadId: thread.id } });
+      expect(stat).toMatchObject({ closedByCustomer: true, resolvedById: null });
+      expect(stat.resolvedAt).not.toBeNull();
+      // An admin replied, so they can rate it.
+      expect((await chat.getThreadSummary(thread.id, customer.id, UserRole.TENANT)).canRate).toBe(true);
+
+      const next = await chat.openSupportThread(customer.id);
+      expect(next.id).not.toBe(thread.id);
+    });
+
+    it('does not ask for a rating when nobody replied', async () => {
+      const customer = await makeUser(prisma, UserRole.TENANT);
+      const thread = await chat.openSupportThread(customer.id);
+      await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Hello?' });
+      await chat.endSupportThreadByCustomer(thread.id, customer.id);
+      expect((await chat.getThreadSummary(thread.id, customer.id, UserRole.TENANT)).canRate).toBe(false);
+      await expect(chat.rateSupportThread(thread.id, customer.id, 2)).rejects.toThrow(BadRequestException);
+      // It left the queue.
+      expect(await chat.findSupportQueue()).toHaveLength(0);
+    });
+  });
+
   // --- Counts and read state --------------------------------------------------
 
   describe('read state and the admin Messages badge', () => {

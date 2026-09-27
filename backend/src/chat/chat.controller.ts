@@ -92,6 +92,13 @@ export class ChatController {
     return this.chat.getHandlingHistory(id, user.sub);
   }
 
+  /// The customer ends their own support conversation.
+  @Patch(':id/end')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async end(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.chat.endSupportThreadByCustomer(id, user.sub);
+  }
+
   /// The customer rates their resolved support conversation (1–5, once).
   @Post(':id/rating')
   @HttpCode(HttpStatus.NO_CONTENT)

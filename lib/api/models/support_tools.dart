@@ -249,6 +249,7 @@ class SupportTotals {
   int get ratings => json['ratings'] as int? ?? 0;
   int get transferred => json['transferred'] as int? ?? 0;
   int get neverAnswered => json['neverAnswered'] as int? ?? 0;
+  int get endedByCustomer => json['endedByCustomer'] as int? ?? 0;
 }
 
 class SupportAdminStat {

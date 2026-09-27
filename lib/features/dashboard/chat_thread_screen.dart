@@ -189,6 +189,45 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   /// Customer side: this resolved support chat can still be rated.
   bool _canRate = false;
 
+  /// Customer side: an open support chat they can end themselves.
+  bool _canEndSupport = false;
+
+  /// Customer: ends their support conversation after confirming.
+  Future<void> _endSupportChat() async {
+    final threadId = widget.threadId;
+    if (threadId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text('End this chat?', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+        content: Text(
+          "Our team won't be able to reply here any more. If you need help again, start a new chat from Contact Support.",
+          style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.75), size: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('Keep chatting', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(backgroundColor: AppColors.navy),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('End chat', style: AppTextStyles.body(color: Colors.white, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().chat.endSupportThread(threadId);
+      await _refreshAccess();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _openTriage() async {
     final threadId = widget.threadId;
     if (threadId == null) return;
@@ -335,8 +374,15 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     String? notice;
     try {
       final summary = await appState.chat.summary(threadId);
-      if (mounted && summary.canRate != _canRate) setState(() => _canRate = summary.canRate);
-      if (summary.lockedReason != null) {
+      if (mounted) {
+        setState(() {
+          _canRate = summary.canRate;
+          _canEndSupport = !isAdmin && summary.isSupport && !summary.resolved;
+        });
+      }
+      if (!isAdmin && summary.isSupport && summary.resolved) {
+        notice = 'This conversation has ended. Start a new one from Contact Support if you still need help.';
+      } else if (summary.lockedReason != null) {
         notice = summary.lockedReason;
       } else if (isAdmin && !summary.canReply) {
         final assigned = summary.assignedAdmin;
@@ -731,6 +777,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           ],
         ),
         actions: [
+          if (_canEndSupport)
+            TextButton(
+              onPressed: _endSupportChat,
+              child: Text('End chat', style: AppTextStyles.body(color: theme.foreground, size: 14, weight: FontWeight.w700)),
+            ),
           // Support tools — shown to the admin handling a support chat and
           // to super admins (the same people the handling history is for).
           if (_history != null && widget.threadId != null && MediaQuery.of(context).size.width < 700)
