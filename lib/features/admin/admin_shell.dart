@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
 import '../../api/models/vendor.dart';
 import '../../core/theme/app_colors.dart';
@@ -209,6 +210,33 @@ class _AdminShellState extends State<AdminShell> {
                     },
                   ),
                 ],
+              ),
+              const SizedBox(height: 8),
+              _SettingsSwitchRow(
+                title: 'On duty',
+                subtitle: appState.adminOnDuty
+                    ? 'You get alert sounds for new support conversations'
+                    : "Away: new support conversations arrive silently. Chats you're handling still alert you.",
+                value: appState.adminOnDuty,
+                onChanged: (value) async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await appState.setAdminOnDuty(value);
+                  } on ApiException catch (e) {
+                    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+                  }
+                  setSheetState(() {});
+                },
+              ),
+              const SizedBox(height: 8),
+              _SettingsSwitchRow(
+                title: 'Alert sounds on this device',
+                subtitle: 'Play a sound for chat alerts (at most once every 10 seconds)',
+                value: appState.adminAlertSound,
+                onChanged: (value) {
+                  appState.setAdminAlertSound(value);
+                  setSheetState(() {});
+                },
               ),
               const SizedBox(height: 12),
               SizedBox(
@@ -558,6 +586,35 @@ class _MoreScreen extends StatelessWidget {
         title: Text(item.label, style: AppTextStyles.heading(color: Colors.white, size: 18)),
       ),
       body: item.builder(),
+    );
+  }
+}
+
+/// A title/subtitle row with a switch, for the white Account Settings sheet
+/// (navy title, grey subtitle on white).
+class _SettingsSwitchRow extends StatelessWidget {
+  const _SettingsSwitchRow({required this.title, required this.subtitle, required this.value, required this.onChanged});
+
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 14)),
+              Text(subtitle, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12)),
+            ],
+          ),
+        ),
+        Switch(value: value, onChanged: onChanged),
+      ],
     );
   }
 }

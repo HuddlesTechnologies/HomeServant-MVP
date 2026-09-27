@@ -238,6 +238,7 @@ export class ChatService {
     if (!claimed) throw new ForbiddenException('This conversation has already been claimed by another admin');
 
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: adminId });
+    await this.notifications.clearThreadAlertsForOtherAdmins(threadId, adminId);
     this.gateway.broadcastToAdmins('thread:claimed', { threadId });
     await this.gateway.evictUnauthorizedFromThread(threadId);
   }
@@ -404,6 +405,7 @@ export class ChatService {
       const claimed = await this.attemptClaim(threadId, userId);
       if (claimed) {
         await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: userId });
+        await this.notifications.clearThreadAlertsForOtherAdmins(threadId, userId);
         this.gateway.broadcastToAdmins('thread:claimed', { threadId });
         await this.gateway.evictUnauthorizedFromThread(threadId);
       }
@@ -431,16 +433,29 @@ export class ChatService {
     // message (or any message on it before an admin picks it up) alerted
     // nobody until an admin happened to manually reopen the Support Queue
     // tab, which defeated the point of this whole feature.
+    //
+    // One alert per conversation, not per message: a customer's follow-up
+    // messages before anyone picks it up update that same alert quietly
+    // ("Ada (3 messages): …") instead of re-notifying — and re-sounding —
+    // every admin each time. "Away" admins get it silently (see
+    // User.adminOnDuty). The 5-minute "still waiting" reminder is
+    // SupportAlertsService's job.
     if (senderRole !== 'ADMIN' && thread?.isSupport && otherParticipants.length === 0) {
-      const admins = await this.prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+      const [admins, messageCount] = await Promise.all([
+        this.prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true, adminOnDuty: true } }),
+        this.prisma.message.count({ where: { threadId } }),
+      ]);
+      const preview = previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText;
+      const body = messageCount > 1 ? `${senderName} (${messageCount} messages): ${preview}` : `${senderName}: ${preview}`;
       await Promise.all(
         admins.map((admin) =>
-          this.notifications.create(
+          this.notifications.upsertThreadAlert(
             admin.id,
             NotificationType.NEW_MESSAGE,
-            'New support conversation',
-            `${senderName}: ${previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText}`,
             threadId,
+            'New support conversation',
+            body,
+            !admin.adminOnDuty,
           ),
         ),
       );
@@ -547,6 +562,7 @@ export class ChatService {
       this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId: previousAdminId, toAdminId } }),
     ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: superAdminId, targetId: toAdminId });
+    await this.notifications.clearThreadAlertsForOtherAdmins(threadId, toAdminId);
     this.gateway.broadcastToAdmins('thread:claimed', { threadId });
     await this.gateway.evictUnauthorizedFromThread(threadId);
 
@@ -613,6 +629,7 @@ export class ChatService {
     // Same "this thread changed hands" signal a claim sends — lets any
     // admin with it open (including the one who just handed it off)
     // re-check their access and go read-only.
+    await this.notifications.clearThreadAlertsForOtherAdmins(threadId, toAdminId);
     this.gateway.broadcastToAdmins('thread:claimed', { threadId });
     await this.gateway.evictUnauthorizedFromThread(threadId);
 

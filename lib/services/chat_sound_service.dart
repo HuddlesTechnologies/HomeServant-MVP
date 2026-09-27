@@ -14,7 +14,10 @@ class ChatSoundService {
   final AudioPlayer _player = AudioPlayer();
   DateTime? _lastPlayedAt;
 
-  static const _minInterval = Duration(seconds: 2);
+  /// At most one alert sound per 10 seconds on a device, however many
+  /// alerts land in that window — several chats arriving together still
+  /// just ding once.
+  static const _minInterval = Duration(seconds: 10);
 
   Future<void> play() async {
     final now = DateTime.now();

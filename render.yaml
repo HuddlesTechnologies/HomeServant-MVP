@@ -50,3 +50,11 @@ services:
         value: https://homeservant.online,https://homeservant.vercel.app
       - key: PORT
         value: 3000
+      # Support chat follow-up alerts (see SupportAlertsService): minutes
+      # an unclaimed chat waits before all admins get a reminder, and
+      # minutes a customer's unanswered message waits before super admins
+      # are alerted.
+      - key: SUPPORT_UNCLAIMED_REMINDER_MINUTES
+        value: "5"
+      - key: SUPPORT_REPLY_ESCALATION_MINUTES
+        value: "10"

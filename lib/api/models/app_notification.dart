@@ -40,6 +40,7 @@ class AppNotification {
     required this.createdAt,
     this.readAt,
     this.threadId,
+    this.silent = false,
   });
 
   final String id;
@@ -54,6 +55,12 @@ class AppNotification {
   /// other types, and for notifications created before this was recorded.
   final String? threadId;
 
+  /// Only ever set on a live socket push, never on GET /notifications: the
+  /// server's way of saying "update the list, but no banner or sound" — a
+  /// follow-up message folded into an existing alert, or an alert for an
+  /// admin who's set themselves Away.
+  final bool silent;
+
   bool get isRead => readAt != null;
 
   factory AppNotification.fromApi(Map<String, dynamic> json) => AppNotification(
@@ -64,5 +71,6 @@ class AppNotification {
     createdAt: DateTime.parse(json['createdAt'] as String),
     readAt: json['readAt'] != null ? DateTime.parse(json['readAt'] as String) : null,
     threadId: json['threadId'] as String?,
+    silent: json['silent'] as bool? ?? false,
   );
 }

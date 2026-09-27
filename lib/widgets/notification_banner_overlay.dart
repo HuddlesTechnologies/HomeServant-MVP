@@ -44,6 +44,7 @@ class NotificationBannerOverlay extends StatefulWidget {
 
 class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
   StreamSubscription<AppNotification>? _subscription;
+  StreamSubscription<String>? _claimedSubscription;
   AppNotification? _visible;
   Timer? _dismissTimer;
 
@@ -54,6 +55,16 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
     // broadcast stream) lives for AppState's whole lifetime, reconnecting
     // under the hood across login/logout rather than being replaced.
     _subscription ??= context.read<AppState>().chatSocket.onNotification.listen(_handleIncoming);
+    // A support conversation was just claimed/reassigned: the server has
+    // already marked everyone else's "new support conversation" alert read
+    // — refresh, and drop a banner still showing for that thread.
+    _claimedSubscription ??= context.read<AppState>().chatSocket.onThreadClaimed.listen(_handleThreadClaimed);
+  }
+
+  void _handleThreadClaimed(String threadId) {
+    if (!mounted) return;
+    unawaited(context.read<AppState>().loadNotifications());
+    if (_visible?.threadId == threadId) _dismiss();
   }
 
   void _handleIncoming(AppNotification notification) {
@@ -63,10 +74,13 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
     // in sync with what the banner just showed, without this overlay
     // needing to know how those counters are maintained internally.
     unawaited(appState.loadNotifications());
+    // A silent push (a follow-up folded into an existing alert, or an
+    // alert for an admin set to Away) only refreshes the list above.
+    if (notification.silent) return;
     // Sound is admin-console-only (an admin session is the only one with a
-    // non-null adminLevel) and only for chat-relevant events — see
-    // _chatSoundTypes.
-    if (appState.adminLevel != null && _chatSoundTypes.contains(notification.type)) {
+    // non-null adminLevel), only for chat-relevant events — see
+    // _chatSoundTypes — and only if this device has alert sounds on.
+    if (appState.adminLevel != null && appState.adminAlertSound && _chatSoundTypes.contains(notification.type)) {
       unawaited(ChatSoundService.instance.play());
     }
     _dismissTimer?.cancel();
@@ -101,6 +115,7 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _claimedSubscription?.cancel();
     _dismissTimer?.cancel();
     super.dispose();
   }
