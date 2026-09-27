@@ -6,11 +6,11 @@ import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
-import '../../widgets/labeled_pill_field.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/upload_picker.dart';
 import '../dashboard/models/property.dart';
 import 'vendor_dashboard_screen.dart';
+import 'widgets/vendor_form_fields.dart';
 
 /// Shop-setup form for an already-authenticated tenant/vendor (see
 /// AppState.hasVendorProfile) — the same login can shop as a customer and
@@ -244,28 +244,28 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
                   ),
                 ),
                 const SizedBox(height: 28),
-                _Field(
+                VendorTextField(
                   label: 'Business Name',
                   theme: theme,
                   controller: _businessName,
                   hint: 'e.g. Comfort Home Furniture',
                 ),
                 const SizedBox(height: 16),
-                _Dropdown(
+                VendorDropdownField(
                   label: 'Business Category',
                   theme: theme,
                   value: _category?.label ?? 'Select a category',
                   onTap: _pickCategory,
                 ),
                 const SizedBox(height: 16),
-                _Dropdown(
+                VendorDropdownField(
                   label: 'State',
                   theme: theme,
                   value: _state ?? 'Select your state',
                   onTap: _pickState,
                 ),
                 const SizedBox(height: 16),
-                _Field(
+                VendorTextField(
                   label: 'CAC/RC Number (optional)',
                   theme: theme,
                   controller: _rcNumber,
@@ -285,93 +285,6 @@ class _VendorSignupScreenState extends State<VendorSignupScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({
-    required this.label,
-    required this.theme,
-    required this.controller,
-    this.keyboardType,
-    this.hint = '',
-  });
-
-  final String label;
-  final DashboardTheme theme;
-  final TextEditingController controller;
-  final TextInputType? keyboardType;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return LabeledPillField(
-      label: label,
-      labelColor: theme.foreground,
-      labelSize: 13.5,
-      controller: controller,
-      keyboardType: keyboardType,
-      hint: hint,
-      fillColor: theme.surface,
-      textColor: theme.onSurface,
-    );
-  }
-}
-
-class _Dropdown extends StatelessWidget {
-  const _Dropdown({
-    required this.label,
-    required this.theme,
-    required this.value,
-    required this.onTap,
-  });
-
-  final String label;
-  final DashboardTheme theme;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: AppTextStyles.body(
-            color: theme.foreground,
-            weight: FontWeight.w600,
-            size: 13.5,
-          ),
-        ),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-            decoration: BoxDecoration(
-              color: theme.surface,
-              borderRadius: BorderRadius.circular(28),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  value,
-                  style: AppTextStyles.body(color: theme.onSurface, size: 15),
-                ),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: theme.onSurface.withValues(alpha: 0.6),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

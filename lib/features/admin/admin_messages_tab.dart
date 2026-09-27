@@ -15,6 +15,7 @@ import '../../widgets/chat_thread_list_tile.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_picker_sheet.dart';
+import 'widgets/admin_badge.dart';
 
 /// The admin console's messaging area — the signed-in admin's own inbox
 /// (conversations they've been assigned or transferred, same as any other
@@ -326,7 +327,8 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
                           ),
                           if (thread.isSupport) ...[
                             const SizedBox(width: 8),
-                            _Badge(
+                            AdminBadge(
+                              size: AdminBadgeSize.small,
                               text: thread.resolved ? 'Resolved' : 'Read',
                               color: thread.resolved ? Colors.green : Colors.blue,
                             ),
@@ -409,7 +411,7 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
                       // queue entirely (see ChatService.findSupportQueue),
                       // so every row here is unattended by construction.
                       const SizedBox(height: 4),
-                      const _Badge(text: 'Unattended', color: Colors.red),
+                      const AdminBadge(size: AdminBadgeSize.small, text: 'Unattended', color: Colors.red),
                     ],
                   ),
                 ],
@@ -422,18 +424,3 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
   }
 }
 
-class _Badge extends StatelessWidget {
-  const _Badge({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: AppTextStyles.body(color: color, size: 10, weight: FontWeight.w700)),
-    );
-  }
-}

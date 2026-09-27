@@ -10,7 +10,7 @@ import '../../widgets/order_status_badge.dart';
 import '../../widgets/upload_picker.dart';
 import 'models/order_options.dart';
 import 'vendor_messages_screen.dart';
-import 'vendor_notifications_screen.dart';
+import '../dashboard/notifications_screen.dart';
 import 'vendor_order_detail_screen.dart';
 import 'widgets/vendor_bottom_nav.dart';
 import 'widgets/vendor_tab_route.dart';
@@ -69,7 +69,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
 
   Future<void> _openNotifications() async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => VendorNotificationsScreen(theme: widget.theme)),
+      MaterialPageRoute(builder: (_) => NotificationsScreen(theme: widget.theme, vendorOnly: true)),
     );
     _load();
   }
@@ -220,7 +220,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                             if (!item.notificationRead) {
                               await context.read<AppState>().marketplaceOrders.markItemRead(item.id);
                             }
-                            if (!mounted) return;
+                            if (!context.mounted) return;
                             await Navigator.of(context).push(
                               MaterialPageRoute(builder: (_) => VendorOrderDetailScreen(theme: theme, item: item)),
                             );

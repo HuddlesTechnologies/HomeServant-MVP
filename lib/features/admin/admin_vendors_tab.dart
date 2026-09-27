@@ -296,10 +296,7 @@ class _StatusBadge extends StatelessWidget {
         color = null,
         _status = status;
 
-  const _StatusBadge.custom({required String text, required Color color})
-      : text = text,
-        color = color,
-        _status = null;
+  const _StatusBadge.custom({required String this.text, required Color this.color}) : _status = null;
 
   final VendorApplicationStatus? _status;
   final String? text;

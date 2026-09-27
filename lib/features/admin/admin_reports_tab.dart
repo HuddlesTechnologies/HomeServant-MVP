@@ -7,6 +7,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
 import 'admin_report_detail_screen.dart';
 import 'widgets/admin_filter_chip.dart';
+import 'widgets/report_status_badge.dart';
 
 /// Reports submitted against a property or marketplace listing —
 /// `findReports` (admin_repository.dart) and `AdminReport`/`ReportStatus`
@@ -108,7 +109,7 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      _StatusBadge(status: report.status),
+                                      ReportStatusBadge(status: report.status),
                                     ],
                                   ),
                                   const SizedBox(height: 4),
@@ -154,27 +155,6 @@ class _AdminReportsTabState extends State<AdminReportsTab> {
                     ),
         ),
       ],
-    );
-  }
-}
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-
-  final ReportStatus status;
-
-  Color get _color => switch (status) {
-    ReportStatus.open => Colors.redAccent,
-    ReportStatus.inProgress => Colors.orange,
-    ReportStatus.resolved => Colors.green,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: _color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(9)),
-      child: Text(status.label, style: AppTextStyles.body(color: _color, size: 11, weight: FontWeight.w700)),
     );
   }
 }

@@ -9,6 +9,8 @@ import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
 import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
+import '../../widgets/labeled_value_row.dart';
+import 'widgets/admin_badge.dart';
 
 /// Full vendor profile — reached by tapping a row in AdminVendorsTab.
 /// Shows the vendor's own catalog and the orders they've received on top
@@ -136,20 +138,20 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                             Expanded(
                               child: Text(vendor.businessName, style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
                             ),
-                            _Badge(text: vendor.status.label, color: AppColors.navy),
+                            AdminBadge(text: vendor.status.label, color: AppColors.navy),
                             if (vendor.isSuspended) ...[
                               const SizedBox(width: 6),
-                              const _Badge(text: 'Suspended', color: Colors.redAccent),
+                              const AdminBadge(text: 'Suspended', color: Colors.redAccent),
                             ],
                           ],
                         ),
                         const SizedBox(height: 14),
-                        _Field('Category', vendor.category.label),
-                        _Field('State', vendor.state),
-                        _Field('Owner Email', vendor.ownerEmail ?? '—'),
-                        _Field('CAC/RC Number', vendor.rcNumber ?? '—'),
+                        LabeledValueRow('Category', vendor.category.label),
+                        LabeledValueRow('State', vendor.state),
+                        LabeledValueRow('Owner Email', vendor.ownerEmail ?? '—'),
+                        LabeledValueRow('CAC/RC Number', vendor.rcNumber ?? '—'),
                         if (vendor.status == VendorApplicationStatus.rejected && vendor.rejectionReason != null)
-                          _Field('Rejection Reason', vendor.rejectionReason!),
+                          LabeledValueRow('Rejection Reason', vendor.rejectionReason!),
                       ],
                     ),
                   ),
@@ -165,9 +167,9 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
                         if (vendor.accountNumber == null)
                           Text('No payout details on file yet.', style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5))
                         else ...[
-                          _Field('Bank Name', vendor.bankName ?? '—'),
-                          _Field('Account Number', vendor.accountNumber!),
-                          _Field('Account Name', vendor.accountName ?? '—'),
+                          LabeledValueRow('Bank Name', vendor.bankName ?? '—'),
+                          LabeledValueRow('Account Number', vendor.accountNumber!),
+                          LabeledValueRow('Account Name', vendor.accountName ?? '—'),
                         ],
                       ],
                     ),
@@ -319,44 +321,3 @@ class _AdminVendorDetailScreenState extends State<AdminVendorDetailScreen> {
   }
 }
 
-class _Field extends StatelessWidget {
-  const _Field(this.label, this.value);
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 140,
-            child: Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
-          ),
-          Expanded(
-            child: Text(value, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: AppTextStyles.body(color: color, size: 10.5, weight: FontWeight.w700)),
-    );
-  }
-}

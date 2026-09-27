@@ -3,35 +3,134 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../api/api_exception.dart';
-import '../../api/models/bank.dart';
-import '../../core/theme/app_text_styles.dart';
-import '../../models/dashboard_theme.dart';
-import '../../state/app_state.dart';
-import '../../widgets/pill_button.dart';
-import '../../widgets/pill_text_field.dart';
+import '../api/api_exception.dart';
+import '../api/models/bank.dart';
+import '../core/theme/app_colors.dart';
+import '../core/theme/app_text_styles.dart';
+import '../models/dashboard_theme.dart';
+import '../state/app_state.dart';
+import 'dashboard_page_scaffold.dart';
+import 'pill_button.dart';
+import 'pill_text_field.dart';
 
-/// Lets a vendor set the bank account their marketplace payouts get
-/// credited to. Mirrors [LandlordBankDetailsScreen] exactly: the account
-/// number is resolved against Paystack as soon as a bank is picked and 10
-/// digits are entered, so the vendor sees and confirms the real account
-/// holder's name before saving — the same name the server independently
-/// re-resolves and actually persists (see [VendorsRepository.update]).
-class VendorBankDetailsScreen extends StatefulWidget {
-  const VendorBankDetailsScreen({super.key, required this.theme});
+/// The payout account currently on file, if any.
+typedef SavedBankAccount = ({String? bankCode, String? accountNumber, String? accountName});
 
-  final DashboardTheme theme;
+/// Every color the screen draws, as contrast-checked pairs: [text] on
+/// [background], [fieldText] on [fieldFill], [onAccent] on [accent],
+/// [sheetText] on [sheetBackground].
+class BankDetailsPalette {
+  const BankDetailsPalette({
+    required this.background,
+    required this.title,
+    required this.text,
+    required this.accent,
+    required this.onAccent,
+    required this.fieldFill,
+    required this.fieldText,
+    required this.fieldIcon,
+    required this.sheetBackground,
+    required this.sheetText,
+    required this.sheetSearchFill,
+  });
 
-  @override
-  State<VendorBankDetailsScreen> createState() => _VendorBankDetailsScreenState();
+  final Color background;
+  final Color title;
+  final Color text;
+  final Color accent;
+  final Color onAccent;
+  final Color fieldFill;
+  final Color fieldText;
+  final Color fieldIcon;
+  final Color sheetBackground;
+  final Color sheetText;
+  final Color sheetSearchFill;
 }
 
-class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
+/// Lets a landlord or vendor set the bank account their payouts are
+/// credited to. The account number is resolved against Paystack as soon as
+/// a bank is picked and 10 digits are entered, so they see and confirm the
+/// real account holder's name before saving — the same name the server
+/// independently re-resolves and actually persists.
+///
+/// Landlords and vendors used to have two copies of this screen that
+/// differed only in colors, where the saved account comes from/goes to,
+/// and the intro text; those are the parameters now.
+class BankDetailsScreen extends StatefulWidget {
+  const BankDetailsScreen._({
+    required this.palette,
+    required this.intro,
+    required this.load,
+    required this.save,
+  });
+
+  /// Landlords draw the fixed navy/gold brand palette, not a switchable
+  /// DashboardTheme, and their account is already on [AppState].
+  factory BankDetailsScreen.landlord() => BankDetailsScreen._(
+    palette: const BankDetailsPalette(
+      background: AppColors.navy,
+      title: AppColors.gold,
+      text: Colors.white,
+      accent: AppColors.gold,
+      onAccent: AppColors.navy,
+      fieldFill: AppColors.white,
+      fieldText: AppColors.navy,
+      fieldIcon: AppColors.inputFieldGrey,
+      sheetBackground: AppColors.navyDark,
+      sheetText: Colors.white,
+      sheetSearchFill: Color(0x14FFFFFF),
+    ),
+    intro:
+        'This is the account that will be credited whenever a tenant pays you. Double-check the '
+        'account holder name below matches yours before saving.',
+    load: (appState) async =>
+        (bankCode: appState.bankCode, accountNumber: appState.accountNumber, accountName: appState.accountName),
+    save: (appState, bankCode, accountNumber) =>
+        appState.updateBankDetails(bankCode: bankCode, accountNumber: accountNumber),
+  );
+
+  /// Vendors follow their DashboardTheme; their account lives on the
+  /// vendor profile, fetched fresh (see VendorsRepository.update).
+  factory BankDetailsScreen.vendor(DashboardTheme theme) => BankDetailsScreen._(
+    palette: BankDetailsPalette(
+      background: theme.background,
+      title: theme.foreground,
+      text: theme.foreground,
+      accent: theme.accent,
+      onAccent: theme.onAccent,
+      fieldFill: theme.surface,
+      fieldText: theme.onSurface,
+      fieldIcon: theme.onSurface.withValues(alpha: 0.4),
+      sheetBackground: theme.surface,
+      sheetText: theme.onSurface,
+      sheetSearchFill: theme.onSurface.withValues(alpha: 0.06),
+    ),
+    intro:
+        'This is the account that will be credited once a buyer confirms an order was received. '
+        'Double-check the account holder name below matches yours before saving.',
+    load: (appState) async {
+      final vendor = await appState.vendors.me();
+      return (bankCode: vendor.bankCode, accountNumber: vendor.accountNumber, accountName: vendor.accountName);
+    },
+    save: (appState, bankCode, accountNumber) =>
+        appState.vendors.update(bankCode: bankCode, accountNumber: accountNumber),
+  );
+
+  final BankDetailsPalette palette;
+  final String intro;
+  final Future<SavedBankAccount> Function(AppState appState) load;
+  final Future<void> Function(AppState appState, String bankCode, String accountNumber) save;
+
+  @override
+  State<BankDetailsScreen> createState() => _BankDetailsScreenState();
+}
+
+class _BankDetailsScreenState extends State<BankDetailsScreen> {
   final _accountNumber = TextEditingController();
   List<Bank>? _banks;
   Bank? _selectedBank;
   String? _resolvedAccountName;
-  bool _loadingVendor = true;
+  bool _loadingAccount = true;
   bool _resolving = false;
   bool _saving = false;
   String? _error;
@@ -40,22 +139,22 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadVendor();
+    _loadAccount();
     _accountNumber.addListener(_onAccountNumberChanged);
   }
 
-  Future<void> _loadVendor() async {
+  Future<void> _loadAccount() async {
     try {
-      final vendor = await context.read<AppState>().vendors.me();
+      final saved = await widget.load(context.read<AppState>());
       if (!mounted) return;
-      _accountNumber.text = vendor.accountNumber ?? '';
-      _resolvedAccountName = vendor.accountName;
-      await _loadBanks(preselectCode: vendor.bankCode);
+      _accountNumber.text = saved.accountNumber ?? '';
+      _resolvedAccountName = saved.accountName;
+      await _loadBanks(preselectCode: saved.bankCode);
     } catch (_) {
       if (!mounted) return;
       await _loadBanks();
     } finally {
-      if (mounted) setState(() => _loadingVendor = false);
+      if (mounted) setState(() => _loadingAccount = false);
     }
   }
 
@@ -115,13 +214,13 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
   Future<void> _pickBank() async {
     final banks = _banks;
     if (banks == null || banks.isEmpty) return;
-    final theme = widget.theme;
+    final palette = widget.palette;
     final result = await showModalBottomSheet<Bank>(
       context: context,
-      backgroundColor: theme.surface,
+      backgroundColor: palette.sheetBackground,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => _BankPickerSheet(banks: banks, theme: theme),
+      builder: (context) => _BankPickerSheet(banks: banks, palette: palette),
     );
     if (result != null) {
       setState(() {
@@ -140,10 +239,7 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
       _error = null;
     });
     try {
-      await context.read<AppState>().vendors.update(
-        bankCode: bank.code,
-        accountNumber: _accountNumber.text.trim(),
-      );
+      await widget.save(context.read<AppState>(), bank.code, _accountNumber.text.trim());
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bank details saved')));
       Navigator.of(context).pop();
@@ -157,36 +253,31 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final palette = widget.palette;
     final canSave = _selectedBank != null && _resolvedAccountName != null && !_resolving;
-    return Scaffold(
-      backgroundColor: theme.background,
-      appBar: AppBar(
-        backgroundColor: theme.background,
-        elevation: 0,
-        iconTheme: IconThemeData(color: theme.foreground),
-        title: Text('Bank Details', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
-      ),
+    return DashboardPageScaffold(
+      background: palette.background,
+      foreground: palette.title,
+      title: 'Bank Details',
       body: SafeArea(
-        child: _loadingVendor
-            ? const Center(child: CircularProgressIndicator())
+        child: _loadingAccount
+            ? Center(child: CircularProgressIndicator(color: palette.accent))
             : ListView(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
                 children: [
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: theme.accent.withValues(alpha: 0.1),
+                      color: palette.accent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Text(
-                      "This is the account that will be credited once a buyer confirms an order was received. "
-                      'Double-check the account holder name below matches yours before saving.',
-                      style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.85), size: 13),
+                      widget.intro,
+                      style: AppTextStyles.body(color: palette.text.withValues(alpha: 0.85), size: 13),
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Text('Bank', style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w600, size: 13.5)),
+                  Text('Bank', style: AppTextStyles.body(color: palette.text, weight: FontWeight.w600, size: 13.5)),
                   const SizedBox(height: 8),
                   InkWell(
                     onTap: _banks == null ? null : _pickBank,
@@ -194,7 +285,7 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-                      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(28)),
+                      decoration: BoxDecoration(color: palette.fieldFill, borderRadius: BorderRadius.circular(28)),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -202,10 +293,10 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
                             child: Text(
                               _selectedBank?.name ?? (_banks == null ? 'Loading banks…' : 'Select your bank'),
                               overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.body(color: theme.onSurface, size: 15),
+                              style: AppTextStyles.body(color: palette.fieldText, size: 15),
                             ),
                           ),
-                          Icon(Icons.keyboard_arrow_down_rounded, color: theme.onSurface.withValues(alpha: 0.4)),
+                          Icon(Icons.keyboard_arrow_down_rounded, color: palette.fieldIcon),
                         ],
                       ),
                     ),
@@ -213,15 +304,15 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
                   const SizedBox(height: 18),
                   Text(
                     'Account Number',
-                    style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w600, size: 13.5),
+                    style: AppTextStyles.body(color: palette.text, weight: FontWeight.w600, size: 13.5),
                   ),
                   const SizedBox(height: 8),
                   PillTextField(
                     hint: '10-digit account number',
                     controller: _accountNumber,
                     keyboardType: TextInputType.number,
-                    fillColor: theme.surface,
-                    textColor: theme.onSurface,
+                    fillColor: palette.fieldFill,
+                    textColor: palette.fieldText,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
                   ),
                   const SizedBox(height: 14),
@@ -231,12 +322,12 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
                         SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: theme.accent),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: palette.accent),
                         ),
                         const SizedBox(width: 10),
                         Text(
                           'Verifying account…',
-                          style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.7), size: 13),
+                          style: AppTextStyles.body(color: palette.text.withValues(alpha: 0.7), size: 13),
                         ),
                       ],
                     )
@@ -248,7 +339,7 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
                         Expanded(
                           child: Text(
                             _resolvedAccountName!,
-                            style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w700, size: 14),
+                            style: AppTextStyles.body(color: palette.text, weight: FontWeight.w700, size: 14),
                           ),
                         ),
                       ],
@@ -260,8 +351,8 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
                   const SizedBox(height: 28),
                   PillButton(
                     label: _saving ? 'Saving…' : 'Save Bank Details',
-                    backgroundColor: theme.accent,
-                    textColor: theme.onAccent,
+                    backgroundColor: palette.accent,
+                    textColor: palette.onAccent,
                     loading: _saving,
                     onPressed: canSave && !_saving ? _save : null,
                   ),
@@ -273,10 +364,10 @@ class _VendorBankDetailsScreenState extends State<VendorBankDetailsScreen> {
 }
 
 class _BankPickerSheet extends StatefulWidget {
-  const _BankPickerSheet({required this.banks, required this.theme});
+  const _BankPickerSheet({required this.banks, required this.palette});
 
   final List<Bank> banks;
-  final DashboardTheme theme;
+  final BankDetailsPalette palette;
 
   @override
   State<_BankPickerSheet> createState() => _BankPickerSheetState();
@@ -293,7 +384,7 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = widget.theme;
+    final palette = widget.palette;
     final query = _search.text.trim().toLowerCase();
     final filtered = query.isEmpty
         ? widget.banks
@@ -308,18 +399,18 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Select Bank', style: AppTextStyles.heading(color: theme.onSurface, size: 17)),
+              Text('Select Bank', style: AppTextStyles.heading(color: palette.sheetText, size: 17)),
               const SizedBox(height: 14),
               TextField(
                 controller: _search,
                 onChanged: (_) => setState(() {}),
-                style: AppTextStyles.body(color: theme.onSurface, size: 14),
+                style: AppTextStyles.body(color: palette.sheetText, size: 14),
                 decoration: InputDecoration(
                   hintText: 'Search banks',
-                  hintStyle: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.5), size: 14),
-                  prefixIcon: Icon(Icons.search_rounded, color: theme.onSurface.withValues(alpha: 0.5)),
+                  hintStyle: AppTextStyles.body(color: palette.sheetText.withValues(alpha: 0.5), size: 14),
+                  prefixIcon: Icon(Icons.search_rounded, color: palette.sheetText.withValues(alpha: 0.5)),
                   filled: true,
-                  fillColor: theme.onSurface.withValues(alpha: 0.06),
+                  fillColor: palette.sheetSearchFill,
                   contentPadding: const EdgeInsets.symmetric(vertical: 14),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
                 ),
@@ -332,7 +423,7 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
                   itemBuilder: (context, index) {
                     final bank = filtered[index];
                     return ListTile(
-                      title: Text(bank.name, style: AppTextStyles.body(color: theme.onSurface)),
+                      title: Text(bank.name, style: AppTextStyles.body(color: palette.sheetText)),
                       onTap: () => Navigator.pop(context, bank),
                     );
                   },
@@ -344,8 +435,4 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
       ),
     );
   }
-}
-
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
 }

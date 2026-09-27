@@ -14,6 +14,7 @@ import 'vendor_edit_profile_screen.dart';
 import 'vendor_transactions_screen.dart';
 import 'widgets/vendor_bottom_nav.dart';
 import 'widgets/vendor_tab_route.dart';
+import '../../widgets/confirm_sheet.dart';
 
 /// The vendor's own shop profile — business details plus the "Danger
 /// Zone" actions (deactivating the shop). Reached from the vendor
@@ -79,20 +80,16 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
   }
 
   Future<void> _confirmDeactivate(BuildContext context) async {
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      backgroundColor: theme.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => _ConfirmSheet(
-        theme: theme,
-        title: 'Deactivate your shop?',
-        body:
-            "Your products will be taken off the marketplace and customers won't be able to reach you. "
-            'You can become a vendor again any time.',
-        actionLabel: 'Deactivate',
-      ),
+    final confirmed = await showConfirmSheet(
+      context,
+      title: 'Deactivate your shop?',
+      body:
+          "Your products will be taken off the marketplace and customers won't be able to reach you. "
+          'You can become a vendor again any time.',
+      actionLabel: 'Deactivate',
+      destructive: true,
     );
-    if (confirmed != true || !context.mounted) return;
+    if (!confirmed || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     try {
@@ -304,61 +301,6 @@ class _ProfileRow extends StatelessWidget {
         ),
         if (showDivider) Divider(color: theme.onSurface.withValues(alpha: 0.1), height: 1),
       ],
-    );
-  }
-}
-
-class _ConfirmSheet extends StatelessWidget {
-  const _ConfirmSheet({required this.theme, required this.title, required this.body, required this.actionLabel});
-
-  final DashboardTheme theme;
-  final String title;
-  final String body;
-  final String actionLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: AppTextStyles.heading(color: theme.onSurface, size: 19)),
-            const SizedBox(height: 8),
-            Text(body, style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 14)),
-            const SizedBox(height: 22),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: theme.onSurface),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    ),
-                    child: Text('Cancel', style: AppTextStyles.button(color: theme.onSurface, size: 14)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                    ),
-                    child: Text(actionLabel, style: AppTextStyles.button(color: Colors.white, size: 14)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

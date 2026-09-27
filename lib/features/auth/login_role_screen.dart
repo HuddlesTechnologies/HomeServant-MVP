@@ -10,6 +10,7 @@ import '../../widgets/login_outcome_handler.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/terms_footer.dart';
+import '../../widgets/google_sign_in_button.dart';
 import '../../widgets/themed_scaffold.dart';
 
 /// Login screen for either tenant or landlord accounts — the two were
@@ -52,7 +53,6 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _submitting = false;
-  bool _googleSubmitting = false;
   String? _error;
 
   UserRole get _role => widget.role;
@@ -94,36 +94,6 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<void> _loginWithGoogle({String? idToken, bool reactivate = false}) async {
-    setState(() {
-      _googleSubmitting = true;
-      _error = null;
-    });
-    try {
-      final outcome = await context.read<AppState>().loginWithGoogle(idToken: idToken, reactivate: reactivate);
-      if (!mounted || outcome == null) return;
-      await handleLoginOutcome(
-        context,
-        outcome,
-        onSuccess: widget.onGoogleSignedIn,
-        onTwoFactor: () {},
-        onReactivate: () => _loginWithGoogle(reactivate: true),
-      );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.message);
-    } catch (e) {
-      // Google SDK failures (misconfigured OAuth client, popup blocked,
-      // network) used to escape this handler entirely, so the button
-      // just stopped spinning with no explanation.
-      debugPrint('Google sign-in failed: $e');
-      if (!mounted) return;
-      setState(() => _error = 'Google sign-in failed. Please try again.');
-    } finally {
-      if (mounted) setState(() => _googleSubmitting = false);
     }
   }
 
@@ -193,8 +163,8 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
           ),
           const SizedBox(height: 20),
           GoogleSignInButton(
-            onPressed: _googleSubmitting ? null : _loginWithGoogle,
-            onWebIdToken: (idToken) => _loginWithGoogle(idToken: idToken),
+            onSignedIn: widget.onGoogleSignedIn,
+            onError: (message) => setState(() => _error = message),
           ),
           const SizedBox(height: 18),
           Center(

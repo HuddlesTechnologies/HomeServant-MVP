@@ -11,23 +11,31 @@ import '../../widgets/home_servant_logo.dart';
 import '../../widgets/labeled_pill_field.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/themed_scaffold.dart';
+import '../../widgets/upload_picker.dart';
 
-class SignupTenant1Screen extends StatefulWidget {
-  const SignupTenant1Screen({super.key, required this.onContinue});
+/// Signup step 1 ("Welcome Onboard": name, phone, date of birth) for both
+/// tenants and landlords — previously two near-identical screens. Role
+/// differences: a tenant can enter a referral code; a landlord gives a
+/// house address and can attach a certificate of ownership.
+class SignupBasicsScreen extends StatefulWidget {
+  const SignupBasicsScreen({super.key, required this.role, required this.onContinue});
 
+  final UserRole role;
   final ValueChanged<Map<String, String>> onContinue;
 
   @override
-  State<SignupTenant1Screen> createState() => _SignupTenant1ScreenState();
+  State<SignupBasicsScreen> createState() => _SignupBasicsScreenState();
 }
 
-class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
+class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _referral = TextEditingController();
+  final _houseAddress = TextEditingController();
   final _dob = TextEditingController();
   DateTime? _dateOfBirth;
-  static const _role = UserRole.tenant;
+  PickedUpload? _certificate;
+  UserRole get _role => widget.role;
   bool _submitting = false;
   String? _error;
 
@@ -36,8 +44,16 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
     _name.dispose();
     _phone.dispose();
     _referral.dispose();
+    _houseAddress.dispose();
     _dob.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickCertificate() async {
+    final picked = await pickUpload(context);
+    if (picked != null) {
+      setState(() => _certificate = picked);
+    }
   }
 
   Future<void> _pickDate() async {
@@ -57,6 +73,9 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
     }
   }
 
+  /// A landlord's certificate of ownership isn't persisted anywhere yet —
+  /// the backend has no document-verification model, so it's collected
+  /// here for UI completeness but only the profile fields actually save.
   Future<void> _continue() async {
     setState(() {
       _submitting = true;
@@ -67,11 +86,16 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
       await context.read<AppState>().completeProfile(
         fullName: _name.text.trim(),
         phoneNumber: _phone.text.trim(),
+        houseAddress: _role.isLandlord ? _houseAddress.text.trim() : null,
         dateOfBirth: _dateOfBirth,
-        referralCode: referral.isEmpty ? null : referral,
+        referralCode: _role.isLandlord || referral.isEmpty ? null : referral,
       );
       if (!mounted) return;
-      widget.onContinue({'name': _name.text.trim(), 'phone': _phone.text.trim(), 'referral': _referral.text.trim()});
+      widget.onContinue({
+        'name': _name.text.trim(),
+        'phone': _phone.text.trim(),
+        if (_role.isLandlord) 'houseAddress': _houseAddress.text.trim() else 'referral': referral,
+      });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message);
@@ -111,6 +135,15 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
             hint: 'e.g. 0801 234 5678',
           ),
           const SizedBox(height: 18),
+          if (_role.isLandlord) ...[
+            LabeledPillField(
+              label: 'House Address',
+              labelColor: _role.foreground,
+              controller: _houseAddress,
+              hint: 'Street, area, city',
+            ),
+            const SizedBox(height: 18),
+          ],
           LabeledPillField(
             label: 'Date of Birth',
             labelColor: _role.foreground,
@@ -120,13 +153,23 @@ class _SignupTenant1ScreenState extends State<SignupTenant1Screen> {
             onTap: _pickDate,
             trailing: const Icon(Icons.calendar_today_outlined, color: AppColors.navy, size: 18),
           ),
-          const SizedBox(height: 18),
-          LabeledPillField(
-            label: 'Referral code (optional)',
-            labelColor: _role.foreground,
-            controller: _referral,
-            hint: 'HS-XXXXXX',
-          ),
+          if (_role.isLandlord) ...[
+            const SizedBox(height: 22),
+            PillOutlineButton(
+              label: _certificate?.fileName ?? 'Certificate of Ownership',
+              textColor: AppColors.navy,
+              icon: Icons.upload_file_rounded,
+              onPressed: _pickCertificate,
+            ),
+          ] else ...[
+            const SizedBox(height: 18),
+            LabeledPillField(
+              label: 'Referral code (optional)',
+              labelColor: _role.foreground,
+              controller: _referral,
+              hint: 'HS-XXXXXX',
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),

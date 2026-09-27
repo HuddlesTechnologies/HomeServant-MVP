@@ -7,10 +7,10 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/home_servant_logo.dart';
-import '../../widgets/login_outcome_handler.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/terms_footer.dart';
+import '../../widgets/google_sign_in_button.dart';
 import '../../widgets/themed_scaffold.dart';
 
 /// Sign-up screen for either tenant or landlord accounts — the two were
@@ -44,7 +44,6 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
   bool _submitting = false;
-  bool _googleSubmitting = false;
   String? _error;
 
   UserRole get _role => widget.role;
@@ -82,36 +81,6 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
     }
   }
 
-  Future<void> _continueWithGoogle({String? idToken, bool reactivate = false}) async {
-    setState(() {
-      _googleSubmitting = true;
-      _error = null;
-    });
-    try {
-      final outcome = await context.read<AppState>().loginWithGoogle(idToken: idToken, reactivate: reactivate);
-      if (!mounted || outcome == null) return;
-      await handleLoginOutcome(
-        context,
-        outcome,
-        onSuccess: widget.onGoogleSignedIn,
-        onTwoFactor: () {},
-        onReactivate: () => _continueWithGoogle(reactivate: true),
-      );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      setState(() => _error = e.message);
-    } catch (e) {
-      // Google SDK failures (misconfigured OAuth client, popup blocked,
-      // network) used to escape this handler entirely, so the button
-      // just stopped spinning with no explanation.
-      debugPrint('Google sign-in failed: $e');
-      if (!mounted) return;
-      setState(() => _error = 'Google sign-in failed. Please try again.');
-    } finally {
-      if (mounted) setState(() => _googleSubmitting = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return ThemedScaffold(
@@ -145,7 +114,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                   PillTextField(
                     // Preserved from each original screen: the landlord version
                     // used a lowercase hint, the tenant one capitalised.
-                    hint: _role.isLandlord ? 'enter your email' : 'Enter your email',
+                    hint: 'Enter your email',
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.username, AutofillHints.email],
@@ -233,8 +202,8 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
             ),
             const SizedBox(height: 24),
             GoogleSignInButton(
-              onPressed: _googleSubmitting ? null : _continueWithGoogle,
-              onWebIdToken: (idToken) => _continueWithGoogle(idToken: idToken),
+              onSignedIn: widget.onGoogleSignedIn,
+              onError: (message) => setState(() => _error = message),
             ),
             const SizedBox(height: 140),
             TermsFooter(

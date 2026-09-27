@@ -203,11 +203,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setProfilePhoto(String? path) {
-    profilePhotoPath = path;
-    notifyListeners();
-  }
-
   // --- Auth ------------------------------------------------------------
 
   Future<void> signup({required String email, required String password, String? fullName}) async {
@@ -656,19 +651,9 @@ class AppState extends ChangeNotifier {
     return updated;
   }
 
-  /// Just the per-property messaging toggle — used from the listing edit
-  /// screen without resubmitting every other field.
-  Future<Property> setPropertyMessagingEnabled(String propertyId, bool enabled) async {
-    final updated = await _propertiesRepo.update(propertyId, {'messagingEnabled': enabled});
-    _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
-    notifyListeners();
-    return updated;
-  }
-
   // --- Wishlist ----------------------------------------------------------
 
   List<Property> _favorites = [];
-  Set<String> get favoritePropertyIds => _favorites.map((p) => p.id).toSet();
   List<Property> get favoriteProperties => List.unmodifiable(_favorites);
 
   bool isFavorite(String propertyId) => _favorites.any((p) => p.id == propertyId);

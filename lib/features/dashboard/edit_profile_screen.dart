@@ -439,8 +439,6 @@ class _EditableField extends StatelessWidget {
     required this.onToggleEdit,
     this.hint = '',
     this.keyboardType,
-    this.obscureText = false,
-    this.validator,
     this.extraTrailing,
     this.forceReadOnly = false,
     this.onFieldTap,
@@ -454,8 +452,6 @@ class _EditableField extends StatelessWidget {
   final VoidCallback onToggleEdit;
   final String hint;
   final TextInputType? keyboardType;
-  final bool obscureText;
-  final String? Function(String?)? validator;
   final Widget? extraTrailing;
   final bool forceReadOnly;
   final VoidCallback? onFieldTap;
@@ -485,8 +481,6 @@ class _EditableField extends StatelessWidget {
                 readOnly: forceReadOnly || !editable,
                 onTap: onFieldTap,
                 keyboardType: keyboardType,
-                obscureText: obscureText,
-                validator: validator,
                 trailing: extraTrailing,
                 fillColor: editable ? AppColors.white : const Color(0xFFEDEDED),
                 // AppColors.hintGrey (#7A7F8C) is calibrated for AppColors.white

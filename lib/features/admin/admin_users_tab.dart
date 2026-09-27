@@ -15,6 +15,7 @@ import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
+import 'widgets/admin_badge.dart';
 
 class AdminUsersTab extends StatefulWidget {
   const AdminUsersTab({super.key, this.initialRoleFilter, this.initialShowDeactivatedOnly = false});
@@ -200,10 +201,10 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                                           user.fullName?.isNotEmpty == true ? user.fullName! : user.email,
                                           style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14),
                                         ),
-                                        _Badge(text: user.role.adminLabel, color: AppColors.navy),
+                                        AdminBadge(text: user.role.adminLabel, color: AppColors.navy),
                                         if (user.isVendor && user.role != UserRole.vendor)
-                                          const _Badge(text: 'Also a Vendor', color: Colors.teal),
-                                        if (user.isDeactivated) const _Badge(text: 'Deactivated', color: Colors.redAccent),
+                                          const AdminBadge(text: 'Also a Vendor', color: Colors.teal),
+                                        if (user.isDeactivated) const AdminBadge(text: 'Deactivated', color: Colors.redAccent),
                                       ],
                                     ),
                                     const SizedBox(height: 3),
@@ -248,22 +249,6 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                 ),
         ),
       ],
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.text, required this.color});
-
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8)),
-      child: Text(text, style: AppTextStyles.body(color: color, size: 10.5, weight: FontWeight.w700)),
     );
   }
 }
