@@ -1091,6 +1091,9 @@ model SupportChatStat {
   transferCount          Int             @default(0)
   resolvedAt             DateTime?
   resolvedById           String?
+  /// The customer ended the conversation themselves (resolvedById is then
+  /// null) rather than an admin marking it resolved.
+  closedByCustomer       Boolean         @default(false)
   /// 1–5, given by the customer after the conversation is resolved.
   rating                 Int?
   ratingComment          String?

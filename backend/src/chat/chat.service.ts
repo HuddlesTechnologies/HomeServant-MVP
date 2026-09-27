@@ -427,7 +427,10 @@ export class ChatService {
         resolved &&
         !isAdmin &&
         isParticipant &&
-        !!(await this.prisma.supportChatStat.findFirst({ where: { threadId, customerId: userId, rating: null } })),
+        // Only once an admin actually replied — there's nothing to rate otherwise.
+        !!(await this.prisma.supportChatStat.findFirst({
+          where: { threadId, customerId: userId, rating: null, firstResponseAt: { not: null } },
+        })),
       // Why a tenant/landlord can't message here right now (payment rules,
       // see landlordTenantBlockReason) — shown in place of the composer.
       lockedReason,
@@ -491,16 +494,58 @@ export class ChatService {
     return { firstHandler, entries, currentAdmin: thread.assignedAdmin };
   }
 
+  /// The customer ends their own support conversation — the same end state
+  /// as an admin resolving it (it leaves their inbox, and a later "Contact
+  /// Support" starts a fresh conversation), recorded as ended by the
+  /// customer. The handling admin (or, if unclaimed, the admins alerted
+  /// about it) are told; a notice is posted in the chat.
+  async endSupportThreadByCustomer(threadId: string, userId: string): Promise<void> {
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: { isSupport: true, status: true, assignedAdminId: true, participants: { select: { userId: true } } },
+    });
+    if (!thread?.isSupport || !thread.participants.some((p) => p.userId === userId)) {
+      throw new NotFoundException('Support conversation not found');
+    }
+    if (thread.status === 'RESOLVED') return;
+    const endedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.thread.update({ where: { id: threadId }, data: { status: 'RESOLVED', resolvedAt: endedAt } }),
+      this.prisma.supportChatStat.updateMany({
+        where: { threadId },
+        data: { resolvedAt: endedAt, resolvedById: null, closedByCustomer: true },
+      }),
+    ]);
+    await this.postThreadSystemMessage(threadId, 'The customer ended this conversation.');
+    // Nobody needs nagging about it any more.
+    await this.prisma.notification.updateMany({
+      where: { threadId, readAt: null, user: { role: UserRole.ADMIN } },
+      data: { readAt: endedAt },
+    });
+    if (thread.assignedAdminId) {
+      await this.notifications.create(
+        thread.assignedAdminId,
+        NotificationType.SUPPORT_THREAD_RESOLVED,
+        'A customer ended their conversation',
+        'The customer closed the support conversation you were handling.',
+        threadId,
+      );
+    }
+    // Admin queues/inboxes and any admin with it open re-check it.
+    this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+    this.gateway.broadcastToAdmins('admin:badges-changed', {});
+  }
+
   /// The customer's 1–5 rating of a resolved support conversation (once).
   async rateSupportThread(threadId: string, userId: string, rating: number, comment?: string): Promise<void> {
     const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { isSupport: true, status: true } });
     if (!thread?.isSupport) throw new NotFoundException('Support conversation not found');
     if (thread.status !== 'RESOLVED') throw new BadRequestException('You can rate a conversation once it has been resolved');
     const { count } = await this.prisma.supportChatStat.updateMany({
-      where: { threadId, customerId: userId, rating: null },
+      where: { threadId, customerId: userId, rating: null, firstResponseAt: { not: null } },
       data: { rating, ratingComment: comment?.trim() || null, ratedAt: new Date() },
     });
-    if (count === 0) throw new BadRequestException("You've already rated this conversation");
+    if (count === 0) throw new BadRequestException("This conversation can't be rated (already rated, or nobody replied)");
   }
 
   async findMessages(threadId: string, userId: string, senderRole?: UserRole, before?: string) {
@@ -516,6 +561,18 @@ export class ChatService {
 
   async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
     await this.assertCanWrite(threadId, userId, senderRole);
+    // A support conversation that has ended (resolved by an admin, or ended
+    // by the customer) takes no new messages: the customer no longer sees
+    // it in their inbox, so a reply there would go unseen. They start a new
+    // one from Contact Support instead.
+    const target = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { isSupport: true, status: true } });
+    if (target?.isSupport && target.status === 'RESOLVED') {
+      throw new ForbiddenException(
+        senderRole === UserRole.ADMIN
+          ? 'This conversation has ended.'
+          : 'This conversation has ended. Start a new one from Contact Support if you still need help.',
+      );
+    }
     if (senderRole === UserRole.TENANT || senderRole === UserRole.LANDLORD) {
       const reason = await this.threadBlockReason(threadId, userId);
       if (reason) throw new ForbiddenException(reason);

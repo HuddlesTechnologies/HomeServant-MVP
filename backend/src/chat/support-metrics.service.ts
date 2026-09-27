@@ -70,6 +70,7 @@ export class SupportMetricsService {
         ratings: ratings.length,
         transferred: rows.filter((r) => r.transferCount > 0).length,
         neverAnswered: rows.filter((r) => r.firstCustomerMessageAt && !r.firstResponseAt).length,
+        endedByCustomer: rows.filter((r) => r.closedByCustomer).length,
       };
     };
 
