@@ -3,10 +3,14 @@
 A home-rental and home-services platform for Nigeria:
 
 - **Tenants** find and pay for homes and shortlets.
-- **Landlords** list and manage properties, get paid through escrow, and
-  chat with paying tenants.
+- **Landlords** list and manage properties and tenants, get paid through
+  escrow, chat with paying tenants, and can request evictions.
 - **Vendors** sell home-services products in the marketplace.
-- **Admins** run support and moderation from a web console.
+- **Admins** run support, moderation, ID verification, platform-wide
+  controls and payout/refund fixes from a web console.
+
+Everyone gives ID at signup (stored privately and reviewed by admins);
+verified landlords and tenants get a Verified badge.
 
 | Part | Tech | Hosted on |
 |---|---|---|

@@ -64,6 +64,10 @@
   <tr><td>Reset another admin's password</td><td class="no">No</td><td class="yes">Yes, not a Super Admin's</td><td class="yes">Yes</td></tr>
   <tr><td>Invite admins, change admin levels, remove admins, turn admin 2FA on/off</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>Clear the Activity Log</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>See ID documents and verify or reject them (ID Verifications)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Approve or reject eviction requests</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Change Platform Controls (only verified landlords; pay unverified landlords)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Retry payouts and refunds, or refund a tenant (Payouts &amp; Refunds)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>Chat Log (all support conversations from the last 30 days)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
 </table>
 
@@ -321,6 +325,10 @@ WHERE "email" = 'suspicious@example.com';</code></pre>
   <tr><td>Work a report</td><td>Reports</td><td>Support</td></tr>
   <tr><td>Reset a locked-out admin's password</td><td>More &rarr; Admins</td><td>Moderator</td></tr>
   <tr><td>Invite, promote or remove an admin</td><td>More &rarr; Admins</td><td>Super Admin</td></tr>
+  <tr><td>Verify someone's ID</td><td>More &rarr; ID Verifications &rarr; user &rarr; Identity Verification</td><td>Moderator</td></tr>
+  <tr><td>Decide an eviction request</td><td>More &rarr; Eviction Requests</td><td>Super Admin</td></tr>
+  <tr><td>Hide unverified landlords' listings, or hold their payouts</td><td>More &rarr; Platform Controls</td><td>Super Admin</td></tr>
+  <tr><td>Fix a payout or refund that didn't go through</td><td>More &rarr; Payouts &amp; Refunds</td><td>Super Admin</td></tr>
   <tr><td>Turn my alert sounds or pop-ups on or off</td><td>Gear icon &rarr; Account Settings</td><td>Any</td></tr>
   <tr><td>Recover a hijacked console</td><td>Render + Supabase (section 9)</td><td>Owner</td></tr>
 </table>
