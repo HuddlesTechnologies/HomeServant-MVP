@@ -29,7 +29,13 @@ Future<String?> _deviceModel() async {
 }
 
 class LoginResult {
-  const LoginResult({this.tokens, this.user, this.requiresTwoFactor = false, this.requiresReactivation = false});
+  const LoginResult({
+    this.tokens,
+    this.user,
+    this.requiresTwoFactor = false,
+    this.requiresReactivation = false,
+    this.requiresEmailVerification = false,
+  });
 
   final ({String accessToken, String refreshToken})? tokens;
   final AuthUser? user;
@@ -41,6 +47,11 @@ class LoginResult {
   /// `reactivate: true` to actually complete it (see
   /// AuthService.login on the backend).
   final bool requiresReactivation;
+
+  /// True when the password was right but the account never entered its
+  /// signup code — the backend has just emailed a fresh one, and the
+  /// caller should route to the signup-code screen for this email.
+  final bool requiresEmailVerification;
 }
 
 /// Wraps `/auth/*`. Every call that returns tokens also persists them to
@@ -87,6 +98,9 @@ class AuthRepository {
         options: Options(extra: {'skipAuth': true}),
       );
       final data = response.data as Map<String, dynamic>;
+      if (data['requiresEmailVerification'] == true) {
+        return const LoginResult(requiresEmailVerification: true);
+      }
       if (data['requiresReactivation'] == true) {
         return const LoginResult(requiresReactivation: true);
       }

@@ -35,7 +35,7 @@ import '../services/google_auth_service.dart';
 /// What happened on a [AppState.login]/[AppState.loginWithGoogle] call —
 /// see each method's doc comment for how a caller should react to
 /// [requiresTwoFactor]/[requiresReactivation].
-enum LoginOutcome { success, requiresTwoFactor, requiresReactivation }
+enum LoginOutcome { success, requiresTwoFactor, requiresReactivation, requiresEmailVerification }
 
 /// Owns the app's session (real, backed by the HomeServant API) plus a
 /// handful of device-local preferences (theme, notification toggles, app
@@ -241,10 +241,16 @@ class AppState extends ChangeNotifier {
   /// `reactivate: true` to actually complete the login (see
   /// AuthRepository.login). [requiresTwoFactor]: route to an OTP screen
   /// and call [verifyLoginTwoFactor] next — [email] is already set either
-  /// way.
+  /// way. [requiresEmailVerification]: the account never entered its
+  /// signup code; a new one was just emailed — route to the signup-code
+  /// screen and call [verifySignupOtp].
   Future<LoginOutcome> login({required String email, required String password, bool reactivate = false}) async {
     final result = await _authRepo.login(email: email, password: password, reactivate: reactivate);
     this.email = email;
+    if (result.requiresEmailVerification) {
+      notifyListeners();
+      return LoginOutcome.requiresEmailVerification;
+    }
     if (result.requiresReactivation) {
       notifyListeners();
       return LoginOutcome.requiresReactivation;

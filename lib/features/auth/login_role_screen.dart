@@ -23,6 +23,7 @@ class LoginRoleScreen extends StatefulWidget {
     required this.onLoginSuccess,
     required this.onGoogleSignedIn,
     required this.onRequiresTwoFactor,
+    required this.onRequiresEmailVerification,
     required this.onSignUp,
     required this.onForgotPassword,
   });
@@ -36,6 +37,10 @@ class LoginRoleScreen extends StatefulWidget {
   /// this case differently.
   final VoidCallback onGoogleSignedIn;
   final VoidCallback onRequiresTwoFactor;
+
+  /// Correct password, but the account never entered its signup code — a
+  /// fresh one has just been emailed.
+  final VoidCallback onRequiresEmailVerification;
   final VoidCallback onSignUp;
   final VoidCallback onForgotPassword;
 
@@ -81,6 +86,7 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
         outcome,
         onSuccess: widget.onLoginSuccess,
         onTwoFactor: widget.onRequiresTwoFactor,
+        onEmailVerification: widget.onRequiresEmailVerification,
         onReactivate: () => _login(reactivate: true),
       );
     } on ApiException catch (e) {
