@@ -30,7 +30,7 @@ describeDb('sign-in pages and account types (real Postgres)', () => {
     const config = { get: (k: string, d?: string) => secrets[k] ?? d, getOrThrow: (k: string) => secrets[k] };
     const otp = { issue: async () => undefined, verify: async () => undefined };
     const activityLog = { log: async () => void adminLogins++ };
-    auth = new AuthService(prisma as never, new JwtService({}), config as never, otp as never, {} as never, activityLog as never);
+    auth = new AuthService(prisma as never, new JwtService({}), config as never, otp as never, {} as never, activityLog as never, { removePrivateFilesFor: async () => undefined } as never);
   });
 
   async function account(role: UserRole, email: string) {

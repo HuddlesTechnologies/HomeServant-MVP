@@ -15,6 +15,7 @@ import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
 import '../../widgets/labeled_value_row.dart';
 import 'widgets/admin_badge.dart';
+import 'widgets/admin_verification_card.dart';
 
 /// Full account detail for a single user — reached by tapping a row in
 /// AdminUsersTab. Shows every field the backend will hand back (see
@@ -420,6 +421,10 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                       ],
                     ),
                   ),
+                  if (user.role == UserRole.landlord || user.role == UserRole.tenant) ...[
+                    const SizedBox(height: 12),
+                    AdminVerificationCard(userId: user.id, isLandlord: user.role == UserRole.landlord),
+                  ],
                   if (user.role == UserRole.landlord) ...[
                     const SizedBox(height: 12),
                     Container(

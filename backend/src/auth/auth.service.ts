@@ -5,6 +5,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ActivityLogType, OtpPurpose, User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
+import { StorageService } from '../storage/storage.service';
+import { VERIFICATION_FOLDER } from '../verification/verification.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -48,6 +50,7 @@ export class AuthService {
     private readonly otp: OtpService,
     private readonly mail: MailService,
     private readonly activityLog: ActivityLogService,
+    private readonly storage: StorageService,
   ) {}
 
   async signup(dto: SignupDto): Promise<{ message: string; email: string }> {
@@ -436,6 +439,7 @@ export class AuthService {
       );
     }
     await this.prisma.user.delete({ where: { id: userId } });
+    await this.storage.removePrivateFilesFor(userId, VERIFICATION_FOLDER);
   }
 
   /// Called from every actual "sign in" completion (password login,

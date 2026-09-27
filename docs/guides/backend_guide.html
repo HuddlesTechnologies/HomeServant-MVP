@@ -216,6 +216,7 @@
   <tr><th style="width:36%">Variable</th><th>Purpose</th></tr>
   <tr><td><code>DATABASE_URL</code>, <code>DIRECT_URL</code></td><td>Supabase Postgres: the pooled connection for the app, the direct one for migrations.</td></tr>
   <tr><td><code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>SUPABASE_STORAGE_BUCKET</code></td><td>Storage access. The service role key must never reach the client.</td></tr>
+  <tr><td><code>SUPABASE_PRIVATE_BUCKET</code></td><td>Optional (default <code>homeservant-private</code>). Private bucket for identity documents; created on startup if missing. Files are only reachable through 10-minute signed links for moderators and super admins, and are deleted with the account.</td></tr>
   <tr><td><code>JWT_ACCESS_SECRET</code>, <code>JWT_REFRESH_SECRET</code></td><td>Token signing secrets. Changing them signs everyone out.</td></tr>
   <tr><td><code>JWT_ACCESS_TTL</code>, <code>JWT_REFRESH_TTL</code></td><td>Token lifetimes (default <code>15m</code> and <code>30d</code>).</td></tr>
   <tr><td><code>OTP_PROVIDER</code>, <code>RESEND_API_KEY</code>, <code>RESEND_FROM_EMAIL</code></td><td>Email and code delivery.</td></tr>
@@ -269,6 +270,8 @@ TEST_DATABASE_URL=postgresql://localhost/hs_test npm test</code></pre>
   <tr><td><code>POST /properties</code>, <code>PATCH|DELETE /properties/:id</code></td><td>Landlord (owner of the listing)</td></tr>
   <tr><td><code>POST /bookings</code>, <code>GET /bookings/mine|landlord</code>, <code>PATCH /bookings/:id/respond</code>, <code>POST /bookings/:id/pay|inspection|reject|moved-in|refund|renew</code>, <code>PATCH /bookings/:id/inspection/respond</code></td><td>Auth (tenant or landlord, checked per booking). <code>GET /bookings/landlord</code> includes the tenant's phone number only for tenants who have paid for that property</td></tr>
   <tr><td><code>POST /evictions</code>, <code>GET /evictions/mine</code>, <code>POST /evictions/:id/cancel|respond</code></td><td>Landlord files/withdraws; tenant responds (EvictionsService)</td></tr>
+  <tr><td><code>POST /verification/uploads/sign</code>, <code>GET|PATCH /verification/me</code></td><td>Tenant/landlord: private upload for ID documents (photo or PDF), save ID type and number, certificate and document paths. Status goes INCOMPLETE &rarr; PENDING once everything the role needs is in (VerificationService)</td></tr>
+  <tr><td><code>GET /admin/verifications</code>, <code>/pending-count</code>, <code>/user/:userId</code>, <code>POST /admin/verifications/user/:userId/review</code></td><td>MODERATOR+. Lists mask the ID number; the detail has the full number and signed file links. Reject needs a note, which the user is sent</td></tr>
   <tr><td><code>GET /admin/evictions</code>, <code>GET /admin/evictions/pending-count</code>, <code>POST /admin/evictions/:id/review</code></td><td>SUPER_ADMIN only. Approval ends the lease today and sets the property unoccupied; approved evictions block renewal</td></tr>
   <tr><td><code>GET /favorites</code>, <code>POST /favorites/:propertyId/toggle</code></td><td>Auth</td></tr>
   <tr><td><code>GET /reviews</code>, <code>GET /reviews/mine</code>, <code>POST /reviews</code>, <code>DELETE /reviews/:id</code></td><td>Public read; tenants who rented the property write</td></tr>

@@ -22,7 +22,21 @@ class UploadsRepository {
 
   final ApiClient _client;
 
-  Future<String> upload({required PickedUpload file, required String folder}) {
+  Future<String> upload({required PickedUpload file, required String folder}) =>
+      _upload(file: file, signPath: '/uploads/sign', signBody: (name) => {'fileName': name, 'folder': folder}, resultKey: 'publicUrl');
+
+  /// Identity documents (IDs, ownership certificates): photos or a PDF, into
+  /// the PRIVATE bucket. Returns the object path to save — there is no
+  /// public URL; admins view it through short-lived signed links.
+  Future<String> uploadPrivateDocument(PickedUpload file) =>
+      _upload(file: file, signPath: '/verification/uploads/sign', signBody: (name) => {'fileName': name}, resultKey: 'path');
+
+  Future<String> _upload({
+    required PickedUpload file,
+    required String signPath,
+    required Map<String, dynamic> Function(String fileName) signBody,
+    required String resultKey,
+  }) {
     return _client.call(() async {
       final Uint8List bytes;
       try {
@@ -41,9 +55,9 @@ class UploadsRepository {
       final contentType = lookupMimeType(file.fileName, headerBytes: bytes) ?? 'application/octet-stream';
       final fileName = _withExtension(file.fileName, contentType);
 
-      final signed = await _client.dio.post('/uploads/sign', data: {'fileName': fileName, 'folder': folder});
+      final signed = await _client.dio.post(signPath, data: signBody(fileName));
       final signedUrl = signed.data['signedUrl'] as String;
-      final publicUrl = signed.data['publicUrl'] as String;
+      final result = signed.data[resultKey] as String;
 
       try {
         await Dio().put(
@@ -58,7 +72,7 @@ class UploadsRepository {
         // rather than the generic "Could not reach the server".
         throw ApiException(0, "Couldn't upload the file. Please try again.");
       }
-      return publicUrl;
+      return result;
     });
   }
 
@@ -69,9 +83,10 @@ class UploadsRepository {
     'image/gif': '.gif',
     'image/heic': '.heic',
     'image/heif': '.heif',
+    'application/pdf': '.pdf',
   };
 
-  static final _hasImageExtension = RegExp(r'\.(jpe?g|png|webp|heic|heif|gif)$', caseSensitive: false);
+  static final _hasImageExtension = RegExp(r'\.(jpe?g|png|webp|heic|heif|gif|pdf)$', caseSensitive: false);
 
   String _withExtension(String fileName, String contentType) {
     if (_hasImageExtension.hasMatch(fileName)) return fileName;

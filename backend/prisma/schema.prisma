@@ -292,11 +292,13 @@ model User {
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 
-  properties             Property[]          @relation("LandlordProperties")
-  bookings               Booking[]           @relation("TenantBookings")
-  evictionsFiled         EvictionRequest[]   @relation("EvictionLandlord")
-  evictionsReceived      EvictionRequest[]   @relation("EvictionTenant")
-  evictionsReviewed      EvictionRequest[]   @relation("EvictionReviewer")
+  properties             Property[]             @relation("LandlordProperties")
+  bookings               Booking[]              @relation("TenantBookings")
+  evictionsFiled         EvictionRequest[]      @relation("EvictionLandlord")
+  evictionsReceived      EvictionRequest[]      @relation("EvictionTenant")
+  evictionsReviewed      EvictionRequest[]      @relation("EvictionReviewer")
+  identityVerification   IdentityVerification?  @relation("VerificationSubject")
+  verificationsReviewed  IdentityVerification[] @relation("VerificationReviewer")
   favorites              Favorite[]
   refreshTokens          RefreshToken[]
   otpCodes               OtpCode[]
@@ -306,25 +308,25 @@ model User {
   vendorProfile          VendorProfile?
   marketplaceOrders      MarketplaceOrder[]
   notifications          Notification[]
-  activityActions        ActivityLog[]       @relation("ActivityActor")
-  activityTargets        ActivityLog[]       @relation("ActivityTarget")
-  reportsFiled           Report[]            @relation("ReportsFiled")
-  reportsAssigned        Report[]            @relation("ReportsAssigned")
-  paymentsMade           Payment[]           @relation("PaymentsMade")
-  paymentsReceived       Payment[]           @relation("PaymentsReceived")
-  supportThreadsAssigned Thread[]            @relation("SupportThreadsAssigned")
-  threadTransfersFrom    ThreadTransferLog[] @relation("ThreadTransfersFrom")
-  threadTransfersTo      ThreadTransferLog[] @relation("ThreadTransfersTo")
-  supportNotes           SupportNote[]       @relation("SupportNotesAuthored")
-  savedReplies           SavedReply[]        @relation("SavedRepliesCreated")
+  activityActions        ActivityLog[]          @relation("ActivityActor")
+  activityTargets        ActivityLog[]          @relation("ActivityTarget")
+  reportsFiled           Report[]               @relation("ReportsFiled")
+  reportsAssigned        Report[]               @relation("ReportsAssigned")
+  paymentsMade           Payment[]              @relation("PaymentsMade")
+  paymentsReceived       Payment[]              @relation("PaymentsReceived")
+  supportThreadsAssigned Thread[]               @relation("SupportThreadsAssigned")
+  threadTransfersFrom    ThreadTransferLog[]    @relation("ThreadTransfersFrom")
+  threadTransfersTo      ThreadTransferLog[]    @relation("ThreadTransfersTo")
+  supportNotes           SupportNote[]          @relation("SupportNotesAuthored")
+  savedReplies           SavedReply[]           @relation("SavedRepliesCreated")
   pushSubscriptions      PushSubscription[]
   /// Admins only: the super admin who created this account through the
   /// console's invite flow. Null for the first admin (bootstrap route), for
   /// admins promoted directly in the database, and for admins created
   /// before this was recorded.
   createdByAdminId       String?
-  createdByAdmin         User?               @relation("AdminsCreated", fields: [createdByAdminId], references: [id], onDelete: SetNull)
-  adminsCreated          User[]              @relation("AdminsCreated")
+  createdByAdmin         User?                  @relation("AdminsCreated", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  adminsCreated          User[]                 @relation("AdminsCreated")
 
   @@index([role])
 }
@@ -1144,4 +1146,45 @@ model SupportChatStat {
 
   @@index([createdAt])
   @@index([resolvedAt])
+}
+
+enum IdType {
+  NIN
+  DRIVERS_LICENSE
+  VOTERS_CARD
+  INTERNATIONAL_PASSPORT
+}
+
+enum VerificationStatus {
+  /// Started at signup but something required is still missing.
+  INCOMPLETE
+  /// Everything submitted; waiting for an admin to review it.
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// The identity documents a tenant or landlord gives at signup: means of
+/// ID + number for everyone, and for landlords a certificate of ownership
+/// and a supporting document. Files live in the PRIVATE storage bucket
+/// ([*Path] are object paths, never public URLs) and admins only ever see
+/// them through short-lived signed links — see VerificationService.
+model IdentityVerification {
+  id              String             @id @default(uuid())
+  userId          String             @unique
+  user            User               @relation("VerificationSubject", fields: [userId], references: [id], onDelete: Cascade)
+  idType          IdType?
+  idNumber        String?
+  certificatePath String?
+  documentPath    String?
+  status          VerificationStatus @default(INCOMPLETE)
+  submittedAt     DateTime?
+  reviewedById    String?
+  reviewedBy      User?              @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewNote      String?
+  reviewedAt      DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([status])
 }

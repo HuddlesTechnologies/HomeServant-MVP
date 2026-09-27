@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
+import '../api/models/verification.dart';
 import 'field_error_text.dart';
 import 'pill_text_field.dart';
 
 /// The "Means of Identification" bottom-sheet picker plus its conditional,
 /// per-ID-type-formatted number field — shared by the landlord and tenant
 /// second signup steps. Both are required: the screen calls [validate] via
-/// a GlobalKey before submitting. (There's no backend KYC/verification
-/// model yet, so the picked ID isn't sent anywhere.)
+/// a GlobalKey before submitting, then reads [selectedType]/[number] and
+/// saves them for admin review (VerificationRepository).
 class IdentificationPickerField extends StatefulWidget {
   const IdentificationPickerField({super.key, required this.labelColor, required this.errorColor});
 
@@ -28,6 +29,9 @@ class IdentificationPickerFieldState extends State<IdentificationPickerField> {
   String? _typeError;
   String? _numberError;
 
+  IdDocumentType? get selectedType => IdDocumentType.fromLabel(_identification);
+  String get number => _idNumberController.text.trim();
+
   /// Both an ID type and a correctly formatted number. Shows the errors.
   bool validate() {
     final format = _idNumberFormat;
@@ -42,8 +46,10 @@ class IdentificationPickerFieldState extends State<IdentificationPickerField> {
       numberError = 'Your NIN must be 11 digits';
     } else if (_identification == "Voter's Card" && number.length != 19) {
       numberError = "Your Voter's Card number must be 19 characters";
-    } else if (number.length < 6) {
-      numberError = 'Enter your full $_identification number';
+    } else if (_identification == "Driver's License" && (number.length < 8 || number.length > 12)) {
+      numberError = "A driver's licence number is 8 to 12 letters and digits";
+    } else if (_identification == 'International Passport' && !RegExp(r'^[A-Z][0-9]{8}$').hasMatch(number)) {
+      numberError = 'A passport number is a letter followed by 8 digits';
     }
     setState(() {
       _typeError = typeError;

@@ -1,16 +1,17 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { MailModule } from '../mail/mail.module';
 import { OtpModule } from '../otp/otp.module';
+import { StorageModule } from '../storage/storage.module';
 import { AccountCleanupService } from './account-cleanup.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({}), OtpModule, MailModule, ActivityLogModule],
+  imports: [PassportModule, JwtModule.register({}), OtpModule, MailModule, ActivityLogModule, forwardRef(() => StorageModule)],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, AccountCleanupService],
   exports: [JwtModule, PassportModule, AuthService],

@@ -14,6 +14,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/themed_scaffold.dart';
 import '../../widgets/upload_picker.dart';
+import '../../widgets/upload_picker_rules.dart';
 
 /// Signup step 2 (profile photo, identification, gender, occupation,
 /// marital status) for both tenants and landlords. The two used to be
@@ -49,10 +50,9 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
   bool _submitting = false;
   String? _error;
 
-  /// Means of identification and a landlord's verification document aren't
-  /// persisted anywhere yet — the backend has no KYC/verification model, so
-  /// they're collected here for UI completeness but only the photo, a
-  /// tenant's address and the fields below actually save.
+  /// The means of ID (and a landlord's document, in the private bucket) are
+  /// saved for admin review first, so a rejected ID number stops here with
+  /// its message instead of completing the profile without it.
   Future<void> _finish() async {
     // Every field on this step is required.
     final formValid = _formKey.currentState?.validate() ?? false;
@@ -62,7 +62,12 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
     final photoError = _photo == null
         ? 'Add a profile photo'
         : (!_photo!.isImage ? 'Your profile photo must be an image' : null);
-    final documentError = _role.isLandlord && _document == null ? 'Upload your document' : null;
+    final document = _document;
+    final documentError = !_role.isLandlord
+        ? null
+        : document == null
+        ? 'Upload your document'
+        : (!isPhotoOrPdf(document) ? 'Upload a photo or a PDF' : null);
     if (!formValid || !idValid || missingGender || missingMaritalStatus || photoError != null || documentError != null) {
       setState(() {
         _showGenderError = missingGender;
@@ -78,6 +83,12 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
     });
     final appState = context.read<AppState>();
     try {
+      final id = _idKey.currentState!;
+      String? documentPath;
+      if (_role.isLandlord && document != null) {
+        documentPath = await appState.uploads.uploadPrivateDocument(document);
+      }
+      await appState.verification.update(idType: id.selectedType, idNumber: id.number, documentPath: documentPath);
       final photo = _photo;
       String? photoUrl;
       if (photo != null && photo.isImage) {

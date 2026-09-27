@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
@@ -15,9 +15,15 @@ export interface SignedUpload {
 /// upload URLs so the client can PUT the file bytes directly to Supabase
 /// instead of routing them through this API.
 @Injectable()
-export class StorageService {
+export class StorageService implements OnModuleInit {
+  private readonly logger = new Logger('Storage');
   private readonly client: SupabaseClient;
   private readonly bucket: string;
+
+  /// Identity documents (IDs, ownership certificates). NOT public: objects
+  /// here are only reachable through short-lived signed URLs minted for
+  /// admins, see [signedViewUrl].
+  private readonly privateBucket: string;
 
   /// Every public object URL this bucket serves starts with this — used by
   /// [assertIsOwnImage] to reject anything else. Derived from the SDK's own
@@ -32,10 +38,83 @@ export class StorageService {
       this.config.getOrThrow<string>('SUPABASE_SERVICE_ROLE_KEY'),
     );
     this.bucket = this.config.get<string>('SUPABASE_STORAGE_BUCKET', 'homeservant-uploads');
+    this.privateBucket = this.config.get<string>('SUPABASE_PRIVATE_BUCKET', 'homeservant-private');
 
     const probe = '__prefix_probe__';
     const { publicUrl } = this.client.storage.from(this.bucket).getPublicUrl(probe).data;
     this.publicUrlPrefix = publicUrl.slice(0, publicUrl.length - probe.length);
+  }
+
+  /// Creates the private bucket on first boot if it doesn't exist yet, so
+  /// no manual Supabase setup is needed. Never public. Runs in the
+  /// background: a slow or unreachable Supabase must not hold up startup.
+  onModuleInit(): void {
+    void this.ensurePrivateBucket();
+  }
+
+  private async ensurePrivateBucket(): Promise<void> {
+    try {
+      const { data } = await this.client.storage.getBucket(this.privateBucket);
+      if (data) {
+        if (data.public) this.logger.error(`Bucket "${this.privateBucket}" is PUBLIC — make it private in Supabase; identity documents are stored there`);
+        return;
+      }
+      const { error } = await this.client.storage.createBucket(this.privateBucket, { public: false });
+      if (error) throw error;
+      this.logger.log(`Created private bucket "${this.privateBucket}"`);
+    } catch (error) {
+      this.logger.error(`Could not check/create private bucket "${this.privateBucket}": ${(error as Error).message}`);
+    }
+  }
+
+  /// Signed upload into the private bucket, under `<folder>/<userId>/`.
+  /// Returns the object path to save (there is no public URL).
+  async createPrivateSignedUploadUrl(userId: string, fileName: string, folder: string): Promise<{ path: string; signedUrl: string; token: string }> {
+    const extension = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.')).toLowerCase() : '';
+    const path = `${folder}/${userId}/${randomUUID()}${extension}`;
+    const { data, error } = await this.client.storage.from(this.privateBucket).createSignedUploadUrl(path);
+    if (error) throw error;
+    return { path, signedUrl: data.signedUrl, token: data.token };
+  }
+
+  /// A client-supplied private path must be one this user was issued (their
+  /// own folder) and must hold an image or PDF.
+  async assertOwnPrivateDocument(userId: string, path: string, folder: string): Promise<void> {
+    if (!path.startsWith(`${folder}/${userId}/`) || path.includes('..')) {
+      throw new BadRequestException('That file was not uploaded by this account');
+    }
+    const url = await this.signedViewUrl(path, 60);
+    let contentType: string | null = null;
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      if (!response.ok) throw new Error(String(response.status));
+      contentType = response.headers.get('content-type');
+    } catch {
+      throw new BadRequestException('The uploaded file could not be found. Please upload it again.');
+    }
+    if (!contentType || !(contentType.startsWith('image/') || contentType === 'application/pdf')) {
+      throw new BadRequestException('Upload a photo or a PDF');
+    }
+  }
+
+  /// Deletes every private file under `<folder>/<userId>/` — called when
+  /// an account is deleted, so identity documents don't outlive it.
+  async removePrivateFilesFor(userId: string, folder: string): Promise<void> {
+    try {
+      const prefix = `${folder}/${userId}`;
+      const { data } = await this.client.storage.from(this.privateBucket).list(prefix, { limit: 1000 });
+      const paths = (data ?? []).map((f) => `${prefix}/${f.name}`);
+      if (paths.length > 0) await this.client.storage.from(this.privateBucket).remove(paths);
+    } catch (error) {
+      this.logger.error(`Could not delete private files for ${userId}: ${(error as Error).message}`);
+    }
+  }
+
+  /// A link to a private object that works for [expiresInSeconds] only.
+  async signedViewUrl(path: string, expiresInSeconds = 600): Promise<string> {
+    const { data, error } = await this.client.storage.from(this.privateBucket).createSignedUrl(path, expiresInSeconds);
+    if (error || !data) throw new BadRequestException('Could not open that document');
+    return data.signedUrl;
   }
 
   /// Namespaces uploads under the owning user's id so one user can't
