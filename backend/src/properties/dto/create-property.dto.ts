@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUrl, Max, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUrl, Max, Min, MinLength } from 'class-validator';
 import { PriceUnit, PropertyCategory } from '@prisma/client';
 
 export class CreatePropertyDto {
@@ -59,4 +59,22 @@ export class CreatePropertyDto {
   @Min(6)
   @Max(24)
   rentDurationMonths?: number;
+
+  /// The landlord's "Allow Messages" toggle (Property.messagingEnabled) —
+  /// the app always sends it, so it must be whitelisted here or the global
+  /// ValidationPipe (forbidNonWhitelisted) rejects every listing with
+  /// "property messagingEnabled should not exist".
+  @IsOptional()
+  @IsBoolean()
+  messagingEnabled?: boolean;
+
+  /// Shortlet-only (the app sends them only for a Shortlet listing): the
+  /// exact unit address and room number, stored on Property.
+  @IsOptional()
+  @IsString()
+  unitAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  roomNumber?: string;
 }
