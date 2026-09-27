@@ -117,4 +117,12 @@ class ChatRepository {
       await _client.dio.patch('/threads/$threadId/transfer', data: {'adminId': adminId});
     });
   }
+
+  /// Super-admin only — hands an open support conversation to [adminId],
+  /// whoever is handling it now (see backend ChatService.reassignThread).
+  Future<void> reassignThread(String threadId, String adminId) {
+    return _client.call(() async {
+      await _client.dio.patch('/threads/$threadId/reassign', data: {'adminId': adminId});
+    });
+  }
 }

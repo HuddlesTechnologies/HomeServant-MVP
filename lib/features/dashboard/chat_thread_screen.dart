@@ -69,6 +69,7 @@ class ChatThreadScreen extends StatefulWidget {
     this.isResolved = false,
     this.onResolve,
     this.onTransfer,
+    this.onReassign,
     this.readOnly = false,
   });
 
@@ -126,6 +127,11 @@ class ChatThreadScreen extends StatefulWidget {
 
   final Future<void> Function()? onResolve;
   final Future<void> Function()? onTransfer;
+
+  /// Super admins viewing a support conversation they aren't handling:
+  /// hand it to another admin (see reassignSupportThread). Shown even
+  /// though the screen is otherwise read-only for them.
+  final Future<void> Function()? onReassign;
 
   /// True for the super-admin Chat Log's history viewer — hides the input
   /// row and the resolve/transfer bar entirely so browsing another admin's
@@ -378,6 +384,17 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     if (mounted) await _refreshAccess();
   }
 
+  Future<void> _handleReassign() async {
+    final onReassign = widget.onReassign;
+    if (onReassign == null || _resolvingOrTransferring) return;
+    setState(() => _resolvingOrTransferring = true);
+    try {
+      await onReassign();
+    } finally {
+      if (mounted) setState(() => _resolvingOrTransferring = false);
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -584,6 +601,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 ),
               if (orderItem != null && orderStatus != null)
                 _OrderStatusBanner(theme: theme, item: orderItem, status: orderStatus),
+              if (widget.onReassign != null && !widget.isResolved)
+                _ReassignBar(
+                  theme: theme,
+                  busy: _resolvingOrTransferring,
+                  onReassign: _handleReassign,
+                ),
               if (widget.showResolveTransferActions && !_readOnly)
                 _ResolveTransferBar(
                   theme: theme,
@@ -973,6 +996,50 @@ class _ResolveTransferBar extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// A super admin's view into someone else's support conversation: says
+/// it's read-only and offers Reassign. theme.surface/onSurface is a fixed
+/// light-surface/navy-text pair in every DashboardTheme (see CLAUDE.md);
+/// the button uses the accent/onAccent pair.
+class _ReassignBar extends StatelessWidget {
+  const _ReassignBar({required this.theme, required this.busy, required this.onReassign});
+
+  final DashboardTheme theme;
+  final bool busy;
+  final VoidCallback onReassign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Icon(Icons.visibility_outlined, color: theme.onSurface, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Viewing as super admin',
+              style: AppTextStyles.body(color: theme.onSurface, size: 12.5, weight: FontWeight.w600),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: busy ? null : onReassign,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.accent,
+              disabledBackgroundColor: theme.accent.withValues(alpha: 0.5),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            icon: Icon(Icons.swap_horiz_rounded, color: theme.onAccent, size: 16),
+            label: Text('Reassign', style: AppTextStyles.body(color: theme.onAccent, size: 12.5, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
     );
   }
 }

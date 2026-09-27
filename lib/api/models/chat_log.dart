@@ -34,6 +34,7 @@ class ChatLogEntry {
     required this.id,
     required this.status,
     this.requesterName,
+    this.currentAdminId,
     this.currentAdminName,
     this.transferChain = const [],
     this.lastMessageBody,
@@ -47,6 +48,7 @@ class ChatLogEntry {
 
   /// The admin currently on this thread (`Thread.assignedAdminId`) — null
   /// only for the rare case a chat-log entry is still genuinely unattended.
+  final String? currentAdminId;
   final String? currentAdminName;
 
   /// Every admin this thread has ever been transferred between, in order
@@ -66,6 +68,7 @@ class ChatLogEntry {
       id: json['id'] as String,
       status: ChatLogStatus.fromApi(json['status'] as String),
       requesterName: requester?['fullName'] as String?,
+      currentAdminId: currentAdmin?['id'] as String?,
       currentAdminName: currentAdmin?['fullName'] as String?,
       transferChain: (json['transferChain'] as List? ?? const []).cast<String>(),
       lastMessageBody: lastMessage?['body'] as String?,

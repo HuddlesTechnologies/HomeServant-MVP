@@ -50,3 +50,34 @@ Future<bool> transferSupportThread(BuildContext context, String threadId) async 
     return false;
   }
 }
+
+/// Super-admin only: picks an admin and hands them this support
+/// conversation, whoever is handling it now. [currentAdminId] is left out
+/// of the picker. Returns whether a reassignment happened.
+Future<bool> reassignSupportThread(BuildContext context, String threadId, {String? currentAdminId}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final appState = context.read<AppState>();
+  List<AdminAccount> admins;
+  try {
+    admins = await appState.admin.findAdmins();
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    return false;
+  }
+  if (!context.mounted) return false;
+  final chosen = await showAdminPickerSheet(
+    context,
+    admins: admins,
+    title: 'Reassign conversation to',
+    excludeAdminIds: {if (currentAdminId != null) currentAdminId},
+  );
+  if (chosen == null) return false;
+  try {
+    await appState.chat.reassignThread(threadId, chosen.id);
+    messenger.showSnackBar(SnackBar(content: Text('Reassigned to ${chosen.email}')));
+    return true;
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    return false;
+  }
+}

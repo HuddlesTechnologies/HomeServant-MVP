@@ -65,6 +65,12 @@ void main() {
     expect(summary.lastTransferFrom?.id, 'a1');
     expect(summary.otherParticipants.single.fullName, 'Tenant T');
     expect(summary.canReply, isFalse);
+    expect(summary.canReassign, isFalse);
+  });
+
+  test('a super admin summary can offer reassign', () {
+    final summary = ThreadSummary.fromApi({'id': 't1', 'canView': true, 'canReassign': true, 'otherParticipants': []});
+    expect(summary.canReassign, isTrue);
   });
 
   test('a transfer from a since-deleted admin still parses', () {

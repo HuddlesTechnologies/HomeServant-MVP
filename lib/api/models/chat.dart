@@ -256,6 +256,7 @@ class ThreadSummary {
     required this.canView,
     required this.canReply,
     required this.otherParticipants,
+    this.canReassign = false,
     this.resolvedAt,
     this.assignedAdmin,
     this.lastTransferFrom,
@@ -273,6 +274,10 @@ class ThreadSummary {
   final bool canView;
   final bool canReply;
 
+  /// Super admins only: can hand this open support conversation to another
+  /// admin even though they aren't handling it themselves.
+  final bool canReassign;
+
   factory ThreadSummary.fromApi(Map<String, dynamic> json) {
     final transfer = json['lastTransfer'] as Map<String, dynamic>?;
     return ThreadSummary(
@@ -289,6 +294,7 @@ class ThreadSummary {
           .toList(),
       canView: json['canView'] as bool? ?? false,
       canReply: json['canReply'] as bool? ?? false,
+      canReassign: json['canReassign'] as bool? ?? false,
     );
   }
 }

@@ -334,6 +334,16 @@ export class ChatService {
         : null,
       otherParticipants: thread.participants.filter((p) => p.userId !== userId).map((p) => p.user),
       canView,
+      // A SUPER_ADMIN can hand an open support conversation to any admin
+      // (see reassignThread) unless they're the one handling it — then the
+      // ordinary Transfer applies.
+      canReassign:
+        isAdmin &&
+        thread.isSupport &&
+        !resolved &&
+        thread.assignedAdminId !== userId &&
+        (await this.prisma.user.findUnique({ where: { id: userId }, select: { adminLevel: true } }))?.adminLevel ===
+          'SUPER_ADMIN',
       // Same rule sendMessage enforces (participant, or any admin on an
       // unclaimed support thread — replying claims it), plus: nobody
       // replies into a resolved thread, and an admin doesn't reply into a
@@ -493,6 +503,75 @@ export class ChatService {
       if (thread && (await adminCanAccessSupportThread(this.prisma, thread, userId))) return;
     }
     throw new ForbiddenException('Not a participant of this thread');
+  }
+
+  /// SUPER_ADMIN-only (enforced by the controller's guards): moves an open
+  /// support thread to [toAdminId] regardless of who's handling it — for a
+  /// conversation stuck with an admin who's away, or one nobody has picked
+  /// up. Unlike [transferThread], the caller doesn't need to be in the
+  /// thread (a super admin only ever reads other admins' chats). The
+  /// previous handler's participant row is handed to [toAdminId] (so they
+  /// lose access, same as after a normal transfer), the hand-off is
+  /// recorded in the transfer chain, and both the new and previous admin
+  /// are notified.
+  async reassignThread(threadId: string, superAdminId: string, toAdminId: string): Promise<void> {
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
+    if (thread.status === 'RESOLVED') throw new ForbiddenException("Can't reassign a resolved conversation");
+    if (thread.assignedAdminId === toAdminId) throw new ForbiddenException('That admin is already handling this conversation');
+
+    const toAdmin = await this.prisma.user.findUnique({ where: { id: toAdminId } });
+    if (!toAdmin || toAdmin.role !== 'ADMIN') throw new NotFoundException('Admin not found');
+
+    const previousAdminId = thread.assignedAdminId;
+    const previousMembership = previousAdminId
+      ? await this.prisma.threadParticipant.findUnique({ where: { threadId_userId: { threadId, userId: previousAdminId } } })
+      : null;
+    const newAdminAlreadyIn = await this.prisma.threadParticipant.findUnique({
+      where: { threadId_userId: { threadId, userId: toAdminId } },
+    });
+
+    await this.prisma.$transaction([
+      // Hand the previous handler's seat over (keeps their messages'
+      // history/read state intact, same as transferThread), or add the new
+      // admin fresh if nobody held one.
+      ...(previousMembership && !newAdminAlreadyIn
+        ? [this.prisma.threadParticipant.update({ where: { id: previousMembership.id }, data: { userId: toAdminId } })]
+        : previousMembership
+          ? [this.prisma.threadParticipant.delete({ where: { id: previousMembership.id } })]
+          : []),
+      ...(!previousMembership && !newAdminAlreadyIn
+        ? [this.prisma.threadParticipant.create({ data: { threadId, userId: toAdminId } })]
+        : []),
+      this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: toAdminId } }),
+      this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId: previousAdminId, toAdminId } }),
+    ]);
+    await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: superAdminId, targetId: toAdminId });
+    this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+    await this.gateway.evictUnauthorizedFromThread(threadId);
+
+    await this.notifications.create(
+      toAdminId,
+      NotificationType.THREAD_TRANSFERRED,
+      'A conversation was assigned to you',
+      'A super admin assigned a support conversation to you.',
+      threadId,
+    );
+    await this.mail.send(
+      toAdmin.email,
+      'A HomeServant conversation was assigned to you',
+      '<p>A super admin assigned a support conversation to you — open Messages in the admin console to continue it.</p>',
+      'A super admin assigned a support conversation to you — open Messages in the admin console to continue it.',
+    );
+    if (previousAdminId && previousAdminId !== superAdminId) {
+      await this.notifications.create(
+        previousAdminId,
+        NotificationType.THREAD_TRANSFERRED,
+        'A conversation was reassigned',
+        `A super admin reassigned a support conversation you were handling to ${toAdmin.fullName ?? 'another admin'}.`,
+        threadId,
+      );
+    }
   }
 
   /// Hands a console conversation off to another admin, "the way Namecheap

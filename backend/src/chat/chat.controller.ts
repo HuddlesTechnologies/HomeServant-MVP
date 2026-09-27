@@ -1,8 +1,10 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { UserRole } from '@prisma/client';
+import { AdminLevel, UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { MinAdminLevel } from '../common/decorators/min-admin-level.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { AdminLevelGuard } from '../common/guards/admin-level.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -56,6 +58,21 @@ export class ChatController {
   @Roles(UserRole.ADMIN)
   async claim(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.chat.claimThread(id, user.sub);
+  }
+
+  /// SUPER_ADMIN-only: hands an open support conversation to another
+  /// admin, whoever is handling it now — see ChatService.reassignThread.
+  @Patch(':id/reassign')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(RolesGuard, AdminLevelGuard)
+  @Roles(UserRole.ADMIN)
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  async reassign(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: TransferThreadDto,
+  ): Promise<void> {
+    await this.chat.reassignThread(id, user.sub, dto.adminId);
   }
 
   /// A thread's current status for the caller — see

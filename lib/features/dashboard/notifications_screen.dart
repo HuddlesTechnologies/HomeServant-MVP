@@ -290,6 +290,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
           isResolved: summary.resolved,
           onResolve: adminSupportActions ? () => resolveSupportThread(context, summary.id) : null,
           onTransfer: adminSupportActions ? () => transferSupportThread(context, summary.id) : null,
+          onReassign: summary.canReassign
+              ? () async {
+                  await reassignSupportThread(context, summary.id, currentAdminId: summary.assignedAdmin?.id);
+                }
+              : null,
         ),
       ),
     );
