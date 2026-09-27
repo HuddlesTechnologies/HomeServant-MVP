@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
 import '../../api/models/vendor.dart';
+import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
@@ -352,6 +353,15 @@ class _AdminShellState extends State<AdminShell> {
   // chosen filter still survives navigating away and back.
   UserRole? _usersInitialRoleFilter;
   bool _usersInitialDeactivatedOnly = false;
+
+  /// Wide screens only: a "More" page shown in the content area beside the
+  /// sidebar (instead of pushed as its own screen, as on phones). Null
+  /// while one of the primary tabs is showing.
+  _MoreItem? _openPage;
+
+  /// The sidebar's own expand/collapse choice; null follows the screen
+  /// width (full sidebar on desktop, icons only on tablets).
+  bool? _sidebarExpanded;
   int _usersTabEpoch = 0;
   VendorApplicationStatus? _vendorsInitialStatusFilter;
   int _vendorsTabEpoch = 0;
@@ -376,6 +386,7 @@ class _AdminShellState extends State<AdminShell> {
       _usersInitialDeactivatedOnly = deactivatedOnly;
       _usersTabEpoch++;
       _index = 1;
+      _openPage = null;
     });
   }
 
@@ -384,6 +395,7 @@ class _AdminShellState extends State<AdminShell> {
       _vendorsInitialStatusFilter = statusFilter;
       _vendorsTabEpoch++;
       _index = 2;
+      _openPage = null;
     });
   }
 
@@ -407,21 +419,25 @@ class _AdminShellState extends State<AdminShell> {
         // filter that actually narrows the list.
         _goToVendors(statusFilter: VendorApplicationStatus.approved);
       case AdminDashboardDestination.properties:
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => const _MoreScreen(item: _MoreItem(icon: Icons.home_work_outlined, label: 'Properties', builder: AdminPropertiesTab.new)),
-          ),
-        );
+        _openMoreItem(const _MoreItem(icon: Icons.home_work_outlined, label: 'Properties', builder: AdminPropertiesTab.new));
       case AdminDashboardDestination.marketplaceOrders:
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => _MoreScreen(
-              item: _MoreItem(icon: Icons.shopping_bag_outlined, label: 'Marketplace', builder: () => const AdminMarketplaceTab(initialShowOrders: true)),
-            ),
-          ),
+        _openMoreItem(
+          _MoreItem(icon: Icons.shopping_bag_outlined, label: 'Marketplace', builder: () => const AdminMarketplaceTab(initialShowOrders: true)),
         );
     }
   }
+
+  /// With the sidebar (wide screens) a "More" page opens beside it; on
+  /// phones it's pushed as its own screen with a back button.
+  void _openMoreItem(_MoreItem item) {
+    if (_usesSidebar(context)) {
+      setState(() => _openPage = item);
+    } else {
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
+    }
+  }
+
+  static bool _usesSidebar(BuildContext context) => MediaQuery.sizeOf(context).width >= Breakpoints.medium;
 
   /// Not `static const` like the old list — the Vendors/Reports
   /// destinations' icons carry live badge counts, so this has to be
@@ -543,7 +559,7 @@ class _AdminShellState extends State<AdminShell> {
             child: Text(
               count > 99 ? '99+' : '$count',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
+              style: AppTextStyles.body(color: Colors.white, size: 9, weight: FontWeight.w800),
             ),
           ),
         ),
@@ -573,44 +589,132 @@ class _AdminShellState extends State<AdminShell> {
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _resetIdleTimer(),
       onPointerSignal: (_) => _resetIdleTimer(),
-      child: _buildScaffold(context, canSeeAdmins, isSuperAdmin, index),
+      child: _usesSidebar(context)
+          ? _buildWideScaffold(context, canSeeAdmins, isSuperAdmin, index)
+          : _buildScaffold(context, canSeeAdmins, isSuperAdmin, index),
+    );
+  }
+
+  AppBar _appBar(BuildContext context) => AppBar(
+    backgroundColor: AppColors.navy,
+    elevation: 0,
+    automaticallyImplyLeading: false,
+    title: Text('Admin Console', style: AppTextStyles.heading(color: Colors.white, size: 18)),
+    actions: [
+      Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: NotificationBell(
+          color: Colors.white,
+          count: context.watch<AppState>().unreadNotificationCount,
+          onTap: () {
+            context.read<AppState>().markAllNotificationsRead();
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen(theme: DashboardTheme.classic)),
+            );
+          },
+        ),
+      ),
+      IconButton(
+        onPressed: () => _openSettings(context),
+        icon: const Icon(Icons.settings_outlined, color: Colors.white),
+        tooltip: 'Account settings',
+      ),
+      IconButton(
+        onPressed: () => _logOut(context),
+        icon: const Icon(Icons.logout_rounded, color: Colors.white),
+        tooltip: 'Log out',
+      ),
+    ],
+  );
+
+  static const _primaryLabels = ['Dashboard', 'Users', 'Vendors', 'Reports'];
+
+  /// The sidebar's groups: every page the phone layout has (the four
+  /// primary tabs plus everything under "More"), sorted by what it's for.
+  /// Pages this admin's level can't open are simply absent from
+  /// [_moreItems], so they (and any group left empty) don't appear.
+  List<_NavSection> _sidebarSections(bool canSeeAdmins, bool isSuperAdmin) {
+    final pages = {for (final item in _moreItems(canSeeAdmins, isSuperAdmin)) item.label: item};
+    _NavEntry? page(String label) {
+      final item = pages[label];
+      return item == null ? null : _NavEntry(icon: item.icon, label: item.label, count: item.count, page: item);
+    }
+
+    const tab = _NavEntry.tab;
+    final sections = [
+      _NavSection('Overview', [tab(0, Icons.dashboard_outlined, 'Dashboard'), page('Activity Log')]),
+      _NavSection('People', [
+        tab(1, Icons.people_outline_rounded, 'Users'),
+        tab(2, Icons.storefront_outlined, 'Vendors', _pendingVendorsCount),
+        page('Admins'),
+        page('ID Verifications'),
+      ]),
+      _NavSection('Listings & marketplace', [page('Properties'), page('Marketplace'), tab(3, Icons.flag_outlined, 'Reports', _openReportsCount)]),
+      _NavSection('Money', [page('Payouts & Refunds'), page('Eviction Requests')]),
+      _NavSection('Support', [page('Messages'), page('Support Insights'), page('Chat Log')]),
+      _NavSection('Platform', [page('Platform Controls')]),
+    ];
+    return [for (final s in sections) if (s.entries.any((e) => e != null)) s];
+  }
+
+  /// Tablets and desktop browsers: every page in a sidebar on the left
+  /// (full width with group names on desktop, icons only on tablets, and
+  /// either way the admin can expand or collapse it), with the chosen page
+  /// beside it. Same pages, badges and permissions as the phone layout.
+  Widget _buildWideScaffold(BuildContext context, bool canSeeAdmins, bool isSuperAdmin, int index) {
+    final expanded = _sidebarExpanded ?? MediaQuery.sizeOf(context).width >= Breakpoints.expanded;
+    final openPage = _openPage;
+    final title = openPage?.label ?? _primaryLabels[index];
+    return Scaffold(
+      backgroundColor: AppColors.offWhite,
+      appBar: _appBar(context),
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _AdminSidebar(
+            sections: _sidebarSections(canSeeAdmins, isSuperAdmin),
+            expanded: expanded,
+            isSelected: (entry) => entry.page != null ? openPage?.label == entry.label : openPage == null && index == entry.tabIndex,
+            onSelect: (entry) => setState(() {
+              if (entry.page != null) {
+                _openPage = entry.page;
+              } else {
+                _openPage = null;
+                _index = entry.tabIndex!;
+              }
+            }),
+            onToggle: () => setState(() => _sidebarExpanded = !expanded),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 6),
+                  child: Text(title, style: AppTextStyles.heading(color: AppColors.navy, size: 20)),
+                ),
+                Expanded(
+                  // The primary tabs stay alive (filters, scroll) while a
+                  // sidebar page is open, as with the phone's bottom nav.
+                  child: Stack(
+                    children: [
+                      Offstage(offstage: openPage != null, child: IndexedStack(index: index, children: _primaryTabs)),
+                      if (openPage != null) KeyedSubtree(key: ValueKey('admin-page-${openPage.label}'), child: openPage.builder()),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildScaffold(BuildContext context, bool canSeeAdmins, bool isSuperAdmin, int index) {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        backgroundColor: AppColors.navy,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Text('Admin Console', style: AppTextStyles.heading(color: Colors.white, size: 18)),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: NotificationBell(
-              color: Colors.white,
-              count: context.watch<AppState>().unreadNotificationCount,
-              onTap: () {
-                context.read<AppState>().markAllNotificationsRead();
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen(theme: DashboardTheme.classic)),
-                );
-              },
-            ),
-          ),
-          IconButton(
-            onPressed: () => _openSettings(context),
-            icon: const Icon(Icons.settings_outlined, color: Colors.white),
-            tooltip: 'Account settings',
-          ),
-          IconButton(
-            onPressed: () => _logOut(context),
-            icon: const Icon(Icons.logout_rounded, color: Colors.white),
-            tooltip: 'Log out',
-          ),
-        ],
-      ),
+      appBar: _appBar(context),
       body: IndexedStack(index: index, children: _primaryTabs),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
@@ -648,6 +752,145 @@ class _MoreItem {
   final Widget Function() builder;
 }
 
+/// One group of pages in the wide-screen sidebar. Null entries are pages
+/// this admin can't open; they're skipped.
+class _NavSection {
+  const _NavSection(this.title, this.entries);
+
+  final String title;
+  final List<_NavEntry?> entries;
+}
+
+/// A sidebar entry: one of the primary tabs ([tabIndex]) or a page that
+/// sits under "More" on phones ([page]).
+class _NavEntry {
+  const _NavEntry({required this.icon, required this.label, this.count = 0, this.tabIndex, this.page});
+
+  const _NavEntry.tab(int index, IconData icon, String label, [int count = 0])
+    : this(icon: icon, label: label, count: count, tabIndex: index);
+
+  final IconData icon;
+  final String label;
+  final int count;
+  final int? tabIndex;
+  final _MoreItem? page;
+}
+
+/// The admin console's left sidebar on tablets and desktop browsers: white,
+/// navy icons and labels, the chosen page on a pale navy highlight, dark
+/// grey group names (6.2:1 on white) and each page's red count badge.
+/// Collapsed, it shows icons only, with the name as a tooltip.
+class _AdminSidebar extends StatelessWidget {
+  const _AdminSidebar({
+    required this.sections,
+    required this.expanded,
+    required this.isSelected,
+    required this.onSelect,
+    required this.onToggle,
+  });
+
+  final List<_NavSection> sections;
+  final bool expanded;
+  final bool Function(_NavEntry) isSelected;
+  final ValueChanged<_NavEntry> onSelect;
+  final VoidCallback onToggle;
+
+  static const _groupColor = Color(0xFF5B6170);
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: expanded ? 252 : 76,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(right: BorderSide(color: Color(0x1A1A2B4C))),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+              children: [
+                for (final (i, section) in sections.indexed) ...[
+                  if (expanded)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(12, i == 0 ? 2 : 16, 12, 6),
+                      child: Text(
+                        section.title.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body(color: _groupColor, size: 11, weight: FontWeight.w700).copyWith(letterSpacing: 0.6),
+                      ),
+                    )
+                  else if (i > 0)
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12), child: Divider(height: 1)),
+                  for (final entry in section.entries.whereType<_NavEntry>()) _tile(entry),
+                ],
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Align(
+            alignment: expanded ? Alignment.centerRight : Alignment.center,
+            child: IconButton(
+              onPressed: onToggle,
+              tooltip: expanded ? 'Collapse sidebar' : 'Expand sidebar',
+              icon: Icon(expanded ? Icons.keyboard_double_arrow_left_rounded : Icons.keyboard_double_arrow_right_rounded, color: AppColors.navy),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile(_NavEntry entry) {
+    final selected = isSelected(entry);
+    final icon = Icon(entry.icon, color: AppColors.navy, size: 22);
+    final tile = Material(
+      color: selected ? AppColors.navy.withValues(alpha: 0.09) : Colors.transparent,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => onSelect(entry),
+        child: Padding(
+          padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0, vertical: 11),
+          child: expanded
+              ? Row(
+                  children: [
+                    icon,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        entry.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: selected ? FontWeight.w700 : FontWeight.w500),
+                      ),
+                    ),
+                    if (entry.count > 0) _CountBadge(count: entry.count),
+                  ],
+                )
+              : Center(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      icon,
+                      if (entry.count > 0) Positioned(top: -8, right: -12, child: _CountBadge(count: entry.count)),
+                    ],
+                  ),
+                ),
+        ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: expanded ? tile : Tooltip(message: entry.label, child: tile),
+    );
+  }
+}
+
 /// Small numeric badge for a "More" sheet row — same red-circle convention
 /// as [_AdminShellState._badgedIcon], just laid out inline as a `trailing`
 /// widget instead of overlaid on an icon.
@@ -665,7 +908,7 @@ class _CountBadge extends StatelessWidget {
       child: Text(
         count > 99 ? '99+' : '$count',
         textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+        style: AppTextStyles.body(color: Colors.white, size: 11, weight: FontWeight.w800),
       ),
     );
   }
