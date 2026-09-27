@@ -249,10 +249,21 @@ class AdminRepository {
   /// The current admin's own level — fetched right after admin login to
   /// decide what the console shows/allows (the server enforces the real
   /// authorization on every write regardless, this is only for the UI).
-  Future<AdminLevel> myLevel() {
+  /// This admin's level and On duty / Away status (`GET /admin/me`).
+  Future<({AdminLevel level, bool onDuty})> me() {
     return _client.call(() async {
       final response = await _client.dio.get('/admin/me');
-      return AdminLevel.fromApi((response.data as Map<String, dynamic>)['adminLevel'] as String);
+      final data = response.data as Map<String, dynamic>;
+      return (level: AdminLevel.fromApi(data['adminLevel'] as String), onDuty: data['onDuty'] as bool? ?? true);
+    });
+  }
+
+  /// See backend User.adminOnDuty — "Away" admins get new-conversation
+  /// alerts silently.
+  Future<bool> setOnDuty(bool onDuty) {
+    return _client.call(() async {
+      final response = await _client.dio.patch('/admin/me/on-duty', data: {'onDuty': onDuty});
+      return (response.data as Map<String, dynamic>)['onDuty'] as bool? ?? onDuty;
     });
   }
 

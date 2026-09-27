@@ -1,0 +1,260 @@
+<div class="toc">
+<h1 class="first">Contents</h1>
+<ol>
+  <li>What the admin console is</li>
+  <li>Signing in and staying secure</li>
+  <li>Admin levels and what each can do</li>
+  <li>A tour of the console</li>
+  <li>Support chats: claiming, replying, transferring, reassigning</li>
+  <li>Alerts, sounds and browser pop-ups</li>
+  <li>Managing other admins</li>
+  <li>Day-to-day moderation (users, vendors, listings, reports)</li>
+  <li>Emergency: the console has been taken over</li>
+  <li>Quick reference</li>
+</ol>
+</div>
+
+<h1>1. What the admin console is</h1>
+<p>The admin console is the staff side of HomeServant. From it, admins look after the people and content on the platform: tenants, landlords and vendors, property listings, marketplace products and orders, reports raised by users, and "Contact Support" conversations.</p>
+<p>It's part of the same web app as everything else, but it has its own sign-in page and only accounts with the <strong>Admin</strong> role can get in. Admin accounts are never created through the normal Sign Up screens: a super admin invites them from inside the console (see section 7).</p>
+<div class="note"><strong>Everything is checked on the server.</strong> Hiding a button in the console is only a convenience. Every action is checked again by the server against the admin's level, so an admin can't do more than their level allows even with a modified app.</div>
+
+<h1>2. Signing in and staying secure</h1>
+<h2>Where to sign in</h2>
+<p>Open the website and go to the admin sign-in page: your site's address followed by <code>/#/admin-login</code>, for example <code>https://homeservant.online/#/admin-login</code>. Sign in with your admin email and password.</p>
+
+<h2>Your first sign-in</h2>
+<ol>
+  <li>When a super admin invites you, you get one email containing a <strong>4-digit confirmation code</strong> and a <strong>temporary password</strong>.</li>
+  <li>Give the <em>code</em> to the super admin who invited you. They type it into the console to create your account. The code expires after 10 minutes.</li>
+  <li>Sign in with the <em>temporary password</em>. The console will not let you do anything else until you set your own password.</li>
+</ol>
+
+<h2>Security features</h2>
+<ul>
+  <li><strong>Two-factor authentication (2FA):</strong> turn it on under <em>Account Settings</em> (the gear icon at the top of the console). Each sign-in then also needs a code emailed to you. All admins should keep it on.</li>
+  <li><strong>Automatic sign-out:</strong> the console signs you out after <strong>15 minutes</strong> without activity.</li>
+  <li><strong>No "Forgot password" for admins:</strong> admin accounts can't reset their own password from the login page. A locked-out admin must ask a Moderator or Super Admin to reset it (see section 7). This stops someone who has access to an admin's email inbox from taking over the account on their own.</li>
+  <li><strong>Instant loss of access:</strong> if an admin is demoted or removed, the change applies on their very next action. They don't keep access until their session runs out.</li>
+</ul>
+
+<h1>3. Admin levels and what each can do</h1>
+<p>There are three levels. Each one includes everything the level below it can do.</p>
+<table>
+  <tr><th style="width:18%">Level</th><th>Meant for</th></tr>
+  <tr><td><strong>Support</strong></td><td>Front-line staff. Can see everything needed to help users (users, vendors, listings, orders, reports), edit a user's basic profile details, work reports, and handle support chats. Can't remove or block anything.</td></tr>
+  <tr><td><strong>Moderator</strong></td><td>Trusted staff who can take action: deactivate or delete accounts, approve or suspend vendors, remove listings and products, change a user's email or password, and reset another admin's password (not a super admin's).</td></tr>
+  <tr><td><strong>Super Admin</strong></td><td>Owners. Everything, plus creating and removing admins, changing admin levels, turning 2FA off for users or admins, clearing the Activity Log, the Chat Log, read-only oversight of other admins' support chats, and reassigning them.</td></tr>
+</table>
+
+<h2>Full access table</h2>
+<table>
+  <tr><th style="width:52%">Action</th><th>Support</th><th>Moderator</th><th>Super Admin</th></tr>
+  <tr><td>View dashboard, users, vendors, properties, marketplace, orders, reports</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Edit a user's name, phone number or address</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Work reports (change status, transfer to another admin)</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Message a user directly from their profile</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Deactivate or permanently delete a user (reason required)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Change a user's email, send them a password reset, or set their password</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Turn off a user's two-factor authentication</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Approve, reject, suspend or unsuspend vendors</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Remove or re-list a property; remove a marketplace product</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>See the Admins list and the Activity Log</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Reset another admin's password</td><td class="no">No</td><td class="yes">Yes, not a Super Admin's</td><td class="yes">Yes</td></tr>
+  <tr><td>Invite admins, change admin levels, remove admins, turn admin 2FA on/off</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Clear the Activity Log</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Chat Log (all support conversations from the last 30 days)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+</table>
+
+<h2>Support chat access</h2>
+<table>
+  <tr><th style="width:34%">The support chat is&hellip;</th><th>Support and Moderator</th><th>Super Admin</th></tr>
+  <tr><td>Unclaimed (in the Support Queue)</td><td>Read, reply (replying takes it on), resolve</td><td>Same, plus reassign</td></tr>
+  <tr><td>Being handled by you</td><td>Full: read, reply, resolve, transfer</td><td>Full: read, reply, resolve, transfer</td></tr>
+  <tr><td>Being handled by another admin</td><td class="no">No access at all</td><td class="ro">Read-only (read, export transcript), plus Reassign</td></tr>
+</table>
+<p>Other conversations (tenant&ndash;landlord chats about a property, marketplace order chats, and direct admin-to-user chats) can only be seen by the people in them.</p>
+
+<h1>4. A tour of the console</h1>
+<p>The bottom bar has four main tabs plus <strong>More</strong>. Red number badges show items that need attention.</p>
+<h2>Dashboard</h2>
+<p>Headline numbers (total users, tenants, landlords, vendors, properties, bookings, marketplace orders, pending vendor reviews, deactivated accounts) and a live activity feed. Tapping a card or a feed item jumps to the relevant list.</p>
+<h2>Users</h2>
+<p>Everyone on the platform, filterable by <em>All, Tenants, Landlords, Vendors, Deactivated</em>. Tap a user to open their detail page:</p>
+<ul>
+  <li>Profile details, which every admin can edit.</li>
+  <li>Their listings, with photos, and their bookings.</li>
+  <li>Actions, depending on your level: message them, change email, send a password reset, set a password, disable 2FA, deactivate, delete permanently.</li>
+</ul>
+<p>Deactivating or deleting needs a written reason of at least 10 characters. It's emailed to the user and recorded in the Activity Log.</p>
+<h2>Vendors</h2>
+<p>Marketplace shop applications and shops, filterable by <em>All, Pending, Approved, Rejected</em>. Moderators and above can approve, reject (with a reason), suspend and unsuspend.</p>
+<h2>Reports</h2>
+<p>Problems users have reported about a property or a marketplace item, filterable by <em>Open, In Progress, Resolved</em>. Open a report to read it, move it through those statuses, or transfer it to another admin.</p>
+<h2>More</h2>
+<ul>
+  <li><strong>Properties:</strong> every listing. Moderators and above can remove one (with a reason) or re-list it.</li>
+  <li><strong>Marketplace:</strong> products and orders. Moderators and above can remove a product (with a reason). Everyone can open an order's details.</li>
+  <li><strong>Messages:</strong> your <em>Inbox</em> (conversations you're in) and the shared <em>Support Queue</em> (support chats nobody has taken yet). See section 5.</li>
+  <li><strong>Admins</strong> (Moderator and above): the admin list. Super admins also invite, promote or demote, remove, and toggle 2FA here. See section 7.</li>
+  <li><strong>Activity Log</strong> (Moderator and above): a record of sensitive actions, such as admin sign-ins, account deactivations and deletions, password and email changes, chat claims and transfers. Only a super admin can clear it.</li>
+  <li><strong>Chat Log</strong> (Super Admin): every support conversation from the last 30 days, with who handled it and every transfer. Filter by <em>Unattended, Opened, Resolved</em>.</li>
+</ul>
+<h2>Top bar</h2>
+<p>The <strong>bell</strong> opens your notifications, the <strong>gear</strong> opens Account Settings, and the <strong>door icon</strong> signs you out.</p>
+
+<h1>5. Support chats</h1>
+<p>When a user taps <em>Contact Support &rarr; Live Chat</em>, a support conversation starts. Here's how it moves through the team:</p>
+<ol>
+  <li><strong>Unclaimed:</strong> it appears in <em>Messages &rarr; Support Queue</em> for every admin, and every admin gets one notification.</li>
+  <li><strong>Claimed:</strong> the first admin to open it from the queue, or to reply, takes it on. It leaves everyone else's queue and their notifications clear. From then on only that admin is notified of new messages.</li>
+  <li><strong>Resolved:</strong> the handling admin taps <em>Mark as Resolved</em>. The conversation disappears from the user's inbox; if they need help again, a fresh conversation starts.</li>
+</ol>
+<h2>Transferring and reassigning</h2>
+<ul>
+  <li><strong>Transfer</strong> (the &#8644; icon in the chat): the handling admin hands the chat to another admin. The new admin is notified in the app and by email, and the old admin loses access.</li>
+  <li><strong>Reassign</strong> (super admins only): for a chat stuck with an admin who's away, or one nobody has picked up. A super admin opens it from the <em>Chat Log</em> or from a notification and taps <em>Reassign</em>. Both the new and previous admin are notified.</li>
+  <li>If the chat is taken away from you while you have it open, the reply box is replaced by a note saying who has it now.</li>
+</ul>
+<h2>Opening chats from notifications</h2>
+<p>Tapping a message notification shows where that conversation stands now: "Waiting for an admin", "You are handling this", "Transferred to Bola", or "Resolved 2h ago". It then offers <em>Reply</em> if you still can, or <em>View conversation</em> (read-only) if you're allowed to look but not reply.</p>
+<h2>Exporting a transcript</h2>
+<p>Inside a chat, the export action saves the conversation as a PDF.</p>
+
+<h1>6. Alerts, sounds and browser pop-ups</h1>
+<h2>How alerts work</h2>
+<ul>
+  <li>A <strong>new support conversation</strong> gives each admin <strong>one</strong> alert. Further messages before anyone takes it update that same alert quietly ("Ada (3 messages): &hellip;").</li>
+  <li>As soon as someone <strong>takes</strong> the chat, the alert clears for everyone else.</li>
+  <li><strong>Reminder after 5 minutes:</strong> if nobody has picked up a new conversation, all admins get one "Support conversation still waiting" alert.</li>
+  <li><strong>Escalation after 10 minutes:</strong> if the customer's latest message in a claimed chat has gone unanswered for 10 minutes, super admins get one "Customer waiting for a reply" alert and can reassign it.</li>
+  <li>Both times can be changed without touching code. See the <code>SUPPORT_UNCLAIMED_REMINDER_MINUTES</code> and <code>SUPPORT_REPLY_ESCALATION_MINUTES</code> settings in the Backend Developer Guide.</li>
+</ul>
+<h2>Your settings (gear icon &rarr; Account Settings)</h2>
+<table>
+  <tr><th style="width:26%">Setting</th><th>What it does</th></tr>
+  <tr><td><strong>On duty</strong></td><td>On: you hear a sound for new support conversations. Off ("Away"): they still arrive, silently. Chats you're handling always alert you. This setting follows you to any device.</td></tr>
+  <tr><td><strong>Alert sounds on this device</strong></td><td>Turns sounds on or off for this computer or phone only. A device never plays more than one alert sound in 10 seconds.</td></tr>
+  <tr><td><strong>Browser pop-ups</strong></td><td>Shows alerts as a pop-up from your browser when the console tab isn't in view (another tab in front, or the window minimised). Your browser asks for permission the first time you turn it on. Clicking a pop-up brings the console back and opens that notification.</td></tr>
+</table>
+<div class="note">Sounds and pop-ups need the console to be <strong>open in a browser tab</strong>, even a background one. If the tab or browser is closed, alerts wait in your notification list until you sign in.</div>
+<div class="note">The server runs on a plan that can go to sleep when nobody is using the app. Reminders can't be sent while it's asleep; overdue ones go out as soon as it wakes.</div>
+
+<h1>7. Managing other admins</h1>
+<p>All of this is in <em>More &rarr; Admins</em>.</p>
+<h2>Inviting a new admin (Super Admin)</h2>
+<ol>
+  <li>Tap <strong>New Admin</strong> and enter their full name, email and level, then <strong>Send Code</strong>.</li>
+  <li>They receive one email with a 4-digit confirmation code and a temporary password.</li>
+  <li>Ask them for the code and enter it in the console within 10 minutes. Their account is created.</li>
+  <li>They sign in with the temporary password and must set their own straight away.</li>
+</ol>
+<p>If you close the code screen by accident, tapping <em>New Admin</em> again within 10 minutes offers to continue that invite. After 10 minutes the code has expired, so start over (the form is pre-filled).</p>
+<h2>Changing an admin's level (Super Admin)</h2>
+<p>Pick the new level next to the admin's name. It applies immediately. You can't demote the <strong>last</strong> super admin: promote someone else first.</p>
+<h2>Resetting an admin's password (Moderator and above)</h2>
+<ol>
+  <li>Choose <em>Reset password</em> on the locked-out admin.</li>
+  <li>A confirmation code is sent to <strong>your own</strong> email, which proves it's really you at the keyboard. Enter it.</li>
+  <li>The admin gets a new temporary password by email and is signed out everywhere.</li>
+</ol>
+<p>A Moderator can't reset a Super Admin's password.</p>
+<h2>Removing an admin (Super Admin)</h2>
+<p>This deletes their account permanently. You can't remove yourself or the last super admin.</p>
+<h2>Admin two-factor authentication (Super Admin)</h2>
+<p>A super admin can turn 2FA on or off for any admin. Keep it on for everyone.</p>
+
+<h1>8. Day-to-day moderation</h1>
+<h3>A user asks for help with their account</h3>
+<p>Find them under <em>Users</em>. Support can correct their name, phone or address. For email or password problems, a Moderator can change the email, send a reset email, or (as a last resort) set a password directly.</p>
+<h3>A vendor applies to open a shop</h3>
+<p>Look at the application under <em>Vendors &rarr; Pending</em>, then approve it or reject it with a clear reason. Suspending a vendor hides their products until they're unsuspended.</p>
+<h3>A listing or product breaks the rules</h3>
+<p>Remove it with a reason (the owner is told why). A removed property can be re-listed later if it's fixed.</p>
+<h3>A user reports a property or product</h3>
+<p>Open it under <em>Reports</em> and set it to <em>In Progress</em> while you look into it. Transfer it if someone else should handle it, then set it to <em>Resolved</em>. While a report about a marketplace item is open, that sale's payment is held and not automatically released to the vendor.</p>
+<h3>Someone needs to be removed</h3>
+<p><em>Deactivate</em> hides the account and signs it out; the user can come back by signing in again within 30 days. <em>Delete permanently</em> cannot be undone. Both need a reason, which is emailed to the user.</p>
+
+<h1>9. Emergency: the console has been taken over</h1>
+<div class="warn"><strong>Use this if an admin account has been stolen, an unknown admin appears, or you're locked out of every super admin account.</strong> You'll need access to the two services the platform runs on: <strong>Render</strong> (where the server runs) and <strong>Supabase</strong> (where the database is). Those two logins are the real master keys to HomeServant. Keep them with the owners only, protected by 2FA.</div>
+
+<h2>Step 1: Sign everyone out, everywhere</h2>
+<p>Changing the secret keys that sign login sessions makes every existing session invalid instantly, including the attacker's.</p>
+<ol>
+  <li>In <strong>Render</strong>, open the <code>homeservant-api</code> service &rarr; <em>Environment</em>.</li>
+  <li>Replace the values of <code>JWT_ACCESS_SECRET</code> and <code>JWT_REFRESH_SECRET</code> with two new long random strings. On a Mac or Linux terminal, <code>openssl rand -hex 32</code> generates one; run it twice.</li>
+  <li>Save. Render redeploys the server, and every user and admin has to sign in again.</li>
+  <li>For good measure, in <strong>Supabase &rarr; SQL Editor</strong>, run:</li>
+</ol>
+<pre><code>UPDATE "RefreshToken" SET "revokedAt" = now() WHERE "revokedAt" IS NULL;</code></pre>
+
+<h2>Step 2: Create a new super admin you control</h2>
+<p><strong>Option A (normal case):</strong> promote a fresh account through the database.</p>
+<ol>
+  <li>On the normal website, <strong>sign up</strong> with an email address only you control. Enter the verification code; you don't need to finish the profile steps. This creates an ordinary account.</li>
+  <li>In <strong>Supabase &rarr; SQL Editor</strong>, run the following, putting your email in:</li>
+</ol>
+<pre><code>UPDATE "User"
+SET "role" = 'ADMIN',
+    "adminLevel" = 'SUPER_ADMIN',
+    "mustChangePassword" = false,
+    "deactivatedAt" = NULL
+WHERE "email" = 'you@yourdomain.com';</code></pre>
+<ol start="3">
+  <li>Sign in at <code>/#/admin-login</code> with that email and the password you chose at sign-up. You're now a super admin.</li>
+  <li>Turn on 2FA straight away under Account Settings.</li>
+</ol>
+<p><strong>Option B (only if no admin accounts exist at all):</strong> the server has a one-time "bootstrap" route that creates the first super admin. It refuses to work while any admin exists, so it's only useful if every admin account has been deleted. It needs the <code>ADMIN_BOOTSTRAP_SECRET</code> value from Render:</p>
+<pre><code>curl -X POST https://homeservant-api-c8w7.onrender.com/api/admin/bootstrap \
+  -H "Content-Type: application/json" \
+  -H "x-admin-bootstrap-secret: &lt;ADMIN_BOOTSTRAP_SECRET from Render&gt;" \
+  -d '{"email":"you@yourdomain.com","password":"a-long-new-password","fullName":"Your Name"}'</code></pre>
+
+<h2>Step 3: Remove the intruder</h2>
+<p>Signed in as your new super admin, open <em>More &rarr; Admins</em>:</p>
+<ul>
+  <li>Remove any admin you don't recognise.</li>
+  <li>Reset the password of every admin you do keep, and check their 2FA is on.</li>
+</ul>
+<p>If you can't use the console, you can demote an account directly in the database. It loses admin access on its very next request:</p>
+<pre><code>UPDATE "User" SET "role" = 'TENANT', "adminLevel" = NULL
+WHERE "email" = 'suspicious@example.com';</code></pre>
+
+<h2>Step 4: Check what was done</h2>
+<ul>
+  <li><strong>Activity Log:</strong> look for account deletions, email or password changes, and 2FA being turned off during the incident. Contact affected users.</li>
+  <li><strong>Payouts:</strong> check that landlords' and vendors' bank details weren't changed.</li>
+  <li><strong>Chat Log:</strong> look for messages sent to users in the platform's name.</li>
+</ul>
+
+<h2>Step 5: Close the door</h2>
+<ul>
+  <li>In Render, also replace <code>ADMIN_BOOTSTRAP_SECRET</code> with a new random value.</li>
+  <li>If you think the Render or Supabase accounts themselves were reached:
+    <ul>
+      <li>change those passwords and turn on 2FA there;</li>
+      <li>rotate the Supabase service role key and database password (update <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>DATABASE_URL</code> and <code>DIRECT_URL</code> in Render);</li>
+      <li>rotate the Paystack secret key and the Resend email API key.</li>
+    </ul>
+  </li>
+  <li>Write down what happened and when, for your records.</li>
+</ul>
+
+<h1>10. Quick reference</h1>
+<table>
+  <tr><th style="width:40%">I want to&hellip;</th><th>Where</th><th>Minimum level</th></tr>
+  <tr><td>Help a customer in a live chat</td><td>More &rarr; Messages &rarr; Support Queue</td><td>Support</td></tr>
+  <tr><td>Hand my chat to a colleague</td><td>Inside the chat &rarr; transfer icon</td><td>Support</td></tr>
+  <tr><td>Rescue a chat stuck with someone else</td><td>More &rarr; Chat Log &rarr; open &rarr; Reassign</td><td>Super Admin</td></tr>
+  <tr><td>Fix a user's name or phone</td><td>Users &rarr; user &rarr; edit</td><td>Support</td></tr>
+  <tr><td>Change a user's email or password</td><td>Users &rarr; user &rarr; actions</td><td>Moderator</td></tr>
+  <tr><td>Deactivate or delete an account</td><td>Users &rarr; user &rarr; actions (reason required)</td><td>Moderator</td></tr>
+  <tr><td>Approve or suspend a vendor</td><td>Vendors</td><td>Moderator</td></tr>
+  <tr><td>Remove a listing or product</td><td>More &rarr; Properties / Marketplace</td><td>Moderator</td></tr>
+  <tr><td>Work a report</td><td>Reports</td><td>Support</td></tr>
+  <tr><td>Reset a locked-out admin's password</td><td>More &rarr; Admins</td><td>Moderator</td></tr>
+  <tr><td>Invite, promote or remove an admin</td><td>More &rarr; Admins</td><td>Super Admin</td></tr>
+  <tr><td>Turn my alert sounds or pop-ups on or off</td><td>Gear icon &rarr; Account Settings</td><td>Any</td></tr>
+  <tr><td>Recover a hijacked console</td><td>Render + Supabase (section 9)</td><td>Owner</td></tr>
+</table>

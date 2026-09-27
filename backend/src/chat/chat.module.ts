@@ -7,6 +7,7 @@ import { StorageModule } from '../storage/storage.module';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
+import { SupportAlertsService } from './support-alerts.service';
 import { SupportChatCleanupService } from './support-chat-cleanup.service';
 
 /// NotificationsModule needs ChatGateway (to emit `notification:new` over
@@ -17,7 +18,7 @@ import { SupportChatCleanupService } from './support-chat-cleanup.service';
 @Module({
   imports: [AuthModule, forwardRef(() => NotificationsModule), MailModule, ActivityLogModule, StorageModule],
   controllers: [ChatController],
-  providers: [ChatService, ChatGateway, SupportChatCleanupService],
+  providers: [ChatService, ChatGateway, SupportChatCleanupService, SupportAlertsService],
   // ChatService is exported for AdminModule, whose super-admin-only Chat
   // Log endpoint (AdminService.findChatLog) delegates straight into
   // ChatService.findChatLog rather than duplicating its Prisma query.

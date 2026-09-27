@@ -23,6 +23,7 @@ import { SetAdminTwoFactorDto } from './dto/set-admin-two-factor.dto';
 import { SetUserPasswordDto } from './dto/set-user-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserEmailDto } from './dto/update-user-email.dto';
+import { SetOnDutyDto } from './dto/set-on-duty.dto';
 
 /// Every route here requires an authenticated ADMIN account at minimum
 /// (SUPPORT tier or above); routes that need more than that carry their
@@ -41,8 +42,16 @@ export class AdminController {
   /// console needs this to render at all, even before that gate clears.
   @Get('me')
   @AllowMustChangePassword()
-  me(@CurrentUser() user: AuthenticatedUser) {
-    return { id: user.sub, email: user.email, role: user.role, adminLevel: user.adminLevel };
+  async me(@CurrentUser() user: AuthenticatedUser) {
+    const onDuty = await this.admin.isOnDuty(user.sub);
+    return { id: user.sub, email: user.email, role: user.role, adminLevel: user.adminLevel, onDuty };
+  }
+
+  /// "On duty" / "Away" for new-conversation alert sounds — see
+  /// User.adminOnDuty. Any admin level, for their own account only.
+  @Patch('me/on-duty')
+  setOnDuty(@CurrentUser() user: AuthenticatedUser, @Body() dto: SetOnDutyDto) {
+    return this.admin.setOnDuty(user.sub, dto.onDuty);
   }
 
   @Get('stats')

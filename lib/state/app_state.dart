@@ -468,6 +468,7 @@ class AppState extends ChangeNotifier {
     wishlistPriceDropAlerts = true;
     promotionalNotifications = false;
     bannerAutoDismiss = true;
+    adminOnDuty = true;
     appLockEnabled = false;
     appLockPin = null;
     unawaited(_tokens.clearAppLockPin());
@@ -498,9 +499,43 @@ class AppState extends ChangeNotifier {
 
   AdminLevel? adminLevel;
 
+  /// Admin console only: "On duty" gets alert sounds for new support
+  /// conversations; "Away" gets them silently. Server-side (the server
+  /// decides per alert whether it's silent), so it follows the admin across
+  /// devices. See backend User.adminOnDuty.
+  bool adminOnDuty = true;
+
+  Future<void> setAdminOnDuty(bool value) async {
+    adminOnDuty = await _adminRepo.setOnDuty(value);
+    notifyListeners();
+  }
+
+  /// Admin console only, per device: whether chat alerts play a sound at
+  /// all. Separate from [adminOnDuty] — this one is about this device's
+  /// speakers, not the admin's availability.
+  bool adminAlertSound = true;
+
+  void setAdminAlertSound(bool value) {
+    adminAlertSound = value;
+    notifyListeners();
+  }
+
+  /// Admin console on web, per device: show a browser pop-up for alerts
+  /// that arrive while the console tab isn't in view (another tab in front,
+  /// window minimised). Only takes effect once the browser's permission has
+  /// been granted — see browser_notifications_web.dart.
+  bool adminBrowserNotifications = true;
+
+  void setAdminBrowserNotifications(bool value) {
+    adminBrowserNotifications = value;
+    notifyListeners();
+  }
+
   Future<void> _loadAdminLevel() async {
     try {
-      adminLevel = await _adminRepo.myLevel();
+      final me = await _adminRepo.me();
+      adminLevel = me.level;
+      adminOnDuty = me.onDuty;
       notifyListeners();
     } catch (_) {
       // Leaves it null — AdminShell treats that the same as "not yet
@@ -920,6 +955,8 @@ class AppState extends ChangeNotifier {
     'wishlistPriceDropAlerts': wishlistPriceDropAlerts,
     'promotionalNotifications': promotionalNotifications,
     'bannerAutoDismiss': bannerAutoDismiss,
+    'adminAlertSound': adminAlertSound,
+    'adminBrowserNotifications': adminBrowserNotifications,
     'appLockEnabled': appLockEnabled,
     // appLockPin is deliberately excluded — it lives in TokenStorage
     // (secure storage), not this plaintext SharedPreferences blob. See
@@ -937,6 +974,8 @@ class AppState extends ChangeNotifier {
     wishlistPriceDropAlerts = json['wishlistPriceDropAlerts'] as bool? ?? true;
     promotionalNotifications = json['promotionalNotifications'] as bool? ?? false;
     bannerAutoDismiss = json['bannerAutoDismiss'] as bool? ?? true;
+    adminAlertSound = json['adminAlertSound'] as bool? ?? true;
+    adminBrowserNotifications = json['adminBrowserNotifications'] as bool? ?? true;
     appLockEnabled = json['appLockEnabled'] as bool? ?? false;
     // appLockPin is restored separately from secure storage — see [load].
   }

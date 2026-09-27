@@ -6,6 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
 import '../features/dashboard/notifications_screen.dart';
 import '../routes/app_router.dart';
+import '../services/browser_notifications.dart';
 import '../services/chat_sound_service.dart';
 import '../state/app_state.dart';
 
@@ -44,6 +45,7 @@ class NotificationBannerOverlay extends StatefulWidget {
 
 class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
   StreamSubscription<AppNotification>? _subscription;
+  StreamSubscription<String>? _claimedSubscription;
   AppNotification? _visible;
   Timer? _dismissTimer;
 
@@ -54,6 +56,16 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
     // broadcast stream) lives for AppState's whole lifetime, reconnecting
     // under the hood across login/logout rather than being replaced.
     _subscription ??= context.read<AppState>().chatSocket.onNotification.listen(_handleIncoming);
+    // A support conversation was just claimed/reassigned: the server has
+    // already marked everyone else's "new support conversation" alert read
+    // — refresh, and drop a banner still showing for that thread.
+    _claimedSubscription ??= context.read<AppState>().chatSocket.onThreadClaimed.listen(_handleThreadClaimed);
+  }
+
+  void _handleThreadClaimed(String threadId) {
+    if (!mounted) return;
+    unawaited(context.read<AppState>().loadNotifications());
+    if (_visible?.threadId == threadId) _dismiss();
   }
 
   void _handleIncoming(AppNotification notification) {
@@ -63,11 +75,26 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
     // in sync with what the banner just showed, without this overlay
     // needing to know how those counters are maintained internally.
     unawaited(appState.loadNotifications());
+    // A silent push (a follow-up folded into an existing alert, or an
+    // alert for an admin set to Away) only refreshes the list above.
+    if (notification.silent) return;
     // Sound is admin-console-only (an admin session is the only one with a
-    // non-null adminLevel) and only for chat-relevant events — see
-    // _chatSoundTypes.
-    if (appState.adminLevel != null && _chatSoundTypes.contains(notification.type)) {
+    // non-null adminLevel), only for chat-relevant events — see
+    // _chatSoundTypes — and only if this device has alert sounds on.
+    if (appState.adminLevel != null && appState.adminAlertSound && _chatSoundTypes.contains(notification.type)) {
       unawaited(ChatSoundService.instance.play());
+    }
+    // An admin looking at another tab (or with the window minimised)
+    // wouldn't see the in-page banner below — show the browser's own
+    // pop-up too. Clicking it brings the console back and opens the
+    // notification.
+    if (appState.adminLevel != null && appState.adminBrowserNotifications && browserTabHidden) {
+      showBrowserNotification(
+        title: notification.title,
+        body: notification.body,
+        tag: notification.threadId ?? notification.id,
+        onClick: () => _openNotification(notification),
+      );
     }
     _dismissTimer?.cancel();
     setState(() => _visible = notification);
@@ -87,6 +114,21 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
   /// routed page tree (same position as SessionExpiredGate/AppLockGate),
   /// so a plain `Navigator.of(context)` here wouldn't find the app's real
   /// Navigator the way it does from inside an actual screen.
+  /// From a browser pop-up: straight to that notification's detail (for a
+  /// chat, that's where its status and the Reply button are).
+  void _openNotification(AppNotification notification) {
+    if (!mounted) return;
+    _dismiss();
+    final navigatorState = rootNavigatorKey.currentState;
+    final navContext = navigatorState?.context;
+    if (navigatorState == null || navContext == null) return;
+    final appState = navContext.read<AppState>();
+    unawaited(appState.markNotificationRead(notification.id));
+    navigatorState.push(
+      MaterialPageRoute(builder: (_) => NotificationDetailScreen(theme: appState.dashboardTheme, item: notification)),
+    );
+  }
+
   void _openNotifications() {
     final notification = _visible;
     _dismiss();
@@ -101,6 +143,7 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
   @override
   void dispose() {
     _subscription?.cancel();
+    _claimedSubscription?.cancel();
     _dismissTimer?.cancel();
     super.dispose();
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
 import '../../api/models/vendor.dart';
 import '../../core/theme/app_colors.dart';
@@ -11,6 +12,7 @@ import '../../models/user_role.dart';
 import '../../state/app_state.dart';
 import '../../widgets/change_password_sheet.dart';
 import '../../widgets/notification_bell.dart';
+import '../../services/browser_notifications.dart';
 import '../dashboard/notifications_screen.dart';
 import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
@@ -65,7 +67,10 @@ class _AdminShellState extends State<AdminShell> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybePromptPasswordChange());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybePromptPasswordChange();
+      _maybeOfferBrowserNotifications();
+    });
     _resetIdleTimer();
     _loadBadgeCounts();
     // Unlike tenant/landlord, an admin session's `_loadInitialData` skips
@@ -174,6 +179,28 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 
+  /// On web, once per console load while the browser hasn't been asked
+  /// yet: offer to turn on pop-ups for alerts that arrive while the tab
+  /// isn't in view. The permission request itself only happens from the
+  /// "Turn on" tap — browsers ignore one that isn't tied to a user action.
+  void _maybeOfferBrowserNotifications() {
+    if (!mounted || !browserNotificationsSupported || browserNotificationPermission != 'default') return;
+    final appState = context.read<AppState>();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 12),
+        content: const Text('Get a pop-up for new chats and alerts even when this tab is in the background?'),
+        action: SnackBarAction(
+          label: 'Turn on',
+          onPressed: () async {
+            final permission = await requestBrowserNotificationPermission();
+            appState.setAdminBrowserNotifications(permission == 'granted');
+          },
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSettings(BuildContext context) async {
     final appState = context.read<AppState>();
     await showModalBottomSheet<void>(
@@ -210,6 +237,56 @@ class _AdminShellState extends State<AdminShell> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              _SettingsSwitchRow(
+                title: 'On duty',
+                subtitle: appState.adminOnDuty
+                    ? 'You get alert sounds for new support conversations'
+                    : "Away: new support conversations arrive silently. Chats you're handling still alert you.",
+                value: appState.adminOnDuty,
+                onChanged: (value) async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await appState.setAdminOnDuty(value);
+                  } on ApiException catch (e) {
+                    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+                  }
+                  setSheetState(() {});
+                },
+              ),
+              const SizedBox(height: 8),
+              _SettingsSwitchRow(
+                title: 'Alert sounds on this device',
+                subtitle: 'Play a sound for chat alerts (at most once every 10 seconds)',
+                value: appState.adminAlertSound,
+                onChanged: (value) {
+                  appState.setAdminAlertSound(value);
+                  setSheetState(() {});
+                },
+              ),
+              if (browserNotificationsSupported) ...[
+                const SizedBox(height: 8),
+                _SettingsSwitchRow(
+                  title: 'Browser pop-ups',
+                  subtitle: switch (browserNotificationPermission) {
+                    'denied' => 'Blocked in this browser. Allow notifications for this site in the browser settings.',
+                    _ => "Show alerts as a pop-up when this tab isn't in view",
+                  },
+                  value: appState.adminBrowserNotifications && browserNotificationPermission == 'granted',
+                  onChanged: (value) async {
+                    if (!value) {
+                      appState.setAdminBrowserNotifications(false);
+                      setSheetState(() {});
+                      return;
+                    }
+                    // Asked only from this tap: browsers ignore a
+                    // permission request that isn't tied to a user action.
+                    final permission = await requestBrowserNotificationPermission();
+                    appState.setAdminBrowserNotifications(permission == 'granted');
+                    setSheetState(() {});
+                  },
+                ),
+              ],
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
@@ -558,6 +635,35 @@ class _MoreScreen extends StatelessWidget {
         title: Text(item.label, style: AppTextStyles.heading(color: Colors.white, size: 18)),
       ),
       body: item.builder(),
+    );
+  }
+}
+
+/// A title/subtitle row with a switch, for the white Account Settings sheet
+/// (navy title, grey subtitle on white).
+class _SettingsSwitchRow extends StatelessWidget {
+  const _SettingsSwitchRow({required this.title, required this.subtitle, required this.value, required this.onChanged});
+
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 14)),
+              Text(subtitle, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12)),
+            ],
+          ),
+        ),
+        Switch(value: value, onChanged: onChanged),
+      ],
     );
   }
 }

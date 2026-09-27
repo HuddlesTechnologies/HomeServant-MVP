@@ -1,0 +1,281 @@
+<div class="toc">
+<h1 class="first">Contents</h1>
+<ol>
+  <li>What the backend is and what it runs on</li>
+  <li>Folder and module layout</li>
+  <li>How a request is handled</li>
+  <li>Authentication and sessions</li>
+  <li>Roles, admin levels and permissions</li>
+  <li>The data model</li>
+  <li>Business flows (bookings, payments, marketplace, chat)</li>
+  <li>Real-time: the WebSocket gateway</li>
+  <li>Background jobs</li>
+  <li>Files, email and other outside services</li>
+  <li>Configuration (environment variables)</li>
+  <li>Running, migrating and deploying</li>
+  <li>API reference</li>
+  <li>Conventions for new code</li>
+</ol>
+</div>
+
+<h1>1. What the backend is and what it runs on</h1>
+<p>The HomeServant API is the single source of truth for users, listings, bookings, payments, the marketplace, chat, notifications and the admin console. The Flutter app (web and mobile) is only a client of it.</p>
+<table>
+  <tr><th style="width:26%">Piece</th><th>Choice and why</th></tr>
+  <tr><td>Framework</td><td><strong>NestJS 10</strong> (TypeScript). Its modules, guards and dependency injection keep auth and permission rules in one place.</td></tr>
+  <tr><td>Database</td><td><strong>PostgreSQL on Supabase</strong>, accessed through <strong>Prisma 5</strong>. Prisma gives a typed schema, generated queries and versioned migrations.</td></tr>
+  <tr><td>Real-time</td><td><strong>Socket.IO</strong>, through Nest's WebSocket gateway, for chat, notifications and live admin updates.</td></tr>
+  <tr><td>File storage</td><td><strong>Supabase Storage</strong> (public bucket). The client uploads directly using one-time signed links.</td></tr>
+  <tr><td>Payments</td><td><strong>Paystack</strong>: charges, webhooks, transfers and refunds, in an escrow model.</td></tr>
+  <tr><td>Email</td><td><strong>Resend</strong> in production; the console in development.</td></tr>
+  <tr><td>Hosting</td><td><strong>Render</strong> (Docker web service, <code>render.yaml</code>). Migrations run automatically at start-up.</td></tr>
+</table>
+<p>All routes are served under the <code>/api</code> prefix, for example <code>https://homeservant-api-c8w7.onrender.com/api/health</code>.</p>
+
+<h1>2. Folder and module layout</h1>
+<p>Everything is in <code>backend/</code>. Each feature is a Nest <em>module</em> in <code>src/&lt;name&gt;/</code>, usually containing a <code>*.controller.ts</code> (HTTP routes), a <code>*.service.ts</code> (business logic), a <code>dto/</code> folder (validated request bodies) and a <code>*.module.ts</code>.</p>
+<table>
+  <tr><th style="width:24%">Module</th><th>Responsibility</th></tr>
+  <tr><td><code>auth</code></td><td>Signup and verification, login, Google, 2FA, JWT issuing and refresh, password reset and change, deactivate and delete, cleanup of deactivated accounts.</td></tr>
+  <tr><td><code>users</code></td><td>Own profile (<code>/users/me</code>), bank details, the <code>profileCompletedAt</code> flag.</td></tr>
+  <tr><td><code>properties</code></td><td>Listings: browse, create, update, delete.</td></tr>
+  <tr><td><code>bookings</code></td><td>Rentals and shortlets: requests, payment, inspection, move-in, refund, reject, renew, tenancy agreement; the lease life-cycle job.</td></tr>
+  <tr><td><code>payments</code></td><td>The single home for escrow money movement (charge, hold, release, refund).</td></tr>
+  <tr><td><code>paystack</code></td><td>Paystack HTTP client, bank list and account-name lookup, webhook route.</td></tr>
+  <tr><td><code>favorites</code>, <code>reviews</code>, <code>reports</code></td><td>Wishlist, reviews (only from real renters), user reports worked by admins.</td></tr>
+  <tr><td><code>chat</code></td><td>Threads and messages, support chats, claim, transfer, reassign, access rules, the WebSocket gateway, online presence, support alerts and cleanup jobs.</td></tr>
+  <tr><td><code>notifications</code></td><td>Notification rows plus live pushes (the only place notifications are created).</td></tr>
+  <tr><td><code>vendors</code>, <code>marketplace-products</code>, <code>marketplace-orders</code></td><td>Shops (applications and approval), products, orders and items, shipping and tracking, auto-release job.</td></tr>
+  <tr><td><code>delivery</code></td><td>Courier integration behind an interface: console (default) or GIG Logistics (scaffolding only).</td></tr>
+  <tr><td><code>storage</code></td><td>Signed upload links; checks that a URL points to one of our own images.</td></tr>
+  <tr><td><code>otp</code>, <code>mail</code></td><td>One-time codes, and email through a pluggable provider (console or Resend).</td></tr>
+  <tr><td><code>admin</code></td><td>Everything behind the admin console, plus the one-time bootstrap route.</td></tr>
+  <tr><td><code>activity-log</code></td><td>Audit trail of sensitive actions.</td></tr>
+  <tr><td><code>common</code></td><td>Guards, decorators and the error filter shared by all modules.</td></tr>
+  <tr><td><code>prisma</code>, <code>health</code></td><td>Database client; <code>GET /api/health</code> for Render's health check.</td></tr>
+</table>
+
+<h1>3. How a request is handled</h1>
+<p>Set up in <code>src/main.ts</code> and <code>src/app.module.ts</code>:</p>
+<ol>
+  <li><strong>Helmet</strong> (security headers) and <strong>compression</strong>. <code>trust proxy</code> is on, so client IPs are correct behind Render's proxy.</li>
+  <li><strong>CORS</strong>: only the origins listed in <code>CORS_ORIGINS</code> can call the API from a browser.</li>
+  <li><strong>Rate limiting</strong> (<code>ThrottlerGuard</code>, global): 100 requests per minute per IP by default, and stricter on sensitive routes (for example the bootstrap route allows only 5 per minute).</li>
+  <li><strong>Guards</strong> on each route decide who may call it (section 5).</li>
+  <li><strong>ValidationPipe</strong>: request bodies are checked against their DTO classes. Unknown fields are rejected (<code>whitelist</code> and <code>forbidNonWhitelisted</code>).</li>
+  <li>The controller calls a service, which reads and writes the database through Prisma.</li>
+  <li><strong>HttpExceptionFilter</strong> turns every error into <code>{ statusCode, message, error }</code>. The app shows <code>message</code> directly, so write messages for end users.</li>
+</ol>
+
+<h1>4. Authentication and sessions</h1>
+<h2>Tokens</h2>
+<ul>
+  <li><strong>Access token:</strong> a JWT signed with <code>JWT_ACCESS_SECRET</code>, valid for 15 minutes (<code>JWT_ACCESS_TTL</code>). It's sent as <code>Authorization: Bearer ...</code>.</li>
+  <li><strong>Refresh token:</strong> a JWT signed with <code>JWT_REFRESH_SECRET</code>, valid for 30 days (<code>JWT_REFRESH_TTL</code>). Only a hash of it is stored in <code>RefreshToken</code>. <strong>Each one can be used once</strong>: <code>POST /auth/refresh</code> revokes it and issues a new pair.</li>
+  <li>Logging out, resetting or changing a password, deactivating or deleting all revoke refresh tokens.</li>
+  <li>Changing either secret signs everyone out immediately. The Admin Guide's emergency procedure relies on this.</li>
+</ul>
+<h2>Sign-up and login flows</h2>
+<ul>
+  <li><strong>Signup:</strong> <code>POST /auth/signup</code> creates an unverified user and emails a code; <code>POST /auth/verify-signup</code> verifies it and returns tokens. Signing up again with an email that was never verified takes over the unverified record and sends a fresh code.</li>
+  <li><strong>Login:</strong> <code>POST /auth/login</code> can return:
+    <ul>
+      <li>tokens;</li>
+      <li><code>requiresTwoFactor</code> (a code was emailed; finish with <code>/auth/verify-2fa</code>);</li>
+      <li><code>requiresReactivation</code> (the account is deactivated; send the same request again with <code>reactivate: true</code>);</li>
+      <li><code>requiresEmailVerification</code> (the email was never verified; a fresh signup code was sent).</li>
+    </ul>
+  </li>
+  <li><strong>Google:</strong> <code>POST /auth/google</code> verifies Google's ID token against <code>GOOGLE_CLIENT_ID</code>, then finds or creates the user. An existing email is linked to the Google account.</li>
+  <li><strong>Profile completion:</strong> <code>User.profileCompletedAt</code> is set the first time a profile has every field signup requires, and is never cleared. The app's "finish your profile" redirect relies only on this flag, which is included in every auth response.</li>
+  <li><strong>Password reset</strong> is by emailed code (<code>/auth/forgot-password</code> then <code>/auth/reset-password</code>). It's refused for admin accounts: another admin must reset those.</li>
+</ul>
+
+<h1>5. Roles, admin levels and permissions</h1>
+<p><code>User.role</code> is one of <code>TENANT</code>, <code>LANDLORD</code>, <code>VENDOR</code> or <code>ADMIN</code>. Admins also have <code>adminLevel</code>: <code>SUPPORT</code> &lt; <code>MODERATOR</code> &lt; <code>SUPER_ADMIN</code>.</p>
+<table>
+  <tr><th style="width:30%">Guard / decorator</th><th>What it does</th></tr>
+  <tr><td><code>JwtAuthGuard</code></td><td>Requires a valid access token and sets <code>request.user</code>.</td></tr>
+  <tr><td><code>RolesGuard</code> + <code>@Roles(...)</code></td><td>Requires one of the listed roles. <strong>For admin routes it re-reads role and level from the database on every request</strong>, so demoting or removing an admin takes effect on their very next request.</td></tr>
+  <tr><td><code>AdminLevelGuard</code> + <code>@MinAdminLevel(...)</code></td><td>Requires at least that admin level.</td></tr>
+  <tr><td><code>MustChangePasswordGuard</code></td><td>Blocks an admin still on a temporary password (except routes marked <code>@AllowMustChangePassword</code>).</td></tr>
+</table>
+<p>Some rules are more specific than a minimum level, so services check them themselves:</p>
+<ul>
+  <li><strong>Admin password resets:</strong> you can't reset the password of an admin ranked above you.</li>
+  <li><strong>Last super admin:</strong> the last super admin can't be demoted or removed.</li>
+  <li><strong>Support chat access</strong> (<code>chat/support-access.ts</code> and <code>ChatService.canWrite</code> / <code>assertCanRead</code>):
+    <ul>
+      <li>non-participant admins can reach a support thread only while it's unclaimed;</li>
+      <li>a <code>SUPER_ADMIN</code> can read, but not write to, threads another admin is handling;</li>
+      <li>only a super admin can reassign.</li>
+    </ul>
+  </li>
+</ul>
+<p>The full admin permission table is in the Admin Guide.</p>
+
+<h1>6. The data model</h1>
+<p>Defined in <code>prisma/schema.prisma</code> (read its comments: most fields explain why they exist). Main tables:</p>
+<table>
+  <tr><th style="width:24%">Model</th><th>What it stores</th></tr>
+  <tr><td><code>User</code></td><td>Every account: role, admin level, profile fields, bank details, 2FA, verification, deactivation, <code>profileCompletedAt</code>, <code>adminOnDuty</code>, referral code.</td></tr>
+  <tr><td><code>RefreshToken</code>, <code>OtpCode</code>, <code>PendingAdmin</code></td><td>Sessions; one-time codes (10-minute lifetime); admin invites not yet confirmed.</td></tr>
+  <tr><td><code>Property</code>, <code>Favorite</code>, <code>Review</code></td><td>Listings (category, price unit, photos, video, occupancy, messaging toggle), wishlists, reviews.</td></tr>
+  <tr><td><code>Booking</code>, <code>TenancyAgreement</code></td><td>Rentals and shortlets with their status and lease dates; the agreement record.</td></tr>
+  <tr><td><code>Payment</code></td><td>The escrow ledger: one row per charge, for either a booking or an order item.</td></tr>
+  <tr><td><code>VendorProfile</code>, <code>Product</code>, <code>MarketplaceOrder</code>, <code>MarketplaceOrderItem</code></td><td>Shops, products, orders (one payment per item).</td></tr>
+  <tr><td><code>Thread</code>, <code>ThreadParticipant</code>, <code>Message</code>, <code>ThreadTransferLog</code></td><td>Chats, including support threads (<code>isSupport</code>, <code>status</code>, <code>assignedAdminId</code>, reminder timestamps) and their transfer history.</td></tr>
+  <tr><td><code>Notification</code></td><td>In-app notifications, with an optional <code>threadId</code> link.</td></tr>
+  <tr><td><code>Report</code>, <code>ActivityLog</code></td><td>User reports; the admin audit trail.</td></tr>
+</table>
+<div class="note">When an account is deleted, a sender's messages are kept but lose their sender (<code>onDelete: SetNull</code>); the same happens to activity-log actors and transfer records. Code that reads these must allow for a missing person.</div>
+
+<h1>7. Business flows</h1>
+<h2>Bookings</h2>
+<ul>
+  <li><strong>Shortlet:</strong> the tenant requests dates (<code>PENDING</code>). The landlord accepts or declines (<code>ACCEPTED</code> / <code>DECLINED</code>). The tenant pays (<code>PAID</code>), and payment is released to the landlord.</li>
+  <li><strong>Rental (house, apartment, self-con):</strong> creating the booking charges straight away (<code>PENDING</code>, then <code>PAID_AWAITING_INSPECTION</code> once paid). An inspection date is proposed and confirmed (<code>INSPECTION_PROPOSED</code>, <code>INSPECTION_CONFIRMED</code>). Moving in (<code>MOVED_IN</code>) releases the payment.
+    <p>Before move-in, the tenant can get a refund (<code>REFUNDED</code>) or the landlord can reject. A renewal charges again, near the end of the lease.</p>
+  </li>
+</ul>
+<h2>Payments (escrow)</h2>
+<p>All in <code>PaymentsService</code>. HomeServant charges the full amount through Paystack and holds it in its own balance (<code>PAID_HELD</code>). Later it transfers the recipient's share to their verified bank account (<code>RELEASED</code>) or refunds the payer (<code>REFUNDED</code>).</p>
+<ul>
+  <li>The platform keeps <strong>5%</strong> on a release, or <strong>0.2%</strong> on a rental refunded before move-in. Fees are in basis points, and amounts are converted to kobo only at the Paystack boundary.</li>
+  <li>Paystack confirms payments at <code>POST /api/paystack/webhook</code>. The signature (<code>x-paystack-signature</code>) is checked against the raw request body before anything is trusted.</li>
+</ul>
+<h2>Marketplace</h2>
+<ul>
+  <li>An order is split into items, one payment each. The vendor ships (a delivery item gets a tracking record), the buyer confirms receipt, and the vendor's share is released.</li>
+  <li>If the buyer never confirms, a daily job releases the payment 7 days after shipping (or 7 days after payment for pickup items), unless there's an open report about that product.</li>
+  <li>Shops are opened by tenant accounts, must be approved by an admin, and a suspended shop's products are hidden.</li>
+</ul>
+<h2>Chat and support</h2>
+<ul>
+  <li>Normal threads link two users, optionally about a property or an order, and are reused rather than duplicated.</li>
+  <li>A support thread starts with just the user. It sits in the shared queue until an admin claims it, either by opening it (<code>PATCH /threads/:id/claim</code>) or by replying, which is race-safe. It can then be transferred, reassigned by a super admin, or resolved.</li>
+  <li>Notifications for unclaimed threads are collapsed into one per admin (<code>NotificationsService.upsertThreadAlert</code>) and cleared for everyone else on claim.</li>
+  <li>Admins marked Away get them silently (<code>User.adminOnDuty</code>).</li>
+  <li>Resolved support threads are removed after 30 days.</li>
+</ul>
+<h2>Notifications</h2>
+<p><code>NotificationsService.create</code> is the only place notifications are created. It stores the row and pushes <code>notification:new</code> to the user's live connection, with a transient <code>silent</code> flag when the app shouldn't play a sound or show a banner.</p>
+
+<h1>8. Real-time: the WebSocket gateway</h1>
+<p><code>chat/chat.gateway.ts</code>. Clients connect with <code>auth: { token: &lt;access token&gt; }</code>. Each socket joins:</p>
+<ul>
+  <li><code>user:&lt;id&gt;</code> (its own room);</li>
+  <li><code>admins</code>, if it's an admin;</li>
+  <li><code>thread:&lt;id&gt;</code>, if it asks and is allowed.</li>
+</ul>
+<table>
+  <tr><th style="width:28%">Event (server to client)</th><th>When</th></tr>
+  <tr><td><code>message:new</code></td><td>A message is sent. It goes to the other participants, and to all admins while a support thread is unclaimed.</td></tr>
+  <tr><td><code>message:read</code></td><td>The other side read the thread.</td></tr>
+  <tr><td><code>notification:new</code></td><td>A notification was created or updated (may be <code>silent</code>).</td></tr>
+  <tr><td><code>thread:claimed</code></td><td>A support thread changed hands: claimed, transferred or reassigned.</td></tr>
+  <tr><td><code>thread:access-revoked</code></td><td>This socket was removed from a thread room it's no longer allowed in.</td></tr>
+  <tr><td><code>admin:badges-changed</code></td><td>An admin badge count changed.</td></tr>
+</table>
+<p>Online presence (<code>PresenceService</code>) tracks connected sockets per user and records <code>lastActiveAt</code>.</p>
+
+<h1>9. Background jobs</h1>
+<p>Scheduled with <code>@nestjs/schedule</code>. If Render's free plan has the server asleep, a job runs on the first tick after it wakes. Every job is written to catch up safely.</p>
+<table>
+  <tr><th style="width:30%">Job</th><th style="width:16%">When</th><th>What</th></tr>
+  <tr><td><code>SupportAlertsService</code></td><td>Every minute</td><td>Unclaimed support chat older than 5 minutes: one reminder to all admins. Customer unanswered for 10 minutes: one alert to super admins.</td></tr>
+  <tr><td><code>AccountCleanupService</code></td><td>Daily, 03:00</td><td>Permanently deletes accounts deactivated more than 30 days ago (skipping ones with active leases or orders).</td></tr>
+  <tr><td><code>SupportChatCleanupService</code></td><td>Daily, 03:00</td><td>Deletes support messages older than 30 days, and emptied threads.</td></tr>
+  <tr><td><code>LeaseLifecycleService</code></td><td>Daily, 04:00</td><td>Re-lists properties whose lease ended without renewal; sends rent-expiry reminders 30, 15 and 0 days before.</td></tr>
+  <tr><td><code>MarketplaceAutoReleaseService</code></td><td>Daily, 05:00</td><td>Releases held marketplace payments after 7 days, unless disputed.</td></tr>
+</table>
+
+<h1>10. Files, email and other outside services</h1>
+<ul>
+  <li><strong>Uploads:</strong> <code>POST /uploads/sign</code> takes a file name and folder. Only image extensions and known folders are accepted. It returns a one-time Supabase upload link and the file's public URL, stored under <code>&lt;folder&gt;/&lt;userId&gt;/&lt;random&gt;</code>. Any endpoint that saves an image URL first calls <code>StorageService.assertIsOwnImage</code>, which checks it's in our bucket and really an image.</li>
+  <li><strong>Email and codes:</strong> <code>OTP_PROVIDER</code> selects <code>console</code> (codes printed to the server log, for development) or <code>resend</code> (real email). <code>MailService</code> uses the same setting.</li>
+  <li><strong>Paystack:</strong> bank list, account-name lookup, charges, transfer recipients, transfers, refunds, webhook.</li>
+  <li><strong>Google:</strong> ID tokens are verified with Google's library against <code>GOOGLE_CLIENT_ID</code>.</li>
+  <li><strong>Delivery:</strong> <code>DELIVERY_PROVIDER</code> selects <code>console</code> (default) or <code>gig</code>. The GIG integration is unverified scaffolding.</li>
+</ul>
+
+<h1>11. Configuration (environment variables)</h1>
+<p>Set in Render (see <code>render.yaml</code>) and locally in <code>backend/.env</code> (copy <code>.env.example</code>).</p>
+<table>
+  <tr><th style="width:36%">Variable</th><th>Purpose</th></tr>
+  <tr><td><code>DATABASE_URL</code>, <code>DIRECT_URL</code></td><td>Supabase Postgres: the pooled connection for the app, the direct one for migrations.</td></tr>
+  <tr><td><code>SUPABASE_URL</code>, <code>SUPABASE_SERVICE_ROLE_KEY</code>, <code>SUPABASE_STORAGE_BUCKET</code></td><td>Storage access. The service role key must never reach the client.</td></tr>
+  <tr><td><code>JWT_ACCESS_SECRET</code>, <code>JWT_REFRESH_SECRET</code></td><td>Token signing secrets. Changing them signs everyone out.</td></tr>
+  <tr><td><code>JWT_ACCESS_TTL</code>, <code>JWT_REFRESH_TTL</code></td><td>Token lifetimes (default <code>15m</code> and <code>30d</code>).</td></tr>
+  <tr><td><code>OTP_PROVIDER</code>, <code>RESEND_API_KEY</code>, <code>RESEND_FROM_EMAIL</code></td><td>Email and code delivery.</td></tr>
+  <tr><td><code>GOOGLE_CLIENT_ID</code></td><td>Google web OAuth client; must match the app's.</td></tr>
+  <tr><td><code>PAYSTACK_SECRET_KEY</code></td><td>Paystack API and webhook signature checks.</td></tr>
+  <tr><td><code>ADMIN_BOOTSTRAP_SECRET</code></td><td>Unlocks the one-time "create first super admin" route. It refuses once any admin exists.</td></tr>
+  <tr><td><code>CORS_ORIGINS</code></td><td>Comma-separated web origins allowed to call the API.</td></tr>
+  <tr><td><code>SUPPORT_UNCLAIMED_REMINDER_MINUTES</code>, <code>SUPPORT_REPLY_ESCALATION_MINUTES</code></td><td>Support reminder delays (defaults 5 and 10).</td></tr>
+  <tr><td><code>DELIVERY_PROVIDER</code>, <code>GIG_API_KEY</code>, <code>GIG_API_BASE_URL</code></td><td>Courier integration.</td></tr>
+  <tr><td><code>PORT</code></td><td>HTTP port (Render uses 3000).</td></tr>
+</table>
+
+<h1>12. Running, migrating and deploying</h1>
+<h2>Local</h2>
+<pre><code>cd backend
+cp .env.example .env         # fill in Supabase + two random JWT secrets
+npm install
+npm run prisma:migrate       # create/upgrade the local schema
+npm run start:dev            # http://localhost:3000/api, reloads on change
+npx tsc --noEmit -p tsconfig.json   # type-check</code></pre>
+<p>With <code>OTP_PROVIDER=console</code>, verification codes are printed in this terminal.</p>
+<h2>Changing the database</h2>
+<ol>
+  <li>Edit <code>prisma/schema.prisma</code>, with a comment explaining any new field.</li>
+  <li>Run <code>npx prisma migrate dev --name what_changed</code>, or hand-write <code>prisma/migrations/&lt;timestamp&gt;_&lt;name&gt;/migration.sql</code>. Prefer additive changes (new nullable columns, or columns with defaults) so the live app keeps working during deploys.</li>
+  <li>Commit the migration folder with the code.</li>
+</ol>
+<h2>Deploying</h2>
+<p>Render builds the Docker image. On start the container runs <code>npx prisma migrate deploy</code> (applying any new migrations) and then <code>node dist/main.js</code>. Deploy the backend <strong>before or together with</strong> any web release that depends on new fields.</p>
+
+<h1>13. API reference</h1>
+<p>All paths are under <code>/api</code>. "Auth" means a valid access token; "Admin (level)" means role ADMIN with at least that level.</p>
+<table>
+  <tr><th style="width:44%">Route</th><th>Access</th></tr>
+  <tr><td><code>GET /health</code></td><td>Public</td></tr>
+  <tr><td><code>POST /auth/signup | verify-signup | login | google | verify-2fa | resend-otp | refresh | forgot-password | reset-password</code></td><td>Public (rate-limited)</td></tr>
+  <tr><td><code>POST /auth/logout</code>, <code>PATCH /auth/password</code>, <code>PATCH /auth/deactivate</code>, <code>DELETE /auth/me</code></td><td>Auth</td></tr>
+  <tr><td><code>GET|PATCH /users/me</code>, <code>PATCH /users/me/bank-details</code></td><td>Auth</td></tr>
+  <tr><td><code>GET /properties</code>, <code>GET /properties/:id</code></td><td>Public</td></tr>
+  <tr><td><code>POST /properties</code>, <code>PATCH|DELETE /properties/:id</code></td><td>Landlord (owner of the listing)</td></tr>
+  <tr><td><code>POST /bookings</code>, <code>GET /bookings/mine|landlord</code>, <code>PATCH /bookings/:id/respond</code>, <code>POST /bookings/:id/pay|inspection|reject|moved-in|refund|renew</code>, <code>PATCH /bookings/:id/inspection/respond</code></td><td>Auth (tenant or landlord, checked per booking)</td></tr>
+  <tr><td><code>GET /favorites</code>, <code>POST /favorites/:propertyId/toggle</code></td><td>Auth</td></tr>
+  <tr><td><code>GET /reviews</code>, <code>GET /reviews/mine</code>, <code>POST /reviews</code>, <code>DELETE /reviews/:id</code></td><td>Public read; tenants who rented the property write</td></tr>
+  <tr><td><code>POST /reports</code>, <code>GET /reports/mine</code></td><td>Auth (must have rented or bought the item)</td></tr>
+  <tr><td><code>GET /reports</code>, <code>GET /reports/open-count</code>, <code>GET /reports/:id</code>, <code>PATCH /reports/:id/status|transfer</code></td><td>Admin (any)</td></tr>
+  <tr><td><code>GET|POST /threads</code>, <code>POST /threads/support</code>, <code>GET /threads/:id/summary|messages</code>, <code>POST /threads/:id/messages</code>, <code>PATCH /threads/:id/read</code></td><td>Auth (per-thread access rules)</td></tr>
+  <tr><td><code>GET /threads/support-queue</code>, <code>PATCH /threads/:id/claim|resolve|transfer</code></td><td>Admin (any, per-thread rules)</td></tr>
+  <tr><td><code>PATCH /threads/:id/reassign</code></td><td>Admin (Super Admin)</td></tr>
+  <tr><td><code>GET /notifications</code>, <code>GET /notifications/unread-count</code>, <code>PATCH /notifications/:id/read</code>, <code>PATCH /notifications/read-all</code></td><td>Auth</td></tr>
+  <tr><td><code>POST|GET|PATCH /vendors/me</code></td><td>Tenant or Vendor</td></tr>
+  <tr><td><code>GET /marketplace/products</code>, <code>GET /marketplace/products/:id</code></td><td>Public</td></tr>
+  <tr><td><code>GET /marketplace/products/mine</code>, <code>POST /marketplace/products</code>, <code>PATCH|DELETE /marketplace/products/:id</code></td><td>Tenant or Vendor with an approved shop (owner)</td></tr>
+  <tr><td><code>POST /marketplace/orders</code>, <code>GET /marketplace/orders/mine|vendor</code>, <code>PATCH /marketplace/orders/items/:itemId/status|read|ship</code>, <code>POST .../confirm-received</code>, <code>GET .../tracking</code></td><td>Auth (buyer or vendor, checked per item)</td></tr>
+  <tr><td><code>GET /paystack/banks</code>, <code>GET /paystack/resolve-account</code></td><td>Auth</td></tr>
+  <tr><td><code>POST /paystack/webhook</code></td><td>Paystack only (signature checked)</td></tr>
+  <tr><td><code>POST /uploads/sign</code></td><td>Auth</td></tr>
+  <tr><td><code>POST /admin/bootstrap</code></td><td>Public with <code>x-admin-bootstrap-secret</code>; only while no admin exists</td></tr>
+  <tr><td><code>GET /admin/me</code>, <code>PATCH /admin/me/on-duty</code>, <code>GET /admin/stats|activity-feed|activity-log</code></td><td>Admin (any)</td></tr>
+  <tr><td><code>GET /admin/users</code>, <code>GET /admin/users/:id</code>, <code>PATCH /admin/users/:id</code>, <code>GET /admin/vendors</code>, <code>GET /admin/vendors/:id</code>, <code>GET /admin/properties</code>, <code>GET /admin/properties/:id</code>, <code>GET /admin/marketplace/products|orders</code>, <code>GET /admin/marketplace/orders/:id</code>, <code>GET /admin/messages/attention-count</code></td><td>Admin (any)</td></tr>
+  <tr><td><code>PATCH /admin/users/:id/deactivate|email|password</code>, <code>DELETE /admin/users/:id</code>, <code>POST /admin/users/:id/send-password-reset</code>, <code>PATCH /admin/vendors/:id/approve|reject|suspend|unsuspend</code>, <code>PATCH /admin/properties/:id/relist</code>, <code>DELETE /admin/properties/:id</code>, <code>DELETE /admin/marketplace/products/:id</code>, <code>GET /admin/admins/pending-count</code>, <code>POST /admin/admins/:id/reset-password/request|confirm</code></td><td>Admin (Moderator)</td></tr>
+  <tr><td><code>GET /admin/admins</code>, <code>POST /admin/admins/request|confirm</code>, <code>PATCH /admin/admins/:id/level|two-factor</code>, <code>DELETE /admin/admins/:id</code>, <code>PATCH /admin/users/:id/disable-2fa</code>, <code>DELETE /admin/activity-log</code>, <code>GET /admin/chat-log</code></td><td>Admin (Super Admin)</td></tr>
+</table>
+
+<h1>14. Conventions for new code</h1>
+<ul>
+  <li><strong>Never trust the client.</strong> Every permission is checked in a guard or service, even if the app already hides the button.</li>
+  <li><strong>Validate bodies with DTOs</strong> (<code>class-validator</code>). The global pipe rejects unknown fields.</li>
+  <li><strong>Money goes through <code>PaymentsService</code> only;</strong> notifications go through <code>NotificationsService</code> only.</li>
+  <li><strong>Race-safe state changes:</strong> use conditional <code>updateMany</code> ("only if still unclaimed") or transactions, not read-then-write.</li>
+  <li><strong>Audit sensitive admin actions</strong> with <code>ActivityLogService.log</code>.</li>
+  <li><strong>Allow for deleted people:</strong> optional relations can be null after an account is deleted.</li>
+  <li><strong>Error messages are user-facing:</strong> the app shows them as-is.</li>
+  <li><strong>Comment the why:</strong> the existing code explains reasons, not mechanics. Keep doing that.</li>
+</ul>

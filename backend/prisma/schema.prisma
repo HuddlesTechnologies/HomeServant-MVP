@@ -229,6 +229,12 @@ model User {
   /// raced the post-login profile fetch.
   profileCompletedAt   DateTime?
   twoFactorEnabled     Boolean        @default(false)
+  /// Admin-only. "On duty" admins get alert sounds for new, unclaimed
+  /// support conversations; "Away" admins still receive those
+  /// notifications, silently. Conversations an admin is handling always
+  /// alert them either way. Toggled from the console's Account Settings
+  /// (PATCH /admin/me/on-duty). Ignored for every other role.
+  adminOnDuty          Boolean        @default(true)
   /// Set true for an admin account created via the console's invite-by-
   /// email flow (AdminService.confirmAdminOtp) — signed in with the
   /// one-time password from that invite email. AuthService.changePassword
@@ -618,6 +624,15 @@ model Thread {
   /// participant, and are the only threads the 30-day cleanup cron and the
   /// "hide once resolved" rule (see [status]) apply to.
   isSupport       Boolean           @default(false)
+  /// When the one-time "still waiting for an admin" reminder went out for
+  /// this unclaimed support thread (SupportAlertsService), so it's never
+  /// repeated.
+  unclaimedReminderAt DateTime?
+  /// When super admins were last alerted that the customer's latest
+  /// message on this claimed support thread had gone unanswered
+  /// (SupportAlertsService) — one alert per unanswered stretch: a newer
+  /// customer message after this can trigger the next one.
+  replyEscalatedAt    DateTime?
   status          ThreadStatus      @default(OPEN)
   /// The admin who claimed this support thread — set automatically the
   /// first time any admin replies (see ChatService.sendMessage), the same

@@ -94,4 +94,25 @@ void main() {
     });
     expect(n.threadId, 't1');
   });
+
+  test('a live notification push can be silent', () {
+    final quiet = AppNotification.fromApi({
+      'id': 'n1',
+      'type': 'NEW_MESSAGE',
+      'title': 'New support conversation',
+      'body': 'Ada (3 messages): hello?',
+      'threadId': 't1',
+      'createdAt': '2026-09-27T10:00:00Z',
+      'silent': true,
+    });
+    expect(quiet.silent, isTrue);
+    final fromList = AppNotification.fromApi({
+      'id': 'n2',
+      'type': 'NEW_MESSAGE',
+      'title': 'x',
+      'body': 'y',
+      'createdAt': '2026-09-27T10:00:00Z',
+    });
+    expect(fromList.silent, isFalse);
+  });
 }

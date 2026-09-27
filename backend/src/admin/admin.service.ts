@@ -1094,6 +1094,20 @@ export class AdminService {
   /// "Contact Support" thread awaiting any admin's reply — the same two
   /// concepts the request behind this named ("unread message" and
   /// "unattended activity").
+  async isOnDuty(adminId: string): Promise<boolean> {
+    const admin = await this.prisma.user.findUnique({ where: { id: adminId }, select: { adminOnDuty: true } });
+    return admin?.adminOnDuty ?? true;
+  }
+
+  async setOnDuty(adminId: string, onDuty: boolean): Promise<{ onDuty: boolean }> {
+    const admin = await this.prisma.user.update({
+      where: { id: adminId },
+      data: { adminOnDuty: onDuty },
+      select: { adminOnDuty: true },
+    });
+    return { onDuty: admin.adminOnDuty };
+  }
+
   async messagesAttentionCount(adminId: string): Promise<number> {
     const [unreadOwnMessages, openSupportThreads] = await Promise.all([
       this.prisma.message.count({
