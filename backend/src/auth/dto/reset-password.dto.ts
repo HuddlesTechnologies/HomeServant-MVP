@@ -1,6 +1,8 @@
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import { IsEmail, IsString, Length, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

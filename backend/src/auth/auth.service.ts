@@ -248,9 +248,10 @@ export class AuthService {
     if (!payload.email || !payload.email_verified) {
       throw new UnauthorizedException("Google account's email isn't verified");
     }
+    const googleEmail = payload.email.trim().toLowerCase();
 
     let user = await this.prisma.user.findFirst({
-      where: { OR: [{ googleId: payload.sub }, { email: payload.email }] },
+      where: { OR: [{ googleId: payload.sub }, { email: googleEmail }] },
     });
 
     // Admins never sign in with Google: it would skip their password,
@@ -274,7 +275,7 @@ export class AuthService {
       }
       user = await this.prisma.user.create({
         data: {
-          email: payload.email,
+          email: googleEmail,
           googleId: payload.sub,
           role: dto.role,
           fullName: payload.name,

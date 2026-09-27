@@ -7,6 +7,10 @@ import { OtpProvider } from './otp-provider.interface';
 
 const CODE_TTL_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
+/// How many of the most recent unexpired codes are accepted. Resending
+/// used to invalidate the earlier code, so someone typing the code from the
+/// first email (often the one that actually arrived) got "Incorrect code".
+const ACCEPTED_RECENT_CODES = 3;
 
 @Injectable()
 export class OtpService {
@@ -45,34 +49,46 @@ export class OtpService {
     return code;
   }
 
-  /// Verifies [code] against the most recent unconsumed, unexpired code
-  /// issued for [destination]/[purpose]. Throws on any failure rather
-  /// than returning a boolean, so callers can't accidentally ignore it.
+  /// Verifies [code] against the few most recent unconsumed, unexpired
+  /// codes issued for [destination]/[purpose] (any of them works, so an
+  /// earlier email still counts after a resend). Using one consumes them
+  /// all. Throws on any failure rather than returning a boolean, so callers
+  /// can't accidentally ignore it.
   ///
-  /// Caps wrong guesses per-code at [MAX_ATTEMPTS] — a 4-digit code has
-  /// only 10,000 possibilities, so without this an attacker could just
-  /// brute-force it within its 10-minute expiry window. Requesting a
-  /// fresh code (`issue`) sidesteps a locked-out one automatically, since
-  /// this always matches against the newest unconsumed code.
+  /// Wrong guesses are capped at [MAX_ATTEMPTS] across those codes (counted
+  /// on the newest) — a 4-digit code has only 10,000 possibilities, so
+  /// without this it could be brute-forced within its 10-minute expiry.
+  /// Requesting a fresh code resets the count, since the newest code is new.
   async verify(destination: string, purpose: OtpPurpose, code: string): Promise<void> {
-    const record = await this.prisma.otpCode.findFirst({
+    const records = await this.prisma.otpCode.findMany({
       where: { destination, purpose, consumedAt: null, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'desc' },
+      take: ACCEPTED_RECENT_CODES,
     });
 
-    if (!record) {
-      throw new BadRequestException('No active code for this request — request a new one.');
+    if (records.length === 0) {
+      throw new BadRequestException('This code has expired — tap Resend to get a new one.');
     }
-    if (record.attempts >= MAX_ATTEMPTS) {
-      throw new BadRequestException('Too many incorrect attempts — request a new code.');
+    const newest = records[0];
+    if (newest.attempts >= MAX_ATTEMPTS) {
+      throw new BadRequestException('Too many incorrect attempts — tap Resend to get a new code.');
     }
 
-    const matches = await bcrypt.compare(code, record.codeHash);
-    if (!matches) {
-      await this.prisma.otpCode.update({ where: { id: record.id }, data: { attempts: { increment: 1 } } });
+    let matched = false;
+    for (const record of records) {
+      if (await bcrypt.compare(code, record.codeHash)) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      await this.prisma.otpCode.update({ where: { id: newest.id }, data: { attempts: { increment: 1 } } });
       throw new BadRequestException('Incorrect code.');
     }
 
-    await this.prisma.otpCode.update({ where: { id: record.id }, data: { consumedAt: new Date() } });
+    await this.prisma.otpCode.updateMany({
+      where: { destination, purpose, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
   }
 }
