@@ -309,3 +309,58 @@ class ThreadSummary {
     );
   }
 }
+
+enum HandoffKind { claim, transfer, reassign }
+
+/// One step in a support conversation's handling history.
+class ThreadHandoff {
+  const ThreadHandoff({required this.kind, required this.at, this.from, this.to, this.by});
+
+  final HandoffKind kind;
+  final DateTime at;
+  final ThreadPersonRef? from;
+  final ThreadPersonRef? to;
+
+  /// Who made the move — the claimer, the transferring admin, or the
+  /// reassigning super admin.
+  final ThreadPersonRef? by;
+
+  factory ThreadHandoff.fromApi(Map<String, dynamic> json) => ThreadHandoff(
+    kind: switch (json['kind']) {
+      'CLAIM' => HandoffKind.claim,
+      'REASSIGN' => HandoffKind.reassign,
+      _ => HandoffKind.transfer,
+    },
+    at: DateTime.parse(json['at'] as String),
+    from: ThreadPersonRef.fromApi(json['from']),
+    to: ThreadPersonRef.fromApi(json['to']),
+    by: ThreadPersonRef.fromApi(json['by']),
+  );
+}
+
+/// `GET /threads/:id/handling-history`.
+class ThreadHandlingHistory {
+  const ThreadHandlingHistory({required this.entries, this.firstHandler, this.currentAdmin});
+
+  final ThreadPersonRef? firstHandler;
+  final List<ThreadHandoff> entries;
+  final ThreadPersonRef? currentAdmin;
+
+  /// The most recent transfer or reassignment, if the conversation has
+  /// changed hands at all.
+  ThreadHandoff? get lastHandoff {
+    for (final entry in entries.reversed) {
+      if (entry.kind != HandoffKind.claim) return entry;
+    }
+    return null;
+  }
+
+  factory ThreadHandlingHistory.fromApi(Map<String, dynamic> json) => ThreadHandlingHistory(
+    firstHandler: ThreadPersonRef.fromApi(json['firstHandler']),
+    currentAdmin: ThreadPersonRef.fromApi(json['currentAdmin']),
+    entries: (json['entries'] as List? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(ThreadHandoff.fromApi)
+        .toList(),
+  );
+}

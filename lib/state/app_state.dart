@@ -73,6 +73,7 @@ class AppState extends ChangeNotifier {
     // the same way NotificationBannerOverlay's own subscription does.
     _chatSocket.onNotification.listen(_handleRealtimeNotification);
     _chatRepo.onLocalChange = _chatSocket.notifyThreadsChanged;
+    _chatRepo.onThreadRead = _markThreadNotificationsReadLocally;
     // Notifications created while the socket was down never arrived live.
     _chatSocket.onReconnected.listen((_) {
       if (userId != null) unawaited(loadNotifications());
@@ -583,15 +584,19 @@ class AppState extends ChangeNotifier {
     final index = notifications.indexWhere((n) => n.id == id);
     if (index == -1 || notifications[index].isRead) return;
     await _notificationsRepo.markRead(id);
-    notifications[index] = AppNotification(
-      id: notifications[index].id,
-      type: notifications[index].type,
-      title: notifications[index].title,
-      body: notifications[index].body,
-      createdAt: notifications[index].createdAt,
-      readAt: DateTime.now(),
-    );
+    notifications[index] = notifications[index].markedRead();
     unreadNotificationCount = (unreadNotificationCount - 1).clamp(0, 1 << 30);
+    notifyListeners();
+  }
+
+  /// The server clears a conversation's notifications when it's read
+  /// (ChatService.markRead); this mirrors that locally so the bell count
+  /// drops straight away.
+  void _markThreadNotificationsReadLocally(String threadId) {
+    final cleared = notifications.where((n) => n.threadId == threadId && !n.isRead).length;
+    if (cleared == 0) return;
+    notifications = [for (final n in notifications) n.threadId == threadId ? n.markedRead() : n];
+    unreadNotificationCount = (unreadNotificationCount - cleared).clamp(0, 1 << 30);
     notifyListeners();
   }
 
@@ -600,7 +605,7 @@ class AppState extends ChangeNotifier {
     await _notificationsRepo.markAllRead();
     notifications = [
       for (final n in notifications)
-        AppNotification(id: n.id, type: n.type, title: n.title, body: n.body, createdAt: n.createdAt, readAt: n.readAt ?? DateTime.now()),
+        n.markedRead(),
     ];
     unreadNotificationCount = 0;
     notifyListeners();

@@ -5,10 +5,11 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
-import '../../api/models/chat.dart' show MessageType, ThreadParticipant;
+import '../../api/models/chat.dart' show HandoffKind, MessageType, ThreadHandlingHistory, ThreadHandoff, ThreadParticipant, ThreadPersonRef;
 import '../../api/models/marketplace_api.dart';
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
@@ -169,6 +170,82 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   bool get _readOnly => widget.readOnly || _accessNotice != null;
 
+  /// Support threads, for the handling admin and super admins only: who
+  /// took the conversation up and every hand-off since. Null when not
+  /// applicable (or not allowed) — the history UI is simply not shown.
+  ThreadHandlingHistory? _history;
+
+  void _showHistorySheet() {
+    final history = _history;
+    if (history == null) return;
+    final myId = context.read<AppState>().userId;
+    // White sheet, navy text (AppColors) — the admin console's palette.
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 16),
+            children: [
+              Text('Handling history', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+              const SizedBox(height: 4),
+              Text(
+                'Who has handled this conversation, oldest first.',
+                style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.65), size: 13),
+              ),
+              const SizedBox(height: 16),
+              if (history.entries.isEmpty)
+                Text(
+                  history.firstHandler != null
+                      ? '${_capitalise(_personName(history.firstHandler, myId))} took up this conversation.'
+                      : 'Nobody has taken up this conversation yet.',
+                  style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                ),
+              // Conversations claimed before claims were recorded start
+              // with a transfer — say who had it first.
+              if (history.entries.isNotEmpty && history.entries.first.kind != HandoffKind.claim && history.firstHandler != null)
+                _HistoryRow(
+                  text: '${_capitalise(_personName(history.firstHandler, myId))} took up this conversation',
+                  time: null,
+                  isLast: false,
+                ),
+              for (var i = 0; i < history.entries.length; i++)
+                _HistoryRow(
+                  text: _describeHandoff(history.entries[i], myId),
+                  time: _handoffTime(history.entries[i].at),
+                  isLast: false,
+                ),
+              _HistoryRow(
+                text: history.currentAdmin != null
+                    ? 'Currently assigned to ${_personName(history.currentAdmin, myId)}'
+                    : 'Not currently assigned',
+                time: null,
+                isLast: true,
+                emphasised: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadHistory() async {
+    final threadId = widget.threadId;
+    if (threadId == null) return;
+    try {
+      final history = await context.read<AppState>().chat.handlingHistory(threadId);
+      if (mounted) setState(() => _history = history);
+    } on ApiException {
+      if (mounted) setState(() => _history = null);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -194,11 +271,18 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         // A claim or transfer of *this* thread may have just taken it away
         // from this admin — re-check rather than guess from the event.
         _claimedSubscription = chatSocket.onThreadClaimed.listen((id) {
-          if (id == threadId) _refreshAccess();
+          if (id == threadId) {
+            _refreshAccess();
+            _loadHistory();
+          }
         });
         _accessRevokedSubscription = chatSocket.onAccessRevoked.listen((id) {
-          if (id == threadId) _refreshAccess();
+          if (id == threadId) {
+            _refreshAccess();
+            _loadHistory();
+          }
         });
+        unawaited(_loadHistory());
       }
     }
   }
@@ -577,6 +661,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           ],
         ),
         actions: [
+          if (_history != null)
+            IconButton(
+              onPressed: _showHistorySheet,
+              icon: Icon(Icons.history_rounded, color: theme.foreground),
+              tooltip: 'Handling history',
+            ),
           if (widget.adminViewOfUserId != null)
             IconButton(
               onPressed: _toggleInfoPanel,
@@ -631,6 +721,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   detail: _recipientDetail,
                   loading: _loadingRecipientDetail,
                   error: _recipientDetailError,
+                ),
+              if (_history != null && _history!.lastHandoff != null)
+                _HandoffBanner(
+                  theme: theme,
+                  history: _history!,
+                  myId: context.read<AppState>().userId,
+                  onViewHistory: _showHistorySheet,
                 ),
               if (orderItem != null && orderStatus != null)
                 _OrderStatusBanner(theme: theme, item: orderItem, status: orderStatus),
@@ -1069,6 +1166,89 @@ class _ResolveTransferBar extends StatelessWidget {
 /// it's read-only and offers Reassign. theme.surface/onSurface is a fixed
 /// light-surface/navy-text pair in every DashboardTheme (see CLAUDE.md);
 /// the button uses the accent/onAccent pair.
+String _personName(ThreadPersonRef? person, String? myId) {
+  if (person == null) return 'a former admin';
+  if (person.id == myId) return 'you';
+  return person.displayName;
+}
+
+String _handoffTime(DateTime at) {
+  final local = at.toLocal();
+  final hh = local.hour.toString().padLeft(2, '0');
+  final mm = local.minute.toString().padLeft(2, '0');
+  return '${formatShortDate(local)}, $hh:$mm';
+}
+
+String _describeHandoff(ThreadHandoff entry, String? myId) {
+  final to = _personName(entry.to, myId);
+  final from = _personName(entry.from, myId);
+  final by = _personName(entry.by, myId);
+  return switch (entry.kind) {
+    HandoffKind.claim => '${_capitalise(to)} took up this conversation',
+    HandoffKind.transfer => '${_capitalise(from)} transferred it to $to',
+    HandoffKind.reassign => '${_capitalise(by)} (super admin) reassigned it from $from to $to',
+  };
+}
+
+String _capitalise(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
+/// Shown above the messages once a support conversation has changed
+/// hands: who moved it to whom, and who first took it up.
+/// theme.surface/onSurface is a fixed contrast pair in every theme.
+class _HandoffBanner extends StatelessWidget {
+  const _HandoffBanner({required this.theme, required this.history, required this.myId, required this.onViewHistory});
+
+  final DashboardTheme theme;
+  final ThreadHandlingHistory history;
+  final String? myId;
+  final VoidCallback onViewHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final last = history.lastHandoff!;
+    final first = history.firstHandler;
+    final current = history.currentAdmin;
+    final handlingIt = current != null && current.id == myId;
+    final headline = handlingIt
+        ? last.kind == HandoffKind.reassign
+            ? 'Reassigned to you by ${_personName(last.by, myId)}'
+            : 'Transferred to you by ${_personName(last.from, myId)}'
+        : 'Now handled by ${_personName(current, myId)}';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Icon(Icons.swap_horiz_rounded, color: theme.onSurface, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$headline · ${_handoffTime(last.at)}',
+                  style: AppTextStyles.body(color: theme.onSurface, size: 13, weight: FontWeight.w700),
+                ),
+                if (first != null)
+                  Text(
+                    'First taken up by ${_personName(first, myId)}',
+                    style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.7), size: 12),
+                  ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onViewHistory,
+            child: Text('History', style: AppTextStyles.body(color: theme.onSurface, size: 13, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ReassignBar extends StatelessWidget {
   const _ReassignBar({required this.theme, required this.busy, required this.onReassign});
 
@@ -1213,6 +1393,64 @@ class _InfoRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(value, style: AppTextStyles.body(color: theme.onSurface, size: 12.5, weight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({required this.text, required this.time, required this.isLast, this.emphasised = false});
+
+  final String text;
+  final String? time;
+  final bool isLast;
+  final bool emphasised;
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 20,
+            child: Column(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  margin: const EdgeInsets.only(top: 5),
+                  decoration: BoxDecoration(
+                    color: emphasised ? AppColors.gold : AppColors.navy,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                if (!isLast) Expanded(child: Container(width: 2, color: AppColors.navy.withValues(alpha: 0.15))),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    text,
+                    style: AppTextStyles.body(
+                      color: AppColors.navy,
+                      size: 14,
+                      weight: emphasised ? FontWeight.w700 : FontWeight.w600,
+                    ),
+                  ),
+                  if (time != null)
+                    Text(time!, style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.6), size: 12)),
+                ],
+              ),
+            ),
           ),
         ],
       ),

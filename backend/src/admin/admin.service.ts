@@ -1108,14 +1108,22 @@ export class AdminService {
     return { onDuty: admin.adminOnDuty };
   }
 
+  /// The Messages nav badge: conversations this admin has unread messages
+  /// in, plus support conversations nobody has picked up yet. It used to
+  /// add *every* open support conversation — including ones this admin had
+  /// already opened and read, and ones other admins were handling — so the
+  /// badge never went down after reading a chat.
   async messagesAttentionCount(adminId: string): Promise<number> {
-    const [unreadOwnMessages, openSupportThreads] = await Promise.all([
-      this.prisma.message.count({
-        where: { thread: { participants: { some: { userId: adminId } } }, senderId: { not: adminId }, readAt: null },
+    const [threadsWithUnread, unclaimedSupportThreads] = await Promise.all([
+      this.prisma.thread.count({
+        where: {
+          participants: { some: { userId: adminId } },
+          messages: { some: { senderId: { not: adminId }, readAt: null } },
+        },
       }),
-      this.prisma.thread.count({ where: { isSupport: true, status: 'OPEN' } }),
+      this.prisma.thread.count({ where: { isSupport: true, status: 'OPEN', assignedAdminId: null } }),
     ]);
-    return unreadOwnMessages + openSupportThreads;
+    return threadsWithUnread + unclaimedSupportThreads;
   }
 
   /// Backs the Admins nav badge — invites sent (via [requestAdminOtp]) but

@@ -13,6 +13,10 @@ class ChatRepository {
   /// pushes the other side's messages) — see ChatSocketService.onThreadsChanged.
   void Function()? onLocalChange;
 
+  /// Set by AppState: called after a conversation is marked read, so the
+  /// notifications about it are cleared locally too.
+  void Function(String threadId)? onThreadRead;
+
   Future<List<ChatThread>> myThreads() {
     return _client.call(() async {
       final response = await _client.dio.get('/threads');
@@ -113,6 +117,16 @@ class ChatRepository {
   Future<void> markRead(String threadId) {
     return _client.call(() async {
       await _client.dio.patch('/threads/$threadId/read');
+      onThreadRead?.call(threadId);
+    });
+  }
+
+  /// Support threads: who took it up and every hand-off since — for the
+  /// handling admin and super admins (backend ChatService.getHandlingHistory).
+  Future<ThreadHandlingHistory> handlingHistory(String threadId) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/threads/$threadId/handling-history');
+      return ThreadHandlingHistory.fromApi(response.data as Map<String, dynamic>);
     });
   }
 

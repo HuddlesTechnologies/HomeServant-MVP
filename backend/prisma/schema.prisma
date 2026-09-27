@@ -668,10 +668,24 @@ enum ThreadStatus {
 /// now. Cascades with its Thread, so it's purged by the same 30-day support
 /// cleanup cron that already deletes old support threads/messages — no
 /// separate retention job needed.
+/// CLAIM: an admin first took up the conversation (fromAdminId null).
+/// TRANSFER: the handling admin handed it on. REASSIGN: a super admin moved
+/// it (actorId is the super admin).
+enum ThreadHandoffKind {
+  CLAIM
+  TRANSFER
+  REASSIGN
+}
+
 model ThreadTransferLog {
   id          String   @id @default(uuid())
   threadId    String
   thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  kind        ThreadHandoffKind @default(TRANSFER)
+  /// Who performed the hand-off — the claimer, the transferring admin, or
+  /// the reassigning super admin. No relation, just an id: names are
+  /// looked up when the history is read (ChatService.getHandlingHistory).
+  actorId     String?
   fromAdminId String?
   fromAdmin   User?    @relation("ThreadTransfersFrom", fields: [fromAdminId], references: [id], onDelete: SetNull)
   toAdminId   String?
