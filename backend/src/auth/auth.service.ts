@@ -57,20 +57,29 @@ export class AuthService {
       throw new ForbiddenException('Admin accounts cannot be self-registered');
     }
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (existing) {
+    // An email/password account whose owner never entered the signup code
+    // can't log in and has no data yet, so it doesn't lock the email: a
+    // repeat signup takes it over with the new password/role and sends a
+    // fresh code. Taking it over still requires the code from that inbox,
+    // same as the original signup did. A verified or Google-linked account
+    // still conflicts.
+    const reclaimable = existing && !existing.emailVerifiedAt && !existing.googleId;
+    if (existing && !reclaimable) {
       throw new ConflictException('An account with this email already exists');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        passwordHash,
-        role: dto.role,
-        fullName: dto.fullName,
-        phoneNumber: dto.phoneNumber,
-      },
-    });
+    const data = {
+      passwordHash,
+      role: dto.role,
+      fullName: dto.fullName,
+      phoneNumber: dto.phoneNumber,
+    };
+    if (existing) {
+      await this.prisma.user.update({ where: { id: existing.id }, data });
+    } else {
+      await this.prisma.user.create({ data: { email: dto.email, ...data } });
+    }
 
     await this.otp.issue(dto.email, OtpPurpose.SIGNUP);
     return { message: 'Verification code sent', email: dto.email };
@@ -93,6 +102,7 @@ export class AuthService {
     | (TokenPair & { user: PublicUser; requiresTwoFactor: false; requiresReactivation: false })
     | { requiresTwoFactor: true; requiresReactivation: false; email: string }
     | { requiresReactivation: true; requiresTwoFactor: false; email: string }
+    | { requiresEmailVerification: true; requiresTwoFactor: false; requiresReactivation: false; email: string }
   > {
     let user = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (!user?.passwordHash) {
@@ -105,7 +115,12 @@ export class AuthService {
       throw new UnauthorizedException('Incorrect email or password');
     }
     if (!user.emailVerifiedAt) {
-      throw new ForbiddenException('Please verify your email before logging in');
+      // Used to be a dead end: a 403 with no way to get a new code, while
+      // signup refused the email as taken. The password is already proven
+      // correct here, so send a fresh signup code and let the client take
+      // them straight to the code screen to finish verifying.
+      await this.otp.issue(user.email, OtpPurpose.SIGNUP);
+      return { requiresEmailVerification: true, requiresTwoFactor: false, requiresReactivation: false, email: user.email };
     }
 
     if (user.deactivatedAt) {

@@ -76,6 +76,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
           context.push('/login-2fa');
         case LoginOutcome.requiresReactivation:
           setState(() => _error = 'This account is deactivated. Contact another admin to reactivate it.');
+        case LoginOutcome.requiresEmailVerification:
+          // Admin accounts are verified when they're created, so this
+          // only happens for a non-admin account used on this form.
+          setState(() => _error = 'This account is not an admin account.');
       }
     } on ApiException catch (e) {
       if (!mounted) return;

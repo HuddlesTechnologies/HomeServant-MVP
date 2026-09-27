@@ -17,12 +17,15 @@ Future<void> handleLoginOutcome(
   required VoidCallback onSuccess,
   required VoidCallback onTwoFactor,
   required Future<void> Function() onReactivate,
+  VoidCallback? onEmailVerification,
 }) async {
   switch (outcome) {
     case LoginOutcome.success:
       onSuccess();
     case LoginOutcome.requiresTwoFactor:
       onTwoFactor();
+    case LoginOutcome.requiresEmailVerification:
+      onEmailVerification?.call();
     case LoginOutcome.requiresReactivation:
       final confirmed = await showReactivateAccountDialog(context);
       if (confirmed == true && context.mounted) await onReactivate();
