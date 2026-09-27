@@ -91,13 +91,13 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
     }
   }
 
-  Future<void> _loginWithGoogle({bool reactivate = false}) async {
+  Future<void> _loginWithGoogle({String? idToken, bool reactivate = false}) async {
     setState(() {
       _googleSubmitting = true;
       _error = null;
     });
     try {
-      final outcome = await context.read<AppState>().loginWithGoogle(reactivate: reactivate);
+      final outcome = await context.read<AppState>().loginWithGoogle(idToken: idToken, reactivate: reactivate);
       if (!mounted || outcome == null) return;
       await handleLoginOutcome(
         context,
@@ -109,6 +109,13 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message);
+    } catch (e) {
+      // Google SDK failures (misconfigured OAuth client, popup blocked,
+      // network) used to escape this handler entirely, so the button
+      // just stopped spinning with no explanation.
+      debugPrint('Google sign-in failed: $e');
+      if (!mounted) return;
+      setState(() => _error = 'Google sign-in failed. Please try again.');
     } finally {
       if (mounted) setState(() => _googleSubmitting = false);
     }
@@ -179,7 +186,10 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          GoogleSignInButton(onPressed: _googleSubmitting ? null : _loginWithGoogle),
+          GoogleSignInButton(
+            onPressed: _googleSubmitting ? null : _loginWithGoogle,
+            onWebIdToken: (idToken) => _loginWithGoogle(idToken: idToken),
+          ),
           const SizedBox(height: 18),
           Center(
             child: GestureDetector(

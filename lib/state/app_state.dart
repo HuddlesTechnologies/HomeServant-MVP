@@ -268,8 +268,12 @@ class AppState extends ChangeNotifier {
   /// is used — see [AuthRepository.googleAuth]. On [reactivate], reuses
   /// the ID token from the immediately preceding call rather than
   /// prompting the picker again.
-  Future<LoginOutcome?> loginWithGoogle({bool reactivate = false}) async {
-    final idToken = reactivate ? _pendingGoogleIdToken : await GoogleAuthService.signInAndGetIdToken();
+  ///
+  /// [idToken] is passed in on web, where Google's rendered button has
+  /// already produced one (see GoogleAuthService); on mobile it's omitted
+  /// and the native picker is opened here instead.
+  Future<LoginOutcome?> loginWithGoogle({String? idToken, bool reactivate = false}) async {
+    idToken = reactivate ? _pendingGoogleIdToken : (idToken ?? await GoogleAuthService.signInAndGetIdToken());
     if (idToken == null) return null;
     _pendingGoogleIdToken = idToken;
     final result = await _authRepo.googleAuth(idToken: idToken, role: role, reactivate: reactivate);
