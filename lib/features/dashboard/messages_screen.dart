@@ -14,10 +14,19 @@ import '../../widgets/contact_avatar.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
 import 'chat_thread_screen.dart';
 
+/// A tenant's inbox. With [marketplaceOnly] it's the marketplace inbox
+/// instead: only threads tied to a marketplace order (`thread.orderId !=
+/// null`), with a shop avatar, so a tenant who's also a customer sees the
+/// two as separate, purpose-scoped views. Starting a *new* vendor
+/// conversation still happens from order history/an order's detail screen
+/// (see OrderHistoryScreen/VendorOrderDetailScreen) — the marketplace
+/// inbox only lists ones already begun. The two inboxes used to be
+/// separate near-identical screens.
 class MessagesScreen extends StatefulWidget {
-  const MessagesScreen({super.key, required this.theme});
+  const MessagesScreen({super.key, required this.theme, this.marketplaceOnly = false});
 
   final DashboardTheme theme;
+  final bool marketplaceOnly;
 
   @override
   State<MessagesScreen> createState() => _MessagesScreenState();
@@ -48,7 +57,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     try {
       final threads = await context.read<AppState>().chat.myThreads();
       if (!mounted) return;
-      setState(() => _threads = threads);
+      setState(() => _threads = widget.marketplaceOnly ? threads.where((t) => t.orderId != null).toList() : threads);
     } catch (_) {
       if (!mounted) return;
       setState(() => _threads = []);
@@ -58,12 +67,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Future<void> _openThread(ChatThread thread) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          theme: widget.theme,
-          contactName: thread.otherParticipantName,
-          threadId: thread.id,
-          otherParticipant: thread.otherParticipant,
-        ),
+        builder:
+            (_) => ChatThreadScreen(
+              theme: widget.theme,
+              contactName: thread.otherParticipantName,
+              threadId: thread.id,
+              otherParticipant: thread.otherParticipant,
+            ),
       ),
     );
     if (!mounted) return;
@@ -81,17 +91,25 @@ class _MessagesScreenState extends State<MessagesScreen> {
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 640,
-          child: threads == null
-              ? const Center(child: CircularProgressIndicator())
-              : threads.isEmpty
+          child:
+              threads == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : threads.isEmpty
                   ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 40),
                       child: Text(
-                        'No conversations yet.',
+                        widget.marketplaceOnly
+                            ? "You can message a vendor once you've bought a pickup item from them."
+                            : 'No conversations yet.',
                         textAlign: TextAlign.center,
                         style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6)),
                       ),
-                    )
-                  : ListView.separated(
+                    ),
+                  )
+                  : RefreshIndicator(
+                    onRefresh: _load,
+                    child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                       itemCount: threads.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -106,21 +124,24 @@ class _MessagesScreenState extends State<MessagesScreen> {
                               color: theme.surface,
                               borderRadius: BorderRadius.circular(18),
                               boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
+                                BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10, offset: const Offset(0, 4)),
                               ],
                             ),
                             child: ChatThreadListTile(
                               thread: thread,
-                              avatar: ContactAvatar(
-                                participant: thread.otherParticipant,
-                                radius: 24,
-                                backgroundColor: theme.accent.withValues(alpha: 0.25),
-                                iconColor: theme.accent,
-                              ),
+                              avatar:
+                                  widget.marketplaceOnly
+                                      ? CircleAvatar(
+                                        radius: 24,
+                                        backgroundColor: theme.accent.withValues(alpha: 0.25),
+                                        child: Icon(Icons.storefront_rounded, color: theme.accent),
+                                      )
+                                      : ContactAvatar(
+                                        participant: thread.otherParticipant,
+                                        radius: 24,
+                                        backgroundColor: theme.accent.withValues(alpha: 0.25),
+                                        iconColor: theme.accent,
+                                      ),
                               nameStyle: AppTextStyles.body(
                                 color: theme.onSurface,
                                 size: 14,
@@ -133,23 +154,22 @@ class _MessagesScreenState extends State<MessagesScreen> {
                               ),
                               time: Text(
                                 formatRelativeTime(thread.updatedAt),
-                                style: AppTextStyles.body(
-                                  color: theme.onSurface.withValues(alpha: 0.5),
-                                  size: 11,
-                                ),
+                                style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.5), size: 11),
                               ),
-                              trailing: unread
-                                  ? Container(
-                                      width: 9,
-                                      height: 9,
-                                      decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
-                                    )
-                                  : null,
+                              trailing:
+                                  unread
+                                      ? Container(
+                                        width: 9,
+                                        height: 9,
+                                        decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
+                                      )
+                                      : null,
                             ),
                           ),
                         );
                       },
                     ),
+                  ),
         ),
       ),
     );

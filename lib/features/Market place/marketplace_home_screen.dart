@@ -10,7 +10,7 @@ import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
-import 'marketplace_messages_screen.dart';
+import '../dashboard/messages_screen.dart';
 import 'marketplace_product_detail_screen.dart';
 import 'models/order_options.dart';
 import 'order_history_screen.dart';
@@ -418,7 +418,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
         actions: [
           IconButton(
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => MarketplaceMessagesScreen(theme: theme)),
+              MaterialPageRoute(builder: (_) => MessagesScreen(theme: theme, marketplaceOnly: true)),
             ),
             icon: Icon(Icons.chat_bubble_outline_rounded, color: theme.foreground),
           ),
