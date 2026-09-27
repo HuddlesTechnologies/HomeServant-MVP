@@ -3,6 +3,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { randomBytes } from 'crypto';
 import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
 import { ChatService } from '../chat/chat.service';
+import { formatRent } from '../common/format-rent';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
@@ -290,7 +291,46 @@ export class PaymentsService {
   /// what makes this a *renewal* rather than a fresh payment is purely
   /// that the booking is already MOVED_IN when the webhook later sees the
   /// charge succeed (see handleChargeSuccess) — no separate flag needed.
-  async renewBooking(bookingId: string, tenantId: string) {
+  ///
+  /// [expected] is what the tenant was shown by [renewalQuote] and agreed
+  /// to pay. If the landlord changed the rent or lease length since, the
+  /// charge is refused (409) so the tenant is never charged an amount they
+  /// didn't see. Older clients that send nothing are charged as before.
+  async renewBooking(bookingId: string, tenantId: string, expected?: { amount?: number; leaseMonths?: number }) {
+    const booking = await this.loadRenewableBooking(bookingId, tenantId);
+    const property = booking.property;
+    if (
+      (expected?.amount !== undefined && expected.amount !== property.price) ||
+      (expected?.leaseMonths !== undefined && expected.leaseMonths !== property.rentDurationMonths)
+    ) {
+      throw new ConflictException(
+        `The landlord changed the terms: renewing is now ${formatRent(property.price, property.priceUnit)} for ` +
+          `${property.rentDurationMonths} months. Please review the new amount before renewing.`,
+      );
+    }
+    return this.chargeBooking(booking, booking.tenant.email, { renewal: true });
+  }
+
+  /// `GET /bookings/:id/renewal-quote` — exactly what [renewBooking] would
+  /// charge right now, and what the tenant paid last time, so the app can
+  /// show (and flag) the amount before the tenant confirms.
+  async renewalQuote(bookingId: string, tenantId: string) {
+    const booking = await this.loadRenewableBooking(bookingId, tenantId);
+    const { property } = booking;
+    const leaseMonths = property.rentDurationMonths!;
+    return {
+      amount: property.price,
+      priceUnit: property.priceUnit,
+      leaseMonths,
+      previousAmount: booking.priceSnapshot,
+      previousPriceUnit: booking.priceUnitSnapshot,
+      currentLeaseEnd: booking.leaseEndDate,
+      newLeaseEnd: addMonths(booking.leaseEndDate!, leaseMonths),
+    };
+  }
+
+  /// Every rule for renewing, shared by the quote and the charge.
+  private async loadRenewableBooking(bookingId: string, tenantId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: { property: true, tenant: true },
@@ -320,8 +360,7 @@ export class PaymentsService {
     if (daysUntilEnd > RENEWAL_WINDOW_DAYS) {
       throw new BadRequestException(`Too early to renew — you can renew starting ${RENEWAL_WINDOW_DAYS} days before your lease ends`);
     }
-
-    return this.chargeBooking(booking, booking.tenant.email);
+    return booking;
   }
 
   private async chargeBooking(
@@ -333,6 +372,7 @@ export class PaymentsService {
       property: { price: number; priceUnit: PriceUnit; landlordId: string; category: PropertyCategory };
     },
     tenantEmail: string,
+    { renewal = false }: { renewal?: boolean } = {},
   ) {
     await this.prisma.payment.updateMany({
       where: { bookingId: booking.id, status: PaymentStatus.INITIATED },
@@ -358,10 +398,18 @@ export class PaymentsService {
           status: PaymentStatus.INITIATED,
         },
       }),
-      this.prisma.booking.update({
-        where: { id: booking.id },
-        data: { priceSnapshot: priceNaira, priceUnitSnapshot: booking.property.priceUnit },
-      }),
+      // A first payment snapshots the price now (the booking isn't paid
+      // yet, so nothing else relies on it). A renewal keeps the price the
+      // tenant last paid until this charge actually succeeds; see
+      // releaseRenewal.
+      ...(renewal
+        ? []
+        : [
+            this.prisma.booking.update({
+              where: { id: booking.id },
+              data: { priceSnapshot: priceNaira, priceUnitSnapshot: booking.property.priceUnit },
+            }),
+          ]),
     ]);
 
     try {
@@ -843,7 +891,7 @@ export class PaymentsService {
   /// the tenant is already living there. Extends leaseEndDate from its
   /// *current* value (not from "now"), and resets the reminder de-dupe
   /// field so the next cycle's 30/15/0-day reminders can fire again.
-  private async releaseRenewal(payment: Payment, booking: { id: string; leaseEndDate: Date | null; property: { landlordId: string; title: string; rentDurationMonths: number | null }; tenantId: string; tenant: { email: string } }): Promise<void> {
+  private async releaseRenewal(payment: Payment, booking: { id: string; propertyId: string; leaseEndDate: Date | null; property: { landlordId: string; title: string; rentDurationMonths: number | null }; tenantId: string; tenant: { email: string } }): Promise<void> {
     if (!booking.leaseEndDate || !booking.property.rentDurationMonths) {
       this.logger.error(`Renewal payment ${payment.id} succeeded but booking ${booking.id} is missing leaseEndDate/rentDurationMonths`);
       return;
@@ -853,17 +901,29 @@ export class PaymentsService {
     const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant rent renewal release — ${booking.property.title}`);
 
     const newLeaseEnd = addMonths(booking.leaseEndDate, booking.property.rentDurationMonths);
-    await this.prisma.booking.update({
-      where: { id: booking.id },
-      data: { leaseEndDate: newLeaseEnd, lastRentReminderDaysOut: null },
-    });
+    // The rent actually paid for the new term (a renewal is never a
+    // Shortlet, so the whole amount is one period's rent). It becomes the
+    // booking's price and the tenancy agreement's rent and end date, so the
+    // agreement always matches the current term.
+    const rentPaid = Math.round(payment.amount / KOBO_PER_NAIRA);
+    const { priceUnit } = await this.prisma.property.findUniqueOrThrow({ where: { id: booking.propertyId }, select: { priceUnit: true } });
+    await this.prisma.$transaction([
+      this.prisma.booking.update({
+        where: { id: booking.id },
+        data: { leaseEndDate: newLeaseEnd, lastRentReminderDaysOut: null, priceSnapshot: rentPaid, priceUnitSnapshot: priceUnit },
+      }),
+      this.prisma.tenancyAgreement.updateMany({
+        where: { bookingId: booking.id },
+        data: { rentAmount: rentPaid, priceUnit, leaseEndDate: newLeaseEnd },
+      }),
+    ]);
 
     await this.notifyBoth(
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Lease renewed',
-      `Your lease for ${booking.property.title} has been renewed.`,
+      `Your lease for ${booking.property.title} has been renewed until ${newLeaseEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} at ${formatRent(rentPaid, priceUnit)}. Your tenancy agreement has been updated.`,
     );
     await this.notifyBoth(
       landlord.id,

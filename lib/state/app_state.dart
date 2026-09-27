@@ -8,7 +8,7 @@ import '../api/api_client.dart';
 import '../api/auth_repository.dart';
 import '../api/bookings_repository.dart';
 import '../api/chat_repository.dart';
-export '../api/bookings_repository.dart' show PaymentInitiation, BookingCreationResult;
+export '../api/bookings_repository.dart' show PaymentInitiation, BookingCreationResult, RenewalQuote;
 import '../api/favorites_repository.dart';
 import '../api/marketplace_orders_repository.dart';
 import '../api/marketplace_products_repository.dart';
@@ -969,11 +969,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> renewBooking(String bookingId) async {
-    final updated = await _bookingsRepo.renew(bookingId);
-    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
-  }
+  Future<RenewalQuote> renewalQuote(String bookingId) => _bookingsRepo.renewalQuote(bookingId);
+
+  /// Starts the renewal payment for the amount in [quote]; the lease is
+  /// extended once Paystack confirms it (the bookings list refreshes then).
+  Future<PaymentInitiation> renewBooking(String bookingId, RenewalQuote quote) => _bookingsRepo.renew(bookingId, quote);
 
   Future<TenancyAgreement?> fetchTenancyAgreement(String bookingId) => _bookingsRepo.tenancyAgreement(bookingId);
 

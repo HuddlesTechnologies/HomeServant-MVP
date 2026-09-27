@@ -352,7 +352,11 @@ export class BookingsService {
 
   /// `POST /bookings/:id/renew` — charges again for another lease term;
   /// releases instantly (no hold) once the webhook confirms it.
-  renew(id: string, tenantId: string) {
-    return this.payments.renewBooking(id, tenantId);
+  renew(id: string, tenantId: string, expected?: { amount?: number; leaseMonths?: number }) {
+    return this.payments.renewBooking(id, tenantId, expected);
+  }
+
+  renewalQuote(id: string, tenantId: string) {
+    return this.payments.renewalQuote(id, tenantId);
   }
 }

@@ -312,6 +312,16 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly, ThousandsSeparatorInputFormatter()],
                 validator: _required,
               ),
+              if (_isEditing)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+                  child: Text(
+                    'Changing the price or lease length notifies tenants who have booked this property. '
+                    "It doesn't change what anyone has already paid; current tenants pay the new rent if they renew.",
+                    // Darker than hintGrey, which is under 4.5:1 on offWhite.
+                    style: AppTextStyles.body(color: const Color(0xFF5B6170), size: 11.5),
+                  ),
+                ),
               const SizedBox(height: 14),
               Row(
                 children: [

@@ -451,7 +451,7 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
 
   describe('deleting a listing', () => {
     function propertiesService() {
-      return new PropertiesService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never);
+      return new PropertiesService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never, { create: async () => undefined } as never);
     }
 
     it('refuses while a tenant lives there, and allows it once the lease has ended', async () => {
