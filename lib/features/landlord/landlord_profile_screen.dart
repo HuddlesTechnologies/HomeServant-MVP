@@ -9,6 +9,7 @@ import '../../widgets/theme_picker_sheet.dart';
 import '../dashboard/edit_profile_screen.dart';
 import '../dashboard/notifications_screen.dart';
 import 'landlord_add_property_screen.dart';
+import 'landlord_tenants_screen.dart';
 import '../../widgets/bank_details_screen.dart';
 
 /// Profile Settings tab of the redesigned landlord dashboard — a fixed
@@ -59,6 +60,13 @@ class LandlordProfileScreen extends StatelessWidget {
           label: 'Add Property',
           onTap: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const LandlordAddPropertyScreen()),
+          ),
+        ),
+        ProfileMenuItemSpec(
+          icon: Icons.groups_rounded,
+          label: 'My Tenants',
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const LandlordTenantsScreen()),
           ),
         ),
         ProfileMenuItemSpec(

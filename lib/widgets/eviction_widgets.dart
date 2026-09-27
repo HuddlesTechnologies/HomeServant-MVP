@@ -35,15 +35,48 @@ class LandlordEvictionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appState = context.watch<AppState>();
-    final booking = currentTenancyFor(appState, property);
+    final booking = currentTenancyFor(context.watch<AppState>(), property);
     if (booking == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: LandlordTenancyCard(booking: booking, theme: theme, textColor: theme.foreground, title: booking.tenantName ?? 'Tenant', caption: 'Current tenant'),
+    );
+  }
+}
+
+/// One tenancy on the landlord's side: a caption + title, the lease dates
+/// and, while the lease is still running, the eviction controls. [textColor]
+/// must contrast with whatever this card sits on (theme.foreground on
+/// theme.background, or navy on the off-white tenant profile).
+class LandlordTenancyCard extends StatelessWidget {
+  const LandlordTenancyCard({
+    super.key,
+    required this.booking,
+    required this.theme,
+    required this.textColor,
+    required this.title,
+    required this.caption,
+  });
+
+  final Booking booking;
+  final DashboardTheme theme;
+  final Color textColor;
+  final String title;
+  final String caption;
+
+  bool get _isCurrent =>
+      booking.status == BookingStatus.movedIn && (booking.leaseEndDate == null || booking.leaseEndDate!.isAfter(DateTime.now()));
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<AppState>();
     final eviction = appState.evictionForBooking(booking.id);
     final pending = eviction != null && eviction.isPending ? eviction : null;
-    final fg = theme.foreground;
+    final fg = textColor;
+    final start = booking.leaseStartDate;
+    final end = booking.leaseEndDate;
 
     return Container(
-      margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: fg.withValues(alpha: 0.05),
@@ -53,55 +86,66 @@ class LandlordEvictionPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Current tenant', style: AppTextStyles.body(color: fg.withValues(alpha: 0.6), size: 12.5, weight: FontWeight.w600)),
+          Text(caption, style: AppTextStyles.body(color: fg.withValues(alpha: 0.6), size: 12.5, weight: FontWeight.w600)),
           const SizedBox(height: 4),
-          Text(booking.tenantName ?? 'Tenant', style: AppTextStyles.body(color: fg, size: 15, weight: FontWeight.w700)),
-          if (booking.leaseEndDate != null)
-            Text('Lease ends ${formatShortDate(booking.leaseEndDate!)}', style: AppTextStyles.body(color: fg.withValues(alpha: 0.6), size: 12.5)),
-          const SizedBox(height: 12),
-          if (pending != null) ...[
-            _StatusPill(label: 'Eviction request under review', color: const Color(0xFFB7791F), textColor: fg),
+          Text(title, style: AppTextStyles.body(color: fg, size: 15, weight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          _DateLine(label: 'Rented on', value: start == null ? 'Not started yet' : formatShortDate(start), color: fg),
+          _DateLine(
+            label: _isCurrent ? 'Rent expires' : 'Rent ended',
+            value: end == null ? '—' : formatShortDate(end),
+            color: fg,
+          ),
+          if (eviction != null && eviction.status == EvictionStatus.approved) ...[
             const SizedBox(height: 10),
-            _LabeledText(label: 'Your reason', text: pending.reason, color: fg),
-            if (pending.tenantResponse != null) ...[
-              const SizedBox(height: 8),
-              _LabeledText(label: "Tenant's response", text: pending.tenantResponse!, color: fg),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              'A HomeServant super admin will review the case. Nothing changes for the tenant unless it is approved.',
-              style: AppTextStyles.body(color: fg.withValues(alpha: 0.6), size: 12),
-            ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => _withdraw(context, pending),
-                child: Text('Withdraw request', style: AppTextStyles.body(color: fg, size: 13, weight: FontWeight.w700)),
-              ),
-            ),
-          ] else ...[
-            if (eviction != null && eviction.status == EvictionStatus.rejected) ...[
-              _StatusPill(label: 'Last eviction request was rejected', color: _warningRed, textColor: fg),
-              if (eviction.reviewNote != null) ...[
-                const SizedBox(height: 8),
-                _LabeledText(label: 'Note from HomeServant', text: eviction.reviewNote!, color: fg),
-              ],
+            _StatusPill(label: 'Ended by an approved eviction', color: _warningRed, textColor: fg),
+          ],
+          if (_isCurrent) ...[
+            const SizedBox(height: 12),
+            if (pending != null) ...[
+              _StatusPill(label: 'Eviction request under review', color: const Color(0xFFB7791F), textColor: fg),
               const SizedBox(height: 10),
-            ],
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: const BorderSide(color: _warningRed, width: 1.2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                ),
-                onPressed: () => showEvictionRequestSheet(context, theme: theme, booking: booking),
-                icon: const Icon(Icons.gavel_rounded, color: _warningRed, size: 18),
-                label: Text('Request eviction', style: AppTextStyles.button(color: fg, size: 14.5)),
+              _LabeledText(label: 'Your reason', text: pending.reason, color: fg),
+              if (pending.tenantResponse != null) ...[
+                const SizedBox(height: 8),
+                _LabeledText(label: "Tenant's response", text: pending.tenantResponse!, color: fg),
+              ],
+              const SizedBox(height: 8),
+              Text(
+                'A HomeServant super admin will review the case. Nothing changes for the tenant unless it is approved.',
+                style: AppTextStyles.body(color: fg.withValues(alpha: 0.6), size: 12),
               ),
-            ),
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => _withdraw(context, pending),
+                  child: Text('Withdraw request', style: AppTextStyles.body(color: fg, size: 13, weight: FontWeight.w700)),
+                ),
+              ),
+            ] else ...[
+              if (eviction != null && eviction.status == EvictionStatus.rejected) ...[
+                _StatusPill(label: 'Last eviction request was rejected', color: _warningRed, textColor: fg),
+                if (eviction.reviewNote != null) ...[
+                  const SizedBox(height: 8),
+                  _LabeledText(label: 'Note from HomeServant', text: eviction.reviewNote!, color: fg),
+                ],
+                const SizedBox(height: 10),
+              ],
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: const BorderSide(color: _warningRed, width: 1.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  ),
+                  onPressed: () => showEvictionRequestSheet(context, theme: theme, booking: booking),
+                  icon: const Icon(Icons.gavel_rounded, color: _warningRed, size: 18),
+                  label: Text('Evict tenant', style: AppTextStyles.button(color: fg, size: 14.5)),
+                ),
+              ),
+            ],
           ],
         ],
       ),
@@ -231,6 +275,27 @@ class TenantEvictionNotice extends StatelessWidget {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DateLine extends StatelessWidget {
+  const _DateLine({required this.label, required this.value, required this.color});
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          SizedBox(width: 96, child: Text(label, style: AppTextStyles.body(color: color.withValues(alpha: 0.6), size: 12.5))),
+          Expanded(child: Text(value, style: AppTextStyles.body(color: color, size: 12.5, weight: FontWeight.w600))),
         ],
       ),
     );

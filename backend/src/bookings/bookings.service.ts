@@ -10,6 +10,15 @@ function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
+/// Booking stages that mean the tenant has paid (and not been refunded).
+const PAID_STATUSES = new Set<BookingStatus>([
+  BookingStatus.PAID,
+  BookingStatus.PAID_AWAITING_INSPECTION,
+  BookingStatus.INSPECTION_PROPOSED,
+  BookingStatus.INSPECTION_CONFIRMED,
+  BookingStatus.MOVED_IN,
+]);
+
 @Injectable()
 export class BookingsService {
   constructor(
@@ -107,6 +116,7 @@ export class BookingsService {
             id: true,
             fullName: true,
             email: true,
+            phoneNumber: true,
             profilePhotoUrl: true,
             gender: true,
             occupation: true,
@@ -123,7 +133,20 @@ export class BookingsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return bookings.map(({ payments, ...booking }) => ({ ...booking, lastPaidAt: payments[0]?.paidAt ?? null }));
+    // The tenant's phone number is only shared once they've paid for this
+    // property, so a landlord can't take an unpaid request off-platform
+    // (the same line messaging draws, see ChatService).
+    const paidTenantIds = new Set(
+      bookings.filter((b) => PAID_STATUSES.has(b.status)).map((b) => `${b.tenantId}:${b.propertyId}`),
+    );
+    return bookings.map(({ payments, ...booking }) => ({
+      ...booking,
+      tenant: {
+        ...booking.tenant,
+        phoneNumber: paidTenantIds.has(`${booking.tenantId}:${booking.propertyId}`) ? booking.tenant.phoneNumber : null,
+      },
+      lastPaidAt: payments[0]?.paidAt ?? null,
+    }));
   }
 
   /// Shortlet-only now — a non-Shortlet booking is charged immediately on
