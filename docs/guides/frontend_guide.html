@@ -1,0 +1,283 @@
+<div class="toc">
+<h1 class="first">Contents</h1>
+<ol>
+  <li>What the app is and what it runs on</li>
+  <li>Folder layout</li>
+  <li>How the app starts</li>
+  <li>Navigation and route guards</li>
+  <li>State: <code>AppState</code></li>
+  <li>Talking to the backend</li>
+  <li>Real-time updates, sounds and browser pop-ups</li>
+  <li>The screens, area by area</li>
+  <li>Look and feel: themes, colors and the contrast rule</li>
+  <li>Web-specific setup (Vercel, security policy, sessions)</li>
+  <li>Testing, building and conventions</li>
+</ol>
+</div>
+
+<h1>1. What the app is and what it runs on</h1>
+<p>HomeServant is one Flutter app that serves four audiences:</p>
+<ul>
+  <li><strong>Tenants</strong>, who find and rent properties;</li>
+  <li><strong>Landlords</strong>, who list and manage properties and bookings;</li>
+  <li><strong>Marketplace customers and vendors</strong> (a tenant can also open a shop);</li>
+  <li><strong>Admins</strong>, through the admin console.</li>
+</ul>
+<p>The same code builds the website (hosted on Vercel) and the Android/iOS apps. All data lives on the HomeServant API (see the Backend Developer Guide). The app holds no business data of its own beyond a few per-device preferences.</p>
+
+<h2>Main packages and why they're used</h2>
+<table>
+  <tr><th style="width:26%">Package</th><th>Why</th></tr>
+  <tr><td><code>provider</code></td><td>Makes the single <code>AppState</code> object available to every screen. It's simple and well understood, which suits a small team.</td></tr>
+  <tr><td><code>go_router</code></td><td>URL-based routing for the entry, auth, dashboard and admin screens, so web addresses and the browser back button work, plus a central place for sign-in redirects.</td></tr>
+  <tr><td><code>dio</code></td><td>HTTP client. Its interceptors let one place attach the login token and refresh it when it expires.</td></tr>
+  <tr><td><code>socket_io_client</code></td><td>Live updates (new messages, notifications, claims) over one WebSocket.</td></tr>
+  <tr><td><code>flutter_secure_storage</code></td><td>Keeps login tokens in the phone's keychain.</td></tr>
+  <tr><td><code>shared_preferences</code></td><td>Per-device preferences such as the dashboard theme and notification toggles.</td></tr>
+  <tr><td><code>google_sign_in</code> / <code>_web</code></td><td>"Continue with Google": the native picker on phones, Google's own rendered button on web.</td></tr>
+  <tr><td><code>image_picker</code>, <code>file_picker</code>, <code>mime</code></td><td>Choosing photos and documents to upload, and detecting their type.</td></tr>
+  <tr><td><code>url_launcher</code></td><td>Opens Paystack's checkout page for payments.</td></tr>
+  <tr><td><code>pdf</code>, <code>printing</code></td><td>Generating PDFs in the app (tenancy agreements, chat transcripts).</td></tr>
+  <tr><td><code>audioplayers</code></td><td>The admin alert sound.</td></tr>
+  <tr><td><code>video_player</code>, <code>flutter_svg</code>, <code>device_info_plus</code></td><td>Splash video and listing walkthrough videos; SVG icons; the device name recorded at login.</td></tr>
+</table>
+
+<h1>2. Folder layout</h1>
+<table>
+  <tr><th style="width:30%">Folder</th><th>What's in it</th></tr>
+  <tr><td><code>lib/main.dart</code>, <code>lib/app.dart</code></td><td>Entry point and the top-level <code>MaterialApp.router</code>.</td></tr>
+  <tr><td><code>lib/routes/app_router.dart</code></td><td>Every go_router route and the redirect rules (<code>appRedirect</code>).</td></tr>
+  <tr><td><code>lib/state/app_state.dart</code></td><td>The single app-wide state object (section 5).</td></tr>
+  <tr><td><code>lib/api/</code></td><td><code>ApiClient</code> (HTTP plus token refresh), one <em>repository</em> per backend area, <code>TokenStorage</code>, <code>api_config.dart</code>.</td></tr>
+  <tr><td><code>lib/api/models/</code></td><td>Data classes that mirror API responses, each with a <code>fromApi</code> parser.</td></tr>
+  <tr><td><code>lib/features/&lt;area&gt;/</code></td><td>Screens grouped by audience: <code>splash</code>, <code>onboarding</code>, <code>auth</code>, <code>dashboard</code> (tenant and shared), <code>landlord</code>, <code>Market place</code>, <code>admin</code>.</td></tr>
+  <tr><td><code>lib/widgets/</code></td><td>Reusable pieces: buttons, fields, bottom sheets, gates, the notification banner, the bank details screen, the Google button, and more.</td></tr>
+  <tr><td><code>lib/services/</code></td><td>Anything that isn't a screen or an API call: live connection (<code>ChatSocketService</code>), alert sound, browser pop-ups, Google sign-in, app icon switching.</td></tr>
+  <tr><td><code>lib/core/</code></td><td>Colors, text styles, the Material theme, date and number formatting, responsive helpers.</td></tr>
+  <tr><td><code>lib/models/</code></td><td><code>UserRole</code> and <code>DashboardTheme</code>, which drive the colors of each area.</td></tr>
+  <tr><td><code>test/</code></td><td>Navigation tests, route-guard unit tests, model parsing tests, App Lock tests.</td></tr>
+  <tr><td><code>web/</code>, <code>vercel.json</code></td><td>Web entry HTML, icons, and the Vercel build and security settings.</td></tr>
+</table>
+
+<h1>3. How the app starts</h1>
+<ol>
+  <li><code>main()</code> calls <code>assertSecureApiBaseUrl()</code>, which refuses to run a release build pointed at a non-HTTPS API, then starts <code>HomeServantApp</code>.</li>
+  <li><code>HomeServantApp</code> creates the one <code>AppState</code> and the router, and calls <code>AppState.load()</code>. That restores device preferences and, if a login token is saved, fetches the user's profile (<code>GET /users/me</code>) and their starting data. Until it finishes, <code>isLoaded</code> is false and the router doesn't redirect anywhere.</li>
+  <li><code>MaterialApp.router</code> wraps every page in three layers, outermost first:
+    <ul>
+      <li><code>SessionExpiredGate</code>: shows "you were signed out" when the refresh token dies.</li>
+      <li><code>AppLockGate</code>: the optional PIN lock on phones.</li>
+      <li><code>NotificationBannerOverlay</code>: the in-app notification banner, the admin alert sound and browser pop-ups.</li>
+    </ul>
+  </li>
+</ol>
+<div class="note"><strong>Why one app instead of separate apps?</strong> Tenants, landlords, vendors and admins share most building blocks: sign-in, chat, notifications, uploads, payments. One codebase means one fix applies everywhere.</div>
+
+<h1>4. Navigation and route guards</h1>
+<h2>Named routes (go_router)</h2>
+<table>
+  <tr><th style="width:30%">Route</th><th>Screen</th></tr>
+  <tr><td><code>/</code></td><td>Splash screen on phones; the marketing site (<code>WebLandingScreen</code>) on web.</td></tr>
+  <tr><td><code>/get-started</code>, <code>/login</code>, <code>/signup</code></td><td>Choice screens, all built on the shared <code>TwoChoiceScreen</code> layout.</td></tr>
+  <tr><td><code>/login-tenant</code>, <code>/login-landlord</code></td><td><code>LoginRoleScreen</code>: email and password, Google, forgot password.</td></tr>
+  <tr><td><code>/signup-tenant</code>, <code>/signup-landlord</code></td><td><code>SignupRoleScreen</code>: email, password, Google.</td></tr>
+  <tr><td><code>/verify-otp</code>, <code>/login-2fa</code></td><td><code>VerifyOtpScreen</code>: the signup code, or the two-factor code at login.</td></tr>
+  <tr><td><code>/signup-tenant-1</code>, <code>/signup-landlord-1</code></td><td><code>SignupBasicsScreen(role)</code>: name, phone, date of birth, plus role extras.</td></tr>
+  <tr><td><code>/signup-tenant-2</code>, <code>/signup-landlord-2</code></td><td><code>SignupDetailsScreen(role)</code>: photo, ID, gender, occupation, marital status.</td></tr>
+  <tr><td><code>/forgot-password</code>, <code>/reset-password</code></td><td>Password reset by emailed code.</td></tr>
+  <tr><td><code>/app-lock-verify</code></td><td>PIN entry after login, when App Lock is on.</td></tr>
+  <tr><td><code>/dashboard</code></td><td><code>TenantDashboardScreen</code> or <code>LandlordDashboardScreen</code>, depending on the role.</td></tr>
+  <tr><td><code>/marketplace</code></td><td><code>MarketplaceNavigatorHost</code>: the marketplace's own nested navigator.</td></tr>
+  <tr><td><code>/admin-login</code>, <code>/admin</code></td><td>Admin sign-in and <code>AdminShell</code> (the console).</td></tr>
+</table>
+<p>Everything past the dashboards (property details, chats, settings, marketplace screens, admin detail pages) opens with plain <code>Navigator.push</code>. Those are drill-down pages that don't need their own web address.</p>
+<p><strong>Why the marketplace has its own route and navigator:</strong> it has many screens of its own. Giving it one route means a single browser <em>Back</em> press from anywhere inside it returns to the dashboard, instead of skipping past the dashboard to an older page.</p>
+
+<h2>Redirect rules (<code>appRedirect</code>)</h2>
+<p>The router asks <code>appRedirect(appState, location)</code> on every navigation and whenever <code>AppState</code> changes. It's a plain function, so it's unit-tested in <code>test/router_redirect_test.dart</code>.</p>
+<ol>
+  <li><strong>Signed out</strong> on a protected page: sent to <code>/get-started</code>. Pre-auth pages (login, signup, code entry) are allowed.</li>
+  <li><strong>Signed in</strong> on an entry page (<code>/</code>, <code>/get-started</code>, <code>/login</code>, <code>/signup</code>): sent to <code>/dashboard</code>, or <code>/admin</code> for admins.
+    <p>The login and code screens themselves are deliberately <em>not</em> redirected. They become "signed in" partway through their own flow, and need to run their own next step, such as the App Lock PIN or finishing profile setup.</p>
+  </li>
+  <li><strong>Admins</strong> never land on <code>/dashboard</code>; they're sent to <code>/admin</code>.</li>
+  <li><strong>Unfinished profiles:</strong> a tenant or landlord whose server-side <code>profileCompleted</code> flag is false is sent from <code>/dashboard</code> or <code>/marketplace</code> back into the signup steps. Name and phone decide whether that's step 1 or step 2.
+    <p>This relies only on the flag the server sends with every login response. Checking individual profile fields instead used to send finished users back into setup on every login.</p>
+  </li>
+</ol>
+
+<h1>5. State: <code>AppState</code></h1>
+<p><code>lib/state/app_state.dart</code> is a single <code>ChangeNotifier</code>, provided at the top of the app. Screens read it with <code>context.watch&lt;AppState&gt;()</code> (rebuild on change) or <code>context.read&lt;AppState&gt;()</code> (one-off calls).</p>
+<table>
+  <tr><th style="width:26%">Section</th><th>Holds</th></tr>
+  <tr><td>Session and profile</td><td><code>userId</code>, <code>role</code>, name, phone, address, photo, gender, occupation, marital status, <code>profileCompleted</code>, 2FA flag, bank details.</td></tr>
+  <tr><td>Auth</td><td><code>signup</code>, <code>verifySignupOtp</code>, <code>login</code> and <code>loginWithGoogle</code> (which return a <code>LoginOutcome</code>: success, two-factor needed, reactivation needed, or email verification needed), <code>completeProfile</code>, <code>logout</code>, deactivate and delete.</td></tr>
+  <tr><td>Notifications</td><td>The list, unread count, mark read.</td></tr>
+  <tr><td>Properties, wishlist, bookings</td><td>The public feed, a landlord's own listings, favorites, the tenant's and the landlord's bookings.</td></tr>
+  <tr><td>Vendor</td><td>Whether this user has a shop.</td></tr>
+  <tr><td>Admin</td><td><code>adminLevel</code>, <code>adminOnDuty</code> (server-side), and the device-only <code>adminAlertSound</code> and <code>adminBrowserNotifications</code>.</td></tr>
+  <tr><td>Device preferences</td><td>Dashboard theme, notification toggles, banner auto-dismiss, App Lock.</td></tr>
+</table>
+<p>Repositories are exposed on <code>AppState</code> (for example <code>appState.chat</code>, <code>appState.admin</code>, <code>appState.uploads</code>). Screens that manage their own lists, such as chats or admin tables, call them directly rather than storing everything in <code>AppState</code>.</p>
+<p><strong>Where it's saved:</strong> login tokens go to the phone's secure keychain, or to the browser tab's <code>sessionStorage</code> on web (section 10). Device preferences go to <code>SharedPreferences</code>, or <code>sessionStorage</code> on web. Profile data is never saved locally; it's re-fetched from the API at start-up.</p>
+<div class="note"><strong>Why one state object?</strong> The app's shared data is small and closely linked (the signed-in user drives almost everything). One well-organised object is easier for a small team than a store per feature. If it grows much further, splitting it by area is the natural next step.</div>
+
+<h1>6. Talking to the backend</h1>
+<h2>Where the API is</h2>
+<p><code>lib/api/api_config.dart</code> reads <code>API_BASE_URL</code> from the build command (<code>--dart-define=API_BASE_URL=https://.../api</code>). The Vercel build sets it to the Render server.</p>
+
+<h2><code>ApiClient</code>: one HTTP client for everything</h2>
+<ul>
+  <li>Adds <code>Authorization: Bearer &lt;access token&gt;</code> to every request, except auth calls marked <code>skipAuth</code>.</li>
+  <li>On a <code>401</code>, calls <code>POST /auth/refresh</code> once, saves the new token pair, and retries the request. Several requests failing together share one refresh, because the server's refresh tokens can only be used once. If refreshing fails, <code>onSessionExpired</code> signs the app out and shows the "session expired" message.</li>
+  <li><code>call(...)</code> turns every network error into an <code>ApiException</code> carrying the server's own message, so screens simply show <code>e.message</code>.</li>
+</ul>
+
+<h2>Repositories: one per backend area</h2>
+<table>
+  <tr><th style="width:30%">Repository</th><th>Backend area it calls</th></tr>
+  <tr><td><code>AuthRepository</code></td><td><code>/auth/*</code>: signup, verify, login, Google, 2FA, refresh, logout, password reset and change, deactivate, delete.</td></tr>
+  <tr><td><code>UsersRepository</code></td><td><code>/users/me</code>, <code>/users/me/bank-details</code>.</td></tr>
+  <tr><td><code>PropertiesRepository</code></td><td><code>/properties</code>.</td></tr>
+  <tr><td><code>BookingsRepository</code></td><td><code>/bookings</code>: create, pay, inspection, move-in, refund, renew, landlord responses, tenancy agreement.</td></tr>
+  <tr><td><code>FavoritesRepository</code>, <code>ReviewsRepository</code></td><td><code>/favorites</code>, <code>/reviews</code>.</td></tr>
+  <tr><td><code>ChatRepository</code></td><td><code>/threads</code>: inbox, messages, support chat, claim, resolve, transfer, reassign, summary.</td></tr>
+  <tr><td><code>NotificationsRepository</code></td><td><code>/notifications</code>.</td></tr>
+  <tr><td><code>VendorsRepository</code>, <code>MarketplaceProductsRepository</code>, <code>MarketplaceOrdersRepository</code></td><td><code>/vendors</code>, <code>/marketplace/products</code>, <code>/marketplace/orders</code>.</td></tr>
+  <tr><td><code>PaystackRepository</code></td><td><code>/paystack/banks</code> and account-name lookup for bank details.</td></tr>
+  <tr><td><code>UploadsRepository</code></td><td><code>/uploads/sign</code>, then uploads straight to Supabase Storage.</td></tr>
+  <tr><td><code>AdminRepository</code></td><td><code>/admin/*</code> and <code>/reports/*</code> for the console.</td></tr>
+</table>
+
+<h2>A typical request, end to end</h2>
+<pre><code>Screen button tap
+  -&gt; context.read&lt;AppState&gt;().someAction()      (or a repository directly)
+  -&gt; XRepository.method()  -&gt;  ApiClient.call(() =&gt; dio.post('/path', data: {...}))
+  -&gt; server responds with JSON
+  -&gt; Model.fromApi(json)  -&gt;  AppState updates fields + notifyListeners()
+  -&gt; screens using context.watch rebuild</code></pre>
+
+<h2>Uploading photos and files</h2>
+<ol>
+  <li>The user picks a file (<code>upload_picker.dart</code>).</li>
+  <li><code>UploadsRepository.upload</code> reads its bytes and works out its type from the content. On web the picked file is a <code>blob:</code> address, which is why the security policy allows <code>blob:</code>.</li>
+  <li>It asks the API for a one-time upload link (<code>POST /uploads/sign</code>) and sends the bytes straight to Supabase Storage with <code>PUT</code>.</li>
+  <li>It saves the returned public URL on the record, for example <code>PATCH /users/me {profilePhotoUrl}</code>. The server checks that the URL is really one of its own images before accepting it.</li>
+</ol>
+
+<h2>Payments</h2>
+<p>Booking a property or buying a product returns a Paystack <code>authorizationUrl</code>, which the app opens with <code>url_launcher</code>. The server learns that the payment succeeded from Paystack directly, via its webhook, and the app picks up the new status on its next refresh or live notification.</p>
+
+<h2>Google sign-in</h2>
+<p>On phones, our own button opens the native account picker. On web, Google's own rendered button is shown, because on web that's the only way to get the ID token the server verifies. Both end in <code>AppState.loginWithGoogle</code>.</p>
+
+<h1>7. Real-time updates, sounds and browser pop-ups</h1>
+<p><code>ChatSocketService</code> opens one Socket.IO connection after login, authenticated with the access token, and turns server events into Dart streams.</p>
+<table>
+  <tr><th style="width:28%">Event</th><th>What the app does</th></tr>
+  <tr><td><code>message:new</code></td><td>Open chat screens append the message; inbox lists reload.</td></tr>
+  <tr><td><code>message:read</code></td><td>Your sent messages show "Seen".</td></tr>
+  <tr><td><code>notification:new</code></td><td>Banner, list refresh, admin sound and browser pop-up, unless the push is marked <code>silent</code>.</td></tr>
+  <tr><td><code>thread:claimed</code></td><td>Admin queues reload, the matching banner is dismissed, and open chats re-check whether you can still reply.</td></tr>
+  <tr><td><code>thread:access-revoked</code></td><td>An open chat switches to read-only with a notice.</td></tr>
+  <tr><td><code>admin:badges-changed</code></td><td>The admin console reloads its badge counts.</td></tr>
+</table>
+<p>Admin-only extras, all in <code>NotificationBannerOverlay</code>:</p>
+<ul>
+  <li><strong>Alert sound</strong> (<code>ChatSoundService</code>): at most one sound per 10 seconds, only if the device's sound setting is on.</li>
+  <li><strong>Browser pop-ups</strong> (<code>services/browser_notifications*.dart</code>): shown only when the console tab isn't in view. They use the browser's own Notification feature, through a web-only file loaded with a conditional import. It does nothing on phones.</li>
+</ul>
+
+<h1>8. The screens, area by area</h1>
+<h2>Entry and sign-in (<code>features/splash</code>, <code>onboarding</code>, <code>auth</code>)</h2>
+<table>
+  <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
+  <tr><td>SplashScreen / WebLandingScreen</td><td>First screen on phones / marketing site on web.</td><td>none</td></tr>
+  <tr><td>GetStarted, Login, Signup</td><td>Choose Login or Sign Up, then the role.</td><td>none</td></tr>
+  <tr><td>LoginRoleScreen</td><td>Email and password login; Google; forgot password.</td><td><code>/auth/login</code>, <code>/auth/google</code></td></tr>
+  <tr><td>SignupRoleScreen</td><td>Create account (email and password) or Google.</td><td><code>/auth/signup</code></td></tr>
+  <tr><td>VerifyOtpScreen</td><td>Signup code or login 2FA code; resend.</td><td><code>/auth/verify-signup</code>, <code>/auth/verify-2fa</code>, <code>/auth/resend-otp</code></td></tr>
+  <tr><td>SignupBasicsScreen, SignupDetailsScreen</td><td>Profile setup steps 1 and 2.</td><td><code>PATCH /users/me</code>, uploads</td></tr>
+  <tr><td>Forgot / Reset password</td><td>Reset by emailed code.</td><td><code>/auth/forgot-password</code>, <code>/auth/reset-password</code></td></tr>
+</table>
+<h2>Tenant (<code>features/dashboard</code>)</h2>
+<table>
+  <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
+  <tr><td>TenantDashboardScreen</td><td>Property feed with search and filters, location header, messages and notification icons.</td><td><code>GET /properties</code></td></tr>
+  <tr><td>PropertyDetailScreen</td><td>Gallery, video, details. Tenants: Rent/Book, Message Landlord, favorite. Owners: Edit Property.</td><td><code>/properties/:id</code>, <code>/bookings</code>, <code>/threads</code></td></tr>
+  <tr><td>MessagesScreen, ChatThreadScreen</td><td>Inbox (optionally marketplace-only) and a single chat, with photos and PDF export.</td><td><code>/threads</code>, <code>/threads/:id/messages</code></td></tr>
+  <tr><td>NotificationsScreen (+ detail)</td><td>Notifications; chat ones show the conversation's status and Reply.</td><td><code>/notifications</code>, <code>/threads/:id/summary</code></td></tr>
+  <tr><td>History, Wishlist</td><td>Bookings and payments; saved properties.</td><td><code>/bookings/mine</code>, <code>/favorites</code></td></tr>
+  <tr><td>Profile, EditProfile, Settings</td><td>Profile and photo, theme, notifications, 2FA, App Lock, deactivate or delete.</td><td><code>/users/me</code>, <code>/auth/*</code></td></tr>
+</table>
+<h2>Landlord (<code>features/landlord</code>)</h2>
+<table>
+  <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
+  <tr><td>LandlordDashboardScreen</td><td>Tabs: Home, Messages, Bookings, Profile.</td><td>(tabs below)</td></tr>
+  <tr><td>LandlordHomeTab</td><td>Stats (including the real booking-request count), incoming bookings, uploads.</td><td><code>/bookings/landlord</code></td></tr>
+  <tr><td>LandlordPropertiesScreen, LandlordAddPropertyScreen</td><td>Own listings; add or edit with photos and video.</td><td><code>/properties</code>, uploads</td></tr>
+  <tr><td>LandlordBookingsScreen</td><td>Requests, inspections, move-ins, rejections.</td><td><code>/bookings/*</code></td></tr>
+  <tr><td>LandlordMessagesScreen</td><td>Inbox with All and Unread filters, plus search.</td><td><code>/threads</code></td></tr>
+  <tr><td>BankDetailsScreen.landlord()</td><td>Payout account, checked with Paystack.</td><td><code>/paystack/*</code>, <code>/users/me/bank-details</code></td></tr>
+</table>
+<h2>Marketplace (<code>features/Market place</code>)</h2>
+<table>
+  <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
+  <tr><td>MarketplaceAuthScreen</td><td>Shop as a customer, become a vendor, or open your shop.</td><td><code>/vendors/me</code></td></tr>
+  <tr><td>MarketplaceHomeScreen, ProductDetail</td><td>Browse, cart and checkout (opens Paystack).</td><td><code>/marketplace/products</code>, <code>/marketplace/orders</code></td></tr>
+  <tr><td>OrderHistoryScreen</td><td>Your orders; confirm received; message the vendor.</td><td><code>/marketplace/orders/mine</code></td></tr>
+  <tr><td>VendorSignup, VendorDashboard, VendorProducts, AddProduct</td><td>Apply for a shop; manage products and orders.</td><td><code>/vendors</code>, <code>/marketplace/*</code></td></tr>
+  <tr><td>VendorEditProfile, BankDetailsScreen.vendor()</td><td>Shop profile and payout account.</td><td><code>PATCH /vendors/me</code></td></tr>
+</table>
+<h2>Admin console (<code>features/admin</code>)</h2>
+<p><code>AdminShell</code> hosts the tabs: Dashboard, Users, Vendors, Reports, and a More sheet with Properties, Marketplace, Messages, Admins, Activity Log and Chat Log. Detail pages cover a user, vendor, property, order or report. What each admin level can see is described in the Admin Guide. The shell also:</p>
+<ul>
+  <li>enforces the 15-minute idle sign-out;</li>
+  <li>forces a password change when <code>mustChangePassword</code> is set;</li>
+  <li>loads badge counts live;</li>
+  <li>hosts Account Settings: 2FA, change password, On duty, alert sounds, browser pop-ups.</li>
+</ul>
+
+<h1>9. Look and feel</h1>
+<ul>
+  <li><strong>Fonts:</strong> Quity for headings, Givonic for body text. Both are bundled with the app, never downloaded (<code>AppTextStyles</code>).</li>
+  <li><strong>Fixed brand colors:</strong> <code>AppColors</code> (navy, gold, sand and so on). The auth screens and admin console use these directly.</li>
+  <li><strong>Role colors:</strong> <code>UserRole</code> gives the auth screens navy for tenants and gold/sand for landlords.</li>
+  <li><strong>Dashboard themes:</strong> <code>DashboardTheme</code> offers user-selectable palettes (Classic, Midnight, Sand) for the dashboards, marketplace and vendor screens. Each theme defines matching pairs: <code>background/foreground</code>, <code>surface/onSurface</code>, <code>accent/onAccent</code>.</li>
+</ul>
+<div class="warn"><strong>The contrast rule (from <code>CLAUDE.md</code>):</strong> every piece of text needs an explicit color that is checked against the exact background it sits on. Only use each theme pair together; <code>background/foreground</code> flip between themes. When giving a field a custom fill color, always pass its text color too. Invisible text has been this app's most common bug.</div>
+<p>Layouts are designed for phones first and centred with a maximum width on larger screens (<code>ResponsiveCenter</code>).</p>
+
+<h1>10. Web-specific setup</h1>
+<h2>Vercel build</h2>
+<p><code>vercel.json</code> clones Flutter, runs <code>flutter build web --release --dart-define=API_BASE_URL=...</code>, and serves <code>build/web</code>. Every pull request gets a preview deployment.</p>
+<h2>Content-Security-Policy</h2>
+<p>The site sends a strict security policy. Anything the app loads from elsewhere must be listed in <code>vercel.json</code>; if something silently stops working on web, check here first.</p>
+<table>
+  <tr><th style="width:36%">Allowed</th><th>Why</th></tr>
+  <tr><td><code>https://www.gstatic.com</code></td><td>Flutter's rendering engine (CanvasKit).</td></tr>
+  <tr><td><code>https://fonts.gstatic.com</code></td><td>Flutter's fallback fonts. Without it, text in default fonts rendered invisible.</td></tr>
+  <tr><td><code>blob:</code> (connect)</td><td>Reading a picked photo before upload. Without it, uploads failed with "could not reach the server".</td></tr>
+  <tr><td><code>https://*.supabase.co</code></td><td>Uploading to and showing images from storage.</td></tr>
+  <tr><td>API host (https and wss)</td><td>The REST API and the live connection.</td></tr>
+  <tr><td><code>https://accounts.google.com</code></td><td>Google sign-in button and popup.</td></tr>
+</table>
+<h2>Sessions per tab</h2>
+<p>On web, login tokens and preferences are kept in <code>sessionStorage</code>, which is separate for each tab. That way two people signed in on different tabs of the same browser never share a session. The trade-off is that opening a new tab means signing in again.</p>
+<h2>Web addresses</h2>
+<p>The app uses hash-style addresses (<code>/#/admin-login</code>), so any page can be refreshed without extra server setup.</p>
+
+<h1>11. Testing, building and conventions</h1>
+<pre><code>flutter pub get
+flutter analyze            # must report "No issues found!"
+flutter test               # all tests must pass
+flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:3000/api
+flutter build web --release --dart-define=API_BASE_URL=https://&lt;api-host&gt;/api</code></pre>
+<h2>Conventions</h2>
+<ul>
+  <li><strong>New backend call:</strong> add a method to the relevant repository, wrap it in <code>_client.call</code>, and parse the response with a model's <code>fromApi</code>.</li>
+  <li><strong>New named page:</strong> add a <code>GoRoute</code> and decide whether it's a pre-auth page (<code>_preAuthPaths</code>). Add a test to <code>router_redirect_test.dart</code> if it affects redirects.</li>
+  <li><strong>Before copying a screen:</strong> reuse the shared widgets in <code>lib/widgets</code>. Parameterise by role instead of duplicating; earlier copies drifted apart and caused bugs.</li>
+  <li><strong>Web-only code:</strong> put it behind a conditional import with a no-op stub, as in <code>browser_notifications*.dart</code> and <code>google_web_button*.dart</code>.</li>
+  <li><strong>Permissions:</strong> never rely on hiding a button. The server must refuse the action too.</li>
+</ul>
