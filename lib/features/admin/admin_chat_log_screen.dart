@@ -9,6 +9,7 @@ import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/admin_filter_chip.dart';
+import 'widgets/support_thread_actions.dart';
 
 enum _ChatLogFilter { all, unattended, opened, resolved }
 
@@ -61,6 +62,15 @@ class _AdminChatLogScreenState extends State<AdminChatLogScreen> {
           threadId: entry.id,
           showExportAction: true,
           readOnly: true,
+          isResolved: entry.status == ChatLogStatus.resolved,
+          // This screen is super-admin only, so every open conversation
+          // here can be handed to another admin.
+          onReassign: entry.status == ChatLogStatus.resolved
+              ? null
+              : () async {
+                  final reassigned = await reassignSupportThread(context, entry.id, currentAdminId: entry.currentAdminId);
+                  if (reassigned && mounted) _load();
+                },
         ),
       ),
     );

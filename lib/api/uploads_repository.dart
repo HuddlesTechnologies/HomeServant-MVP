@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mime/mime.dart';
 import '../widgets/upload_picker.dart';
 import 'api_client.dart';
+import 'api_exception.dart';
 
 /// Uploads a picked file straight to Supabase Storage using a signed URL
 /// minted by the API (`POST /uploads/sign`), then returns the file's public
@@ -23,7 +24,16 @@ class UploadsRepository {
 
   Future<String> upload({required PickedUpload file, required String folder}) {
     return _client.call(() async {
-      final bytes = await _readBytes(file);
+      final Uint8List bytes;
+      try {
+        bytes = await _readBytes(file);
+      } catch (_) {
+        // On web this read goes to the picked file's blob: URL, which the
+        // site's Content-Security-Policy must allow (connect-src blob:) —
+        // when it didn't, this surfaced as a misleading "Could not reach
+        // the server".
+        throw ApiException(0, "Couldn't read the selected file. Please pick it again.");
+      }
       // Sniff the real type from the file's first bytes when the name alone
       // doesn't say (e.g. a web blob name with no extension) — the sign
       // endpoint rejects a fileName without an image extension, and the
@@ -35,18 +45,19 @@ class UploadsRepository {
       final signedUrl = signed.data['signedUrl'] as String;
       final publicUrl = signed.data['publicUrl'] as String;
 
-      await Dio().put(
-        signedUrl,
-        // Browsers refuse a script-set Content-Length (they compute it
-        // themselves), so it's only sent off-web.
-        data: kIsWeb ? bytes : Stream.fromIterable([bytes]),
-        options: Options(
-          headers: {
-            Headers.contentTypeHeader: contentType,
-            if (!kIsWeb) Headers.contentLengthHeader: bytes.length,
-          },
-        ),
-      );
+      try {
+        await Dio().put(
+          signedUrl,
+          // Browsers refuse a script-set Content-Length (they compute it
+          // themselves), so it's only sent off-web.
+          data: kIsWeb ? bytes : Stream.fromIterable([bytes]),
+          options: Options(headers: {Headers.contentTypeHeader: contentType, if (!kIsWeb) Headers.contentLengthHeader: bytes.length}),
+        );
+      } on DioException {
+        // Storage upload (straight to Supabase), not our API — say so
+        // rather than the generic "Could not reach the server".
+        throw ApiException(0, "Couldn't upload the file. Please try again.");
+      }
       return publicUrl;
     });
   }

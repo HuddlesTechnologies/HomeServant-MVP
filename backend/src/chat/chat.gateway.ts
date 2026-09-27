@@ -14,6 +14,7 @@ import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { PresenceService } from './presence.service';
+import { adminCanAccessSupportThread } from './support-access';
 
 /// Same allow-list `main.ts` builds from CORS_ORIGINS for the REST API —
 /// duplicated here because `@WebSocketGateway`'s options are evaluated at
@@ -80,8 +81,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /// just that thread's room — unused for now beyond acking the join so
   /// the client knows the socket is live.
   ///
-  /// Mirrors ChatService.assertParticipant's membership check (a real
-  /// ThreadParticipant row, or an admin on a support thread) — without it,
+  /// Mirrors ChatService.assertCanRead (a real
+  /// ThreadParticipant row, or an admin allowed into a support thread — see
+  /// adminCanAccessSupportThread) — without it,
   /// any authenticated socket could join an arbitrary thread id it merely
   /// guessed or came across and silently receive every message
   /// [broadcastMessage] emits into that thread's room, regardless of
@@ -96,8 +98,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!membership) {
       const role = client.data.role as string | undefined;
       if (role !== 'ADMIN') return;
-      const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { isSupport: true } });
-      if (!thread?.isSupport) return;
+      const thread = await this.prisma.thread.findUnique({
+        where: { id: threadId },
+        select: { isSupport: true, assignedAdminId: true },
+      });
+      if (!thread || !(await adminCanAccessSupportThread(this.prisma, thread, userId))) return;
     }
 
     client.join(this.threadRoom(threadId));
@@ -129,6 +134,35 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /// Queue tab update live instead of waiting for a manual refresh.
   broadcastToAdmins(event: string, payload: unknown): void {
     this.server.to(this.adminRoom()).emit(event, payload);
+  }
+
+  /// Called whenever a support thread changes hands (claimed from the
+  /// queue, claimed by a first reply, or transferred). Any socket in the
+  /// thread's room that's no longer allowed in — not a participant, and not
+  /// an admin who still passes adminCanAccessSupportThread — is removed
+  /// from the room so it stops receiving that thread's live messages, and
+  /// told why. Without this, a socket that joined while the thread was
+  /// unclaimed stayed in the room after another admin took it over, even
+  /// though every REST call was already refused.
+  async evictUnauthorizedFromThread(threadId: string): Promise<void> {
+    const room = this.threadRoom(threadId);
+    const sockets = await this.server.in(room).fetchSockets();
+    if (sockets.length === 0) return;
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: { isSupport: true, assignedAdminId: true, participants: { select: { userId: true } } },
+    });
+    if (!thread) return;
+    const participantIds = new Set(thread.participants.map((p) => p.userId));
+    for (const socket of sockets) {
+      const userId = socket.data.userId as string | undefined;
+      if (userId && participantIds.has(userId)) continue;
+      if (userId && socket.data.role === 'ADMIN' && (await adminCanAccessSupportThread(this.prisma, thread, userId))) {
+        continue;
+      }
+      socket.leave(room);
+      socket.emit('thread:access-revoked', { threadId });
+    }
   }
 
   private userRoom(userId: string): string {

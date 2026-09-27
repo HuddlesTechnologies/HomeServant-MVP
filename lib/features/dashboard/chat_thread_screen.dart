@@ -69,6 +69,7 @@ class ChatThreadScreen extends StatefulWidget {
     this.isResolved = false,
     this.onResolve,
     this.onTransfer,
+    this.onReassign,
     this.readOnly = false,
   });
 
@@ -127,6 +128,11 @@ class ChatThreadScreen extends StatefulWidget {
   final Future<void> Function()? onResolve;
   final Future<void> Function()? onTransfer;
 
+  /// Super admins viewing a support conversation they aren't handling:
+  /// hand it to another admin (see reassignSupportThread). Shown even
+  /// though the screen is otherwise read-only for them.
+  final Future<void> Function()? onReassign;
+
   /// True for the super-admin Chat Log's history viewer — hides the input
   /// row and the resolve/transfer bar entirely so browsing another admin's
   /// past conversation can't be mistaken for actually replying to it.
@@ -151,6 +157,16 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   bool _exportingPdf = false;
   bool _resolvingOrTransferring = false;
   bool _sendingImage = false;
+  StreamSubscription<String>? _claimedSubscription;
+  StreamSubscription<String>? _accessRevokedSubscription;
+
+  /// Set once an admin loses the ability to reply here while the screen is
+  /// open — another admin took the support conversation over, or it was
+  /// transferred away or resolved. Turns the screen read-only and explains
+  /// why, instead of leaving a composer whose sends the server now refuses.
+  String? _accessNotice;
+
+  bool get _readOnly => widget.readOnly || _accessNotice != null;
 
   @override
   void initState() {
@@ -164,7 +180,41 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       final chatSocket = context.read<AppState>().chatSocket;
       _socketSubscription = chatSocket.onNewMessage.listen(_onSocketMessage);
       _readSubscription = chatSocket.onRead.listen(_onSocketRead);
+      if (context.read<AppState>().role.isAdmin) {
+        // A claim or transfer of *this* thread may have just taken it away
+        // from this admin — re-check rather than guess from the event.
+        _claimedSubscription = chatSocket.onThreadClaimed.listen((id) {
+          if (id == threadId) _refreshAccess();
+        });
+        _accessRevokedSubscription = chatSocket.onAccessRevoked.listen((id) {
+          if (id == threadId) _refreshAccess();
+        });
+      }
     }
+  }
+
+  /// Admin-only: asks the server whether this admin can still reply here
+  /// (see backend ChatService.getThreadSummary) and updates [_accessNotice].
+  Future<void> _refreshAccess() async {
+    final threadId = widget.threadId;
+    if (threadId == null || widget.readOnly) return;
+    final appState = context.read<AppState>();
+    String? notice;
+    try {
+      final summary = await appState.chat.summary(threadId);
+      if (!summary.canReply) {
+        final assigned = summary.assignedAdmin;
+        notice = summary.resolved
+            ? 'This conversation has been resolved.'
+            : assigned != null && assigned.id != appState.userId
+            ? 'This conversation is now handled by ${assigned.displayName}.'
+            : "You can't reply to this conversation anymore.";
+      }
+    } on ApiException {
+      notice = "You don't have access to this conversation anymore.";
+    }
+    if (!mounted) return;
+    setState(() => _accessNotice = notice);
   }
 
   /// The other participant just read this thread — flip every message we
@@ -253,6 +303,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   @override
   void dispose() {
+    _claimedSubscription?.cancel();
+    _accessRevokedSubscription?.cancel();
     _socketSubscription?.cancel();
     _readSubscription?.cancel();
     _inputController.dispose();
@@ -315,6 +367,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     } finally {
       if (mounted) setState(() => _resolvingOrTransferring = false);
     }
+    // Resolving or handing it off ends this admin's ability to reply.
+    if (mounted) await _refreshAccess();
   }
 
   Future<void> _handleTransfer() async {
@@ -323,6 +377,19 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     setState(() => _resolvingOrTransferring = true);
     try {
       await onTransfer();
+    } finally {
+      if (mounted) setState(() => _resolvingOrTransferring = false);
+    }
+    // Resolving or handing it off ends this admin's ability to reply.
+    if (mounted) await _refreshAccess();
+  }
+
+  Future<void> _handleReassign() async {
+    final onReassign = widget.onReassign;
+    if (onReassign == null || _resolvingOrTransferring) return;
+    setState(() => _resolvingOrTransferring = true);
+    try {
+      await onReassign();
     } finally {
       if (mounted) setState(() => _resolvingOrTransferring = false);
     }
@@ -534,7 +601,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 ),
               if (orderItem != null && orderStatus != null)
                 _OrderStatusBanner(theme: theme, item: orderItem, status: orderStatus),
-              if (widget.showResolveTransferActions && !widget.readOnly)
+              if (widget.onReassign != null && !widget.isResolved)
+                _ReassignBar(
+                  theme: theme,
+                  busy: _resolvingOrTransferring,
+                  onReassign: _handleReassign,
+                ),
+              if (widget.showResolveTransferActions && !_readOnly)
                 _ResolveTransferBar(
                   theme: theme,
                   isResolved: widget.isResolved,
@@ -637,7 +710,28 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     ),
                   ),
                 ),
-              if (!widget.readOnly)
+              if (_accessNotice != null)
+                // theme.surface/onSurface: a fixed light-surface/navy-text
+                // pair in every DashboardTheme (see CLAUDE.md).
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lock_outline_rounded, color: theme.onSurface, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _accessNotice!,
+                          style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (!_readOnly)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Row(
@@ -902,6 +996,50 @@ class _ResolveTransferBar extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// A super admin's view into someone else's support conversation: says
+/// it's read-only and offers Reassign. theme.surface/onSurface is a fixed
+/// light-surface/navy-text pair in every DashboardTheme (see CLAUDE.md);
+/// the button uses the accent/onAccent pair.
+class _ReassignBar extends StatelessWidget {
+  const _ReassignBar({required this.theme, required this.busy, required this.onReassign});
+
+  final DashboardTheme theme;
+  final bool busy;
+  final VoidCallback onReassign;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Icon(Icons.visibility_outlined, color: theme.onSurface, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Viewing as super admin',
+              style: AppTextStyles.body(color: theme.onSurface, size: 12.5, weight: FontWeight.w600),
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: busy ? null : onReassign,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.accent,
+              disabledBackgroundColor: theme.accent.withValues(alpha: 0.5),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            icon: Icon(Icons.swap_horiz_rounded, color: theme.onAccent, size: 16),
+            label: Text('Reassign', style: AppTextStyles.body(color: theme.onAccent, size: 12.5, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
     );
   }
 }

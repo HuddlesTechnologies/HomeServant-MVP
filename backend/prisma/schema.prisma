@@ -457,6 +457,13 @@ model Notification {
   type      NotificationType
   title     String
   body      String
+  /// The chat thread a message/transfer/resolved notification is about,
+  /// so the client can open it (or show that it's since been transferred
+  /// or resolved) straight from the notification. Deliberately not a
+  /// foreign key: support threads are purged after 30 days
+  /// (SupportChatCleanupService) and the notification should outlive that,
+  /// just without a working link. Null for every other notification type.
+  threadId  String?
   readAt    DateTime?
   createdAt DateTime         @default(now())
 

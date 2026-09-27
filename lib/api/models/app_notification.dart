@@ -39,6 +39,7 @@ class AppNotification {
     required this.body,
     required this.createdAt,
     this.readAt,
+    this.threadId,
   });
 
   final String id;
@@ -47,6 +48,11 @@ class AppNotification {
   final String body;
   final DateTime createdAt;
   final DateTime? readAt;
+
+  /// The chat thread a message/transfer/resolved notification is about —
+  /// lets the detail screen show its current status and open it. Null for
+  /// other types, and for notifications created before this was recorded.
+  final String? threadId;
 
   bool get isRead => readAt != null;
 
@@ -57,5 +63,6 @@ class AppNotification {
     body: json['body'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
     readAt: json['readAt'] != null ? DateTime.parse(json['readAt'] as String) : null,
+    threadId: json['threadId'] as String?,
   );
 }

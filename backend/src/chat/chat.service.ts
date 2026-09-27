@@ -9,6 +9,7 @@ import { ChatGateway } from './chat.gateway';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { PresenceService } from './presence.service';
+import { adminCanAccessSupportThread } from './support-access';
 
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_LOG_WINDOW_DAYS = 30;
@@ -238,6 +239,7 @@ export class ChatService {
 
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: adminId });
     this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+    await this.gateway.evictUnauthorizedFromThread(threadId);
   }
 
   /// Race-safe "claim this unattended support thread" primitive shared by
@@ -261,13 +263,16 @@ export class ChatService {
 
   /// Sets `status: RESOLVED` — from that point [findForUser] hides this
   /// thread from the *user's* inbox (see its `isAdmin` param); the admin
-  /// side still shows it until the 30-day cleanup cron purges it. Any admin
-  /// can resolve it, not just whoever's assigned, same as any admin can
-  /// see the shared queue. [adminId] is only used for the activity-log
-  /// entry — it plays no part in authorization.
+  /// side still shows it until the 30-day cleanup cron purges it. Only the
+  /// admin handling it can resolve it, or any admin while it's still
+  /// unclaimed (see [canWrite]). A SUPER_ADMIN viewing someone else's
+  /// conversation is read-only and can't resolve it.
   async resolveSupportThread(threadId: string, adminId: string): Promise<void> {
     const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, include: { participants: true } });
     if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
+    if (!(await this.canWrite(threadId, adminId, UserRole.ADMIN))) {
+      throw new ForbiddenException('Another admin is handling this conversation');
+    }
     if (thread.status === 'RESOLVED') return;
     await this.prisma.thread.update({ where: { id: threadId }, data: { status: 'RESOLVED', resolvedAt: new Date() } });
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_RESOLVED, { actorId: adminId });
@@ -279,12 +284,80 @@ export class ChatService {
         NotificationType.SUPPORT_THREAD_RESOLVED,
         'Your support conversation was resolved',
         "An admin marked your support conversation as resolved. Reach out again any time if you still need help.",
+        threadId,
       );
     }
   }
 
+  /// Where a thread stands *now*, for the caller — what the client shows
+  /// when someone opens a chat notification: still waiting for an admin,
+  /// being handled (by them or by whom), transferred away, or resolved,
+  /// and whether they can open it ([canView]) and reply ([canReply]).
+  /// Visible to participants, to admins allowed into a support thread (see
+  /// adminCanAccessSupportThread), and to an admin who transferred the
+  /// thread away — they get the status (so their notification can say where
+  /// it went) but canView false, since it's no longer theirs to read.
+  async getThreadSummary(threadId: string, userId: string, role: UserRole) {
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      include: {
+        participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
+        assignedAdmin: { select: { id: true, fullName: true } },
+        transferLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { fromAdmin: { select: { id: true, fullName: true } }, toAdmin: { select: { id: true, fullName: true } } },
+        },
+      },
+    });
+    if (!thread) throw new NotFoundException('This conversation no longer exists');
+
+    const isAdmin = role === UserRole.ADMIN;
+    const isParticipant = thread.participants.some((p) => p.userId === userId);
+    const transferredByMe =
+      isAdmin &&
+      (await this.prisma.threadTransferLog.count({ where: { threadId, fromAdminId: userId } })) > 0;
+    const canView = isParticipant || (isAdmin && (await adminCanAccessSupportThread(this.prisma, thread, userId)));
+    if (!canView && !transferredByMe) throw new ForbiddenException('Not a participant of this thread');
+
+    const resolved = thread.status === 'RESOLVED';
+    const unclaimedSupport = thread.isSupport && !thread.assignedAdminId;
+    const lastTransfer = thread.transferLogs[0];
+    return {
+      id: thread.id,
+      isSupport: thread.isSupport,
+      resolved,
+      resolvedAt: thread.resolvedAt,
+      assignedAdmin: thread.assignedAdmin,
+      lastTransfer: lastTransfer
+        ? { fromAdmin: lastTransfer.fromAdmin, toAdmin: lastTransfer.toAdmin, createdAt: lastTransfer.createdAt }
+        : null,
+      otherParticipants: thread.participants.filter((p) => p.userId !== userId).map((p) => p.user),
+      canView,
+      // A SUPER_ADMIN can hand an open support conversation to any admin
+      // (see reassignThread) unless they're the one handling it — then the
+      // ordinary Transfer applies.
+      canReassign:
+        isAdmin &&
+        thread.isSupport &&
+        !resolved &&
+        thread.assignedAdminId !== userId &&
+        (await this.prisma.user.findUnique({ where: { id: userId }, select: { adminLevel: true } }))?.adminLevel ===
+          'SUPER_ADMIN',
+      // Same rule sendMessage enforces (participant, or any admin on an
+      // unclaimed support thread — replying claims it), plus: nobody
+      // replies into a resolved thread, and an admin doesn't reply into a
+      // support thread another admin is now handling.
+      canReply:
+        !resolved &&
+        (isAdmin && thread.isSupport
+          ? unclaimedSupport || thread.assignedAdminId === userId
+          : isParticipant),
+    };
+  }
+
   async findMessages(threadId: string, userId: string, senderRole?: UserRole, before?: string) {
-    await this.assertParticipant(threadId, userId, senderRole);
+    await this.assertCanRead(threadId, userId, senderRole);
     const messages = await this.prisma.message.findMany({
       where: { threadId, ...(before ? { createdAt: { lt: new Date(before) } } : {}) },
       orderBy: { createdAt: 'desc' },
@@ -295,7 +368,7 @@ export class ChatService {
   }
 
   async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
-    await this.assertParticipant(threadId, userId, senderRole);
+    await this.assertCanWrite(threadId, userId, senderRole);
     const body = dto.body?.trim() ?? '';
     if (!body && !dto.attachmentUrl) {
       throw new BadRequestException('A message needs either text or an image');
@@ -332,6 +405,7 @@ export class ChatService {
       if (claimed) {
         await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: userId });
         this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+        await this.gateway.evictUnauthorizedFromThread(threadId);
       }
     }
 
@@ -347,6 +421,7 @@ export class ChatService {
           NotificationType.NEW_MESSAGE,
           `New message from ${senderName}`,
           previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText,
+          threadId,
         ),
       ),
     );
@@ -365,6 +440,7 @@ export class ChatService {
             NotificationType.NEW_MESSAGE,
             'New support conversation',
             `${senderName}: ${previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText}`,
+            threadId,
           ),
         ),
       );
@@ -375,7 +451,11 @@ export class ChatService {
   }
 
   async markRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
-    await this.assertParticipant(threadId, userId, senderRole);
+    await this.assertCanRead(threadId, userId, senderRole);
+    // A read-only viewer (a SUPER_ADMIN looking into another admin's
+    // conversation) must not mark messages read on that admin's behalf —
+    // it would silently clear their unread badge.
+    if (!(await this.canWrite(threadId, userId, senderRole))) return;
     await this.prisma.message.updateMany({
       where: { threadId, senderId: { not: userId }, readAt: null },
       data: { readAt: new Date() },
@@ -391,20 +471,107 @@ export class ChatService {
     return participants.map((p) => p.userId);
   }
 
-  /// [senderRole] lets any admin read/reply to an unclaimed support thread
-  /// even before they're a [ThreadParticipant] of it (see [sendMessage]'s
-  /// auto-claim, which is what actually adds them as one) — every other
-  /// thread, and every other role, still requires real participancy.
-  private async assertParticipant(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
+  /// Who may *reply* (send, mark read, resolve): a real [ThreadParticipant],
+  /// or any admin on a support thread nobody has claimed yet (the shared
+  /// Support Queue — [sendMessage]'s auto-claim is what then makes them a
+  /// participant). Every other thread, and every other role, requires real
+  /// participancy.
+  private async canWrite(threadId: string, userId: string, senderRole?: UserRole): Promise<boolean> {
     const membership = await this.prisma.threadParticipant.findUnique({
       where: { threadId_userId: { threadId, userId } },
     });
-    if (membership) return;
+    if (membership) return true;
+    if (senderRole !== 'ADMIN') return false;
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    return !!thread && thread.isSupport && !thread.assignedAdminId;
+  }
+
+  private async assertCanWrite(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
+    if (!(await this.canWrite(threadId, userId, senderRole))) {
+      throw new ForbiddenException('Not a participant of this thread');
+    }
+  }
+
+  /// Who may *read*: everyone who can write, plus a SUPER_ADMIN on a
+  /// support thread another admin is handling — read-only oversight (see
+  /// adminCanAccessSupportThread). No other admin can see into a support
+  /// thread someone else is handling.
+  private async assertCanRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
+    if (await this.canWrite(threadId, userId, senderRole)) return;
     if (senderRole === 'ADMIN') {
       const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
-      if (thread?.isSupport) return;
+      if (thread && (await adminCanAccessSupportThread(this.prisma, thread, userId))) return;
     }
     throw new ForbiddenException('Not a participant of this thread');
+  }
+
+  /// SUPER_ADMIN-only (enforced by the controller's guards): moves an open
+  /// support thread to [toAdminId] regardless of who's handling it — for a
+  /// conversation stuck with an admin who's away, or one nobody has picked
+  /// up. Unlike [transferThread], the caller doesn't need to be in the
+  /// thread (a super admin only ever reads other admins' chats). The
+  /// previous handler's participant row is handed to [toAdminId] (so they
+  /// lose access, same as after a normal transfer), the hand-off is
+  /// recorded in the transfer chain, and both the new and previous admin
+  /// are notified.
+  async reassignThread(threadId: string, superAdminId: string, toAdminId: string): Promise<void> {
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
+    if (thread.status === 'RESOLVED') throw new ForbiddenException("Can't reassign a resolved conversation");
+    if (thread.assignedAdminId === toAdminId) throw new ForbiddenException('That admin is already handling this conversation');
+
+    const toAdmin = await this.prisma.user.findUnique({ where: { id: toAdminId } });
+    if (!toAdmin || toAdmin.role !== 'ADMIN') throw new NotFoundException('Admin not found');
+
+    const previousAdminId = thread.assignedAdminId;
+    const previousMembership = previousAdminId
+      ? await this.prisma.threadParticipant.findUnique({ where: { threadId_userId: { threadId, userId: previousAdminId } } })
+      : null;
+    const newAdminAlreadyIn = await this.prisma.threadParticipant.findUnique({
+      where: { threadId_userId: { threadId, userId: toAdminId } },
+    });
+
+    await this.prisma.$transaction([
+      // Hand the previous handler's seat over (keeps their messages'
+      // history/read state intact, same as transferThread), or add the new
+      // admin fresh if nobody held one.
+      ...(previousMembership && !newAdminAlreadyIn
+        ? [this.prisma.threadParticipant.update({ where: { id: previousMembership.id }, data: { userId: toAdminId } })]
+        : previousMembership
+          ? [this.prisma.threadParticipant.delete({ where: { id: previousMembership.id } })]
+          : []),
+      ...(!previousMembership && !newAdminAlreadyIn
+        ? [this.prisma.threadParticipant.create({ data: { threadId, userId: toAdminId } })]
+        : []),
+      this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: toAdminId } }),
+      this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId: previousAdminId, toAdminId } }),
+    ]);
+    await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: superAdminId, targetId: toAdminId });
+    this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+    await this.gateway.evictUnauthorizedFromThread(threadId);
+
+    await this.notifications.create(
+      toAdminId,
+      NotificationType.THREAD_TRANSFERRED,
+      'A conversation was assigned to you',
+      'A super admin assigned a support conversation to you.',
+      threadId,
+    );
+    await this.mail.send(
+      toAdmin.email,
+      'A HomeServant conversation was assigned to you',
+      '<p>A super admin assigned a support conversation to you — open Messages in the admin console to continue it.</p>',
+      'A super admin assigned a support conversation to you — open Messages in the admin console to continue it.',
+    );
+    if (previousAdminId && previousAdminId !== superAdminId) {
+      await this.notifications.create(
+        previousAdminId,
+        NotificationType.THREAD_TRANSFERRED,
+        'A conversation was reassigned',
+        `A super admin reassigned a support conversation you were handling to ${toAdmin.fullName ?? 'another admin'}.`,
+        threadId,
+      );
+    }
   }
 
   /// Hands a console conversation off to another admin, "the way Namecheap
@@ -443,12 +610,18 @@ export class ChatService {
       this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId, toAdminId } }),
     ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: fromAdminId, targetId: toAdminId });
+    // Same "this thread changed hands" signal a claim sends — lets any
+    // admin with it open (including the one who just handed it off)
+    // re-check their access and go read-only.
+    this.gateway.broadcastToAdmins('thread:claimed', { threadId });
+    await this.gateway.evictUnauthorizedFromThread(threadId);
 
     await this.notifications.create(
       toAdminId,
       NotificationType.THREAD_TRANSFERRED,
       'A conversation was transferred to you',
       'Another admin handed off a console conversation to you.',
+      threadId,
     );
     await this.mail.send(
       toAdmin.email,

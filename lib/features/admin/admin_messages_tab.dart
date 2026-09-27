@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
-import '../../api/models/admin_models.dart';
 import '../../api/models/chat.dart';
 import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
@@ -14,7 +13,7 @@ import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'widgets/admin_filter_chip.dart';
-import 'widgets/admin_picker_sheet.dart';
+import 'widgets/support_thread_actions.dart';
 import 'widgets/admin_badge.dart';
 
 /// The admin console's messaging area — the signed-in admin's own inbox
@@ -83,7 +82,10 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
           _error = null;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      // Keep the real cause visible in the browser console — this message
+      // alone can't tell a network failure from a parsing bug.
+      debugPrint('Admin messages failed to load: $e');
       if (!mounted) return;
       setState(() => _error = "Couldn't load messages.");
     }
@@ -149,41 +151,11 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
   }
 
   Future<void> _resolve(String threadId) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await context.read<AppState>().chat.resolveThread(threadId);
-      messenger.showSnackBar(const SnackBar(content: Text('Marked resolved')));
-      _load();
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    }
+    if (await resolveSupportThread(context, threadId) && mounted) _load();
   }
 
   Future<void> _transfer(String threadId) async {
-    final messenger = ScaffoldMessenger.of(context);
-    List<AdminAccount> admins;
-    try {
-      admins = await context.read<AppState>().admin.findAdmins();
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-      return;
-    }
-    if (!mounted) return;
-    final myId = context.read<AppState>().userId;
-    final chosen = await showAdminPickerSheet(
-      context,
-      admins: admins,
-      title: 'Transfer conversation to',
-      excludeAdminIds: {if (myId != null) myId},
-    );
-    if (chosen == null || !mounted) return;
-    try {
-      await context.read<AppState>().chat.transferThread(threadId, chosen.id);
-      messenger.showSnackBar(SnackBar(content: Text('Transferred to ${chosen.email}')));
-      _load();
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    }
+    if (await transferSupportThread(context, threadId) && mounted) _load();
   }
 
   @override

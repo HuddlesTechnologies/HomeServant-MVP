@@ -59,7 +59,11 @@ class ChatMessage {
 
   final String id;
   final String threadId;
-  final String senderId;
+  /// Null once the sender's account has been deleted — Message.sender is
+  /// `onDelete: SetNull`, so their messages stay in the thread without one.
+  /// Parsing this as non-null used to throw on any thread holding such a
+  /// message, failing the whole inbox load ("Couldn't load messages").
+  final String? senderId;
   final String senderName;
   final String body;
   final DateTime createdAt;
@@ -81,8 +85,10 @@ class ChatMessage {
   factory ChatMessage.fromApi(Map<String, dynamic> json) => ChatMessage(
     id: json['id'] as String,
     threadId: json['threadId'] as String,
-    senderId: json['senderId'] as String,
-    senderName: (json['sender'] as Map<String, dynamic>?)?['fullName'] as String? ?? 'User',
+    senderId: json['senderId'] as String?,
+    senderName:
+        (json['sender'] as Map<String, dynamic>?)?['fullName'] as String? ??
+        (json['senderId'] == null ? 'Deleted user' : 'User'),
     body: json['body'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
     readAt: (json['readAt'] as String?) != null ? DateTime.parse(json['readAt'] as String) : null,
@@ -214,6 +220,81 @@ class SupportQueueThread {
       lastMessage: lastMessage != null ? ChatMessage.fromApi(lastMessage) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+    );
+  }
+}
+
+/// A person reference inside a [ThreadSummary] (an admin, or the other
+/// side of the conversation).
+class ThreadPersonRef {
+  const ThreadPersonRef({required this.id, this.fullName, this.profilePhotoUrl});
+
+  final String id;
+  final String? fullName;
+  final String? profilePhotoUrl;
+
+  String get displayName => fullName?.trim().isNotEmpty == true ? fullName! : 'an admin';
+
+  static ThreadPersonRef? fromApi(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    return ThreadPersonRef(
+      id: json['id'] as String,
+      fullName: json['fullName'] as String?,
+      profilePhotoUrl: json['profilePhotoUrl'] as String?,
+    );
+  }
+}
+
+/// Where a thread stands now, for the signed-in user — `GET
+/// /threads/:id/summary` (see backend ChatService.getThreadSummary). Shown
+/// when a chat notification is opened.
+class ThreadSummary {
+  const ThreadSummary({
+    required this.id,
+    required this.isSupport,
+    required this.resolved,
+    required this.canView,
+    required this.canReply,
+    required this.otherParticipants,
+    this.canReassign = false,
+    this.resolvedAt,
+    this.assignedAdmin,
+    this.lastTransferFrom,
+    this.lastTransferTo,
+  });
+
+  final String id;
+  final bool isSupport;
+  final bool resolved;
+  final DateTime? resolvedAt;
+  final ThreadPersonRef? assignedAdmin;
+  final ThreadPersonRef? lastTransferFrom;
+  final ThreadPersonRef? lastTransferTo;
+  final List<ThreadPersonRef> otherParticipants;
+  final bool canView;
+  final bool canReply;
+
+  /// Super admins only: can hand this open support conversation to another
+  /// admin even though they aren't handling it themselves.
+  final bool canReassign;
+
+  factory ThreadSummary.fromApi(Map<String, dynamic> json) {
+    final transfer = json['lastTransfer'] as Map<String, dynamic>?;
+    return ThreadSummary(
+      id: json['id'] as String,
+      isSupport: json['isSupport'] as bool? ?? false,
+      resolved: json['resolved'] as bool? ?? false,
+      resolvedAt: json['resolvedAt'] != null ? DateTime.parse(json['resolvedAt'] as String) : null,
+      assignedAdmin: ThreadPersonRef.fromApi(json['assignedAdmin']),
+      lastTransferFrom: ThreadPersonRef.fromApi(transfer?['fromAdmin']),
+      lastTransferTo: ThreadPersonRef.fromApi(transfer?['toAdmin']),
+      otherParticipants: (json['otherParticipants'] as List? ?? const [])
+          .map(ThreadPersonRef.fromApi)
+          .whereType<ThreadPersonRef>()
+          .toList(),
+      canView: json['canView'] as bool? ?? false,
+      canReply: json['canReply'] as bool? ?? false,
+      canReassign: json['canReassign'] as bool? ?? false,
     );
   }
 }

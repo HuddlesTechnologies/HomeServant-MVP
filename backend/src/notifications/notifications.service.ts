@@ -15,8 +15,10 @@ export class NotificationsService {
     private readonly chatGateway: ChatGateway,
   ) {}
 
-  async create(userId: string, type: NotificationType, title: string, body: string) {
-    const notification = await this.prisma.notification.create({ data: { userId, type, title, body } });
+  /// [threadId] links a chat-related notification to its thread (see
+  /// Notification.threadId).
+  async create(userId: string, type: NotificationType, title: string, body: string, threadId?: string) {
+    const notification = await this.prisma.notification.create({ data: { userId, type, title, body, threadId } });
     // Same per-row shape GET /notifications already returns — the client's
     // AppNotification.fromApi parses this socket payload identically.
     this.chatGateway.emitToUser(userId, 'notification:new', {
@@ -24,6 +26,7 @@ export class NotificationsService {
       type: notification.type,
       title: notification.title,
       body: notification.body,
+      threadId: notification.threadId,
       createdAt: notification.createdAt,
     });
     return notification;

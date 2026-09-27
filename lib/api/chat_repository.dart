@@ -75,6 +75,14 @@ class ChatRepository {
     });
   }
 
+  /// The thread's current status for this user — see [ThreadSummary].
+  Future<ThreadSummary> summary(String threadId) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/threads/$threadId/summary');
+      return ThreadSummary.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
   Future<List<ChatMessage>> messages(String threadId, {DateTime? before}) {
     return _client.call(() async {
       final response = await _client.dio.get(
@@ -107,6 +115,14 @@ class ChatRepository {
   Future<void> transferThread(String threadId, String adminId) {
     return _client.call(() async {
       await _client.dio.patch('/threads/$threadId/transfer', data: {'adminId': adminId});
+    });
+  }
+
+  /// Super-admin only — hands an open support conversation to [adminId],
+  /// whoever is handling it now (see backend ChatService.reassignThread).
+  Future<void> reassignThread(String threadId, String adminId) {
+    return _client.call(() async {
+      await _client.dio.patch('/threads/$threadId/reassign', data: {'adminId': adminId});
     });
   }
 }
