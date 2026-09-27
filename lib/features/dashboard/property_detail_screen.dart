@@ -410,7 +410,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                               ),
                             ),
                           const SizedBox(height: 12),
-                          if (messagingEnabled)
+                          // Tenants can only message a landlord once they've
+                          // paid — the backend enforces the same rule
+                          // (ChatService.assertTenantMayMessageLandlord).
+                          if (messagingEnabled && hasPaidForProperty)
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton(
@@ -431,6 +434,15 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                     ),
                                   ],
                                 ),
+                              ),
+                            )
+                          else if (messagingEnabled)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Text(
+                                'You can message the ${isShortlet ? 'owner' : 'landlord'} once you have paid for this property.',
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 12.5),
                               ),
                             )
                           else

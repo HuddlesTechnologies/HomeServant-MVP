@@ -153,6 +153,7 @@
 <h2>Chat and support</h2>
 <ul>
   <li>Normal threads link two users, optionally about a property or an order, and are reused rather than duplicated.</li>
+  <li>A tenant can only message a landlord after paying: <code>ChatService.assertTenantMayMessageLandlord</code> requires a paid booking (PAID through MOVED_IN) on that property, or on any of that landlord's properties for a thread not tied to a listing. It is checked both when the thread is opened and on every tenant message. The one exception is a thread the landlord has already written in, so a tenant can always answer a landlord. Support and marketplace order threads are not affected.</li>
   <li>A support thread starts with just the user. It sits in the shared queue until an admin claims it, either by opening it (<code>PATCH /threads/:id/claim</code>) or by replying, which is race-safe. It can then be transferred, reassigned by a super admin, or resolved.</li>
   <li>Notifications for unclaimed threads are collapsed into one per admin (<code>NotificationsService.upsertThreadAlert</code>) and cleared for everyone else on claim.</li>
   <li>Admins marked Away get them silently (<code>User.adminOnDuty</code>).</li>

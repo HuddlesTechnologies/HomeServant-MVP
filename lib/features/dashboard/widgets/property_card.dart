@@ -9,10 +9,15 @@ import 'property_image.dart';
 import 'shortlet_unavailable_countdown.dart';
 
 class PropertyCard extends StatelessWidget {
-  const PropertyCard({super.key, required this.property, required this.theme});
+  const PropertyCard({super.key, required this.property, required this.theme, this.showCategoryLabel = false});
 
   final Property property;
   final DashboardTheme theme;
+
+  /// Overlays a badge naming the category the property was listed under
+  /// (House, Shortlet, ...). Used where categories are mixed together,
+  /// e.g. the tenant dashboard's All tab.
+  final bool showCategoryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -71,6 +76,22 @@ class PropertyCard extends StatelessWidget {
                       }),
                     ),
                   ),
+                  if (showCategoryLabel && property.category.isNotEmpty)
+                    Positioned(
+                      left: 12,
+                      bottom: 10,
+                      // accent/onAccent is a fixed contrast pair in every
+                      // DashboardTheme, and the solid fill keeps the text
+                      // legible over any photo.
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(color: theme.accent, borderRadius: BorderRadius.circular(10)),
+                        child: Text(
+                          property.category,
+                          style: AppTextStyles.body(color: theme.onAccent, size: 11, weight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
                   if (property.category == 'Shortlet' && property.shortletUnavailable)
                     Positioned(
                       left: 12,

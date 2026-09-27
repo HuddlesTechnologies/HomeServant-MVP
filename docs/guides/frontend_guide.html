@@ -204,7 +204,7 @@
 <table>
   <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
   <tr><td>TenantDashboardScreen</td><td>Property feed with search and filters, location header, messages and notification icons.</td><td><code>GET /properties</code></td></tr>
-  <tr><td>PropertyDetailScreen</td><td>Gallery, video, details. Tenants: Rent/Book, Message Landlord, favorite. Owners: Edit Property.</td><td><code>/properties/:id</code>, <code>/bookings</code>, <code>/threads</code></td></tr>
+  <tr><td>PropertyDetailScreen</td><td>Gallery, video, details. Tenants: Rent/Book, favorite, and Message Landlord once they have paid (a paid booking on this property). Owners: Edit Property.</td><td><code>/properties/:id</code>, <code>/bookings</code>, <code>/threads</code></td></tr>
   <tr><td>MessagesScreen, ChatThreadScreen</td><td>Inbox (optionally marketplace-only) and a single chat, with photos and PDF export.</td><td><code>/threads</code>, <code>/threads/:id/messages</code></td></tr>
   <tr><td>NotificationsScreen (+ detail)</td><td>Notifications; chat ones show the conversation's status and Reply.</td><td><code>/notifications</code>, <code>/threads/:id/summary</code></td></tr>
   <tr><td>History, Wishlist</td><td>Bookings and payments; saved properties.</td><td><code>/bookings/mine</code>, <code>/favorites</code></td></tr>
