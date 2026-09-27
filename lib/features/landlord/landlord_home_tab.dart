@@ -182,8 +182,12 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                     child: LandlordStatCard(
                       icon: Icons.people_alt_rounded,
                       iconBackground: const Color(0xFF3FBF6A),
-                      value: '5+',
-                      label: 'Booking Request',
+                      // Used to be a hardcoded '5+', so the card showed
+                      // requests the Bookings tab (correctly) didn't have.
+                      // Same pending set that tab's "Upcoming Bookings" and
+                      // "Incoming Bookings" below list.
+                      value: '${pendingBookings.length}',
+                      label: pendingBookings.length == 1 ? 'Booking Request' : 'Booking Requests',
                     ),
                   ),
                 ),
@@ -329,7 +333,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                   borderRadius: BorderRadius.circular(16),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => PropertyDetailScreen(property: allProperties[index], theme: theme),
+                      builder: (_) => PropertyDetailScreen(property: allProperties[index], theme: theme, ownerView: true),
                     ),
                   ),
                   child: ClipRRect(

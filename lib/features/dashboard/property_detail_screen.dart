@@ -6,6 +6,7 @@ import '../../api/models/booking.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../landlord/landlord_add_property_screen.dart';
 import 'chat_thread_screen.dart';
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
@@ -26,10 +27,16 @@ const _paidBookingStatuses = {
 };
 
 class PropertyDetailScreen extends StatefulWidget {
-  const PropertyDetailScreen({super.key, required this.property, required this.theme});
+  const PropertyDetailScreen({super.key, required this.property, required this.theme, this.ownerView = false});
 
   final Property property;
   final DashboardTheme theme;
+
+  /// Set by the landlord's own screens (Properties list, dashboard
+  /// uploads). The screen also detects ownership itself from
+  /// [Property.landlordId], so either is enough to swap the tenant-facing
+  /// Rent Now / Message Landlord / favorite actions for Edit Property.
+  final bool ownerView;
 
   @override
   State<PropertyDetailScreen> createState() => _PropertyDetailScreenState();
@@ -132,10 +139,19 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     }
   }
 
+  Future<void> _editProperty() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => LandlordAddPropertyScreen(initial: _property)),
+    );
+    if (mounted) _refreshProperty();
+  }
+
   @override
   Widget build(BuildContext context) {
     final property = _property;
     final theme = widget.theme;
+    final userId = context.select<AppState, String?>((state) => state.userId);
+    final isOwner = widget.ownerView || (property.landlordId != null && property.landlordId == userId);
     final favorited = context.select<AppState, bool>((state) => state.isFavorite(property.id));
     final hasPaidForProperty = context.select<AppState, bool>(
       (state) => state.myBookings.any((b) => b.property.id == property.id && _paidBookingStatuses.contains(b.status)),
@@ -158,6 +174,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                   _Hero(
                     property: property,
                     favorited: favorited,
+                    showFavorite: !isOwner,
                     onToggleFavorite: () => context.read<AppState>().toggleFavorite(property.id),
                     onBack: () => Navigator.of(context).pop(),
                     onOpenGallery: () => _openGallery(0),
@@ -295,6 +312,21 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             PropertyVideoPlayer(path: property.videoPath!),
                           ],
                           const SizedBox(height: 24),
+                          if (isOwner)
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: theme.accent,
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                ),
+                                onPressed: _editProperty,
+                                icon: Icon(Icons.edit_rounded, color: theme.onAccent, size: 18),
+                                label: Text('Edit Property', style: AppTextStyles.button(color: theme.onAccent)),
+                              ),
+                            )
+                          else ...[
                           if (unavailable)
                             Container(
                               width: double.infinity,
@@ -410,6 +442,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.5), size: 12.5),
                               ),
                             ),
+                          ],
                         ],
                       ),
                     ),
@@ -441,6 +474,7 @@ class _Hero extends StatelessWidget {
   const _Hero({
     required this.property,
     required this.favorited,
+    required this.showFavorite,
     required this.onToggleFavorite,
     required this.onBack,
     required this.onOpenGallery,
@@ -448,6 +482,7 @@ class _Hero extends StatelessWidget {
 
   final Property property;
   final bool favorited;
+  final bool showFavorite;
   final VoidCallback onToggleFavorite;
   final VoidCallback onBack;
   final VoidCallback onOpenGallery;
@@ -461,15 +496,16 @@ class _Hero extends StatelessWidget {
         children: [
           GestureDetector(onTap: onOpenGallery, child: PropertyImage(path: property.image)),
           Positioned(top: 16, left: 16, child: _CircleButton(icon: Icons.arrow_back_ios_new_rounded, onTap: onBack)),
-          Positioned(
-            top: 16,
-            right: 16,
-            child: _CircleButton(
-              icon: favorited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-              iconColor: favorited ? Colors.redAccent : Colors.white,
-              onTap: onToggleFavorite,
+          if (showFavorite)
+            Positioned(
+              top: 16,
+              right: 16,
+              child: _CircleButton(
+                icon: favorited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                iconColor: favorited ? Colors.redAccent : Colors.white,
+                onTap: onToggleFavorite,
+              ),
             ),
-          ),
         ],
       ),
     );

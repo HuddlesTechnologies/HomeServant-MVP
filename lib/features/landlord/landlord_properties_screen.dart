@@ -78,7 +78,7 @@ class LandlordPropertiesScreen extends StatelessWidget {
                       activeBooking: _activeBookingFor(entries[index], landlordBookings),
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => PropertyDetailScreen(property: entries[index], theme: theme),
+                          builder: (_) => PropertyDetailScreen(property: entries[index], theme: theme, ownerView: true),
                         ),
                       ),
                       onEdit: () => Navigator.of(context).push(
