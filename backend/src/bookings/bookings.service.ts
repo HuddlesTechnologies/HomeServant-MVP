@@ -178,6 +178,21 @@ export class BookingsService {
     }));
   }
 
+  /// Clears (or, for Undo, restores) booking requests from the landlord's
+  /// dashboard feed. Only the landlord's own bookings are touched; nothing
+  /// is declined. No ids = every current pending request. Returns how many
+  /// changed.
+  async setFeedCleared(landlordId: string, cleared: boolean, bookingIds?: string[]): Promise<{ count: number }> {
+    const { count } = await this.prisma.booking.updateMany({
+      where: {
+        property: { landlordId },
+        ...(bookingIds?.length ? { id: { in: bookingIds } } : { status: BookingStatus.PENDING }),
+      },
+      data: { landlordFeedClearedAt: cleared ? new Date() : null },
+    });
+    return { count };
+  }
+
   /// Shortlet-only now — a non-Shortlet booking is charged immediately on
   /// creation (see `create`) and never sits PENDING waiting on this
   /// endpoint; its equivalent landlord decision points are

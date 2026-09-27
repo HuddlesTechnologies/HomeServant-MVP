@@ -59,7 +59,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       final outcome = await context.read<AppState>().login(
         email: _email.text.trim(),
         password: _password.text,
-        adminPortal: true,
+        portal: 'ADMIN',
       );
       if (!mounted) return;
       // See LoginRoleScreen — without this, browsers/iOS never learn the

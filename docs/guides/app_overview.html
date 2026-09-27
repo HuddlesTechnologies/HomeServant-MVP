@@ -31,7 +31,7 @@
   <li><strong>Sign in</strong> on the tenant/landlord page (or the marketplace for vendors). Optional extras in Settings: <em>Two-Factor Authentication</em> (an emailed code at every sign-in) and <em>App Lock</em> (a PIN whenever the app reopens).</li>
   <li><strong>Forgot password</strong> sends a reset code by email.</li>
   <li><strong>Deactivate</strong> hides the account; signing in again reactivates it. <strong>Delete</strong> removes it for good.</li>
-  <li><strong>Admins</strong> sign in only on the admin console's own page. The regular sign-in pages, and Google sign-in, refuse admin accounts.</li>
+  <li><strong>Each sign-in page only takes its own kind of account.</strong> A landlord on the tenant sign-in page (or a tenant on the landlord page) is told which page to use, with a button to switch; the same goes for "Continue with Google". Vendors sign in on the tenant page (a shop belongs to a tenant account). <strong>Admins</strong> sign in only on the admin console's own page; the regular sign-in pages, and Google sign-in, refuse admin accounts.</li>
 </ul>
 
 <h1>3. Tenants</h1>
@@ -65,6 +65,7 @@
   <li><strong>Payout account first:</strong> a landlord adds a bank account (checked against the bank) before listing.</li>
   <li><strong>Add a property</strong> from the <em>Upload a Property</em> button on the dashboard home (or Profile), with photos, video, price, rooms, lease length (or unit details for a shortlet), and whether tenants may message them.</li>
   <li><strong>My Properties:</strong> search, filter by status and category, sort (price, name, rent expiring), and see each listing's price, rooms, pending requests, tenant and rent expiry at a glance.</li>
+  <li><strong>Incoming Bookings</strong> (dashboard home) shows new requests with the tenant's photo. A landlord can clear one (✕) or all of them from this feed, with Undo; clearing doesn't decline anything, the request stays in Bookings and still counts as waiting for an answer.</li>
   <li><strong>Bookings:</strong> accept or decline shortlet requests, confirm inspection dates, reject a paid booking (refunding the tenant), view a tenant's profile, and see the rent roll.</li>
   <li><strong>Delete a listing</strong> only when nobody lives there and no tenant's money is being held.</li>
   <li><strong>My Tenants</strong> (dashboard home or Profile): everyone who has rented or paid for a stay, filtered by Current / Former / All and searchable by name, with when they rented and when their rent expires (highlighted within 30 days). Tapping a tenant shows their email, phone, occupation, marital status and every tenancy with that landlord, with <em>Evict tenant</em> on a current one. A tenant's phone number is only shown once they have paid for that landlord's property.</li>
@@ -75,6 +76,7 @@
 <ul>
   <li>Payments go through Paystack. Rent is <strong>held</strong> until move-in, then paid out to the landlord's account, minus the platform fee.</li>
   <li>A tenant's own refund before move-in returns the money less a small fee; a landlord's rejection refunds in full.</li>
+  <li>No one is ever paid or refunded twice, and a payment can't be both paid out and refunded. If a payout or refund doesn't go through (a bank or Paystack problem), the tenant's move-in or stay still goes ahead and a super admin sees it on the <em>Payouts &amp; Refunds</em> screen to retry it, or to refund a tenant who hasn't moved in. After an admin refund, the tenant can't request another.</li>
   <li>Marketplace payments are held until the buyer confirms receipt (or released automatically after 7 days unless disputed).</li>
 </ul>
 

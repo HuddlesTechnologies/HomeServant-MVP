@@ -19,6 +19,7 @@ import 'landlord_tenants_screen.dart';
 import 'landlord_property_status.dart';
 import '../profile/verification_submit_screen.dart';
 import '../../api/models/verification.dart';
+import '../../api/api_exception.dart';
 import 'widgets/landlord_widgets.dart';
 
 /// Home tab of the redesigned landlord dashboard: greeting header, the four
@@ -49,6 +50,31 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => LandlordPropertiesScreen(theme: theme, filter: filter)),
     );
+  }
+
+  /// Hides requests from the feed (not declined), with Undo.
+  Future<void> _clearFromFeed(BuildContext context, List<Booking> bookings) async {
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final ids = [for (final b in bookings) b.id];
+    try {
+      await appState.setIncomingFeedCleared(cleared: true, bookingIds: ids);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            ids.length == 1
+                ? 'Cleared from your feed. It is still waiting for your answer in Bookings.'
+                : '${ids.length} requests cleared from your feed. They are still in Bookings.',
+          ),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => appState.setIncomingFeedCleared(cleared: false, bookingIds: ids).catchError((_) {}),
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
   }
 
   Future<void> _messageAboutBooking(BuildContext context, Booking booking) async {
@@ -83,7 +109,10 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
     final allProperties = appState.landlordProperties;
     final occupied = allProperties.where(isOccupied).length;
     final available = allProperties.length - occupied;
+    // Every request still waiting for an answer (the stat card counts
+    // these); the feed below leaves out the ones the landlord cleared.
     final pendingBookings = appState.landlordBookings.where((b) => b.status == BookingStatus.pending).toList();
+    final feedBookings = pendingBookings.where((b) => b.landlordFeedClearedAt == null).toList();
 
     return Center(
       child: ConstrainedBox(
@@ -322,32 +351,47 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                           ),
                         ],
                       ),
-                      if (pendingBookings.isNotEmpty)
-                        InkWell(
-                          onTap: widget.onOpenBookings,
-                          child: Text(
-                            'See all',
-                            style: AppTextStyles.body(
-                              color: Colors.white.withValues(alpha: 0.6),
-                              size: 12.5,
-                              weight: FontWeight.w600,
+                      if (feedBookings.isNotEmpty)
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            InkWell(
+                              onTap: () => _clearFromFeed(context, feedBookings),
+                              child: Text(
+                                'Clear all',
+                                style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.75), size: 12.5, weight: FontWeight.w600),
+                              ),
                             ),
-                          ),
+                            const SizedBox(width: 14),
+                            InkWell(
+                              onTap: widget.onOpenBookings,
+                              child: Text(
+                                'See all',
+                                style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.75), size: 12.5, weight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
                         ),
                     ],
                   ),
                   const SizedBox(height: 14),
-                  if (pendingBookings.isEmpty)
+                  if (feedBookings.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       child: Text(
-                        'No incoming bookings right now.',
-                        style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 13),
+                        pendingBookings.isEmpty
+                            ? 'No incoming bookings right now.'
+                            : 'All caught up. ${pendingBookings.length} request${pendingBookings.length == 1 ? ' is' : 's are'} still waiting for your answer in Bookings.',
+                        style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.75), size: 13),
                       ),
                     )
                   else
-                    for (final booking in pendingBookings.take(5))
-                      _IncomingBookingTile(booking: booking, onTap: () => _messageAboutBooking(context, booking)),
+                    for (final booking in feedBookings.take(5))
+                      _IncomingBookingTile(
+                        booking: booking,
+                        onTap: () => _messageAboutBooking(context, booking),
+                        onClear: () => _clearFromFeed(context, [booking]),
+                      ),
                 ],
               ),
             ),
@@ -511,10 +555,11 @@ class _UploadThumbnail extends StatelessWidget {
 }
 
 class _IncomingBookingTile extends StatelessWidget {
-  const _IncomingBookingTile({required this.booking, required this.onTap});
+  const _IncomingBookingTile({required this.booking, required this.onTap, required this.onClear});
 
   final Booking booking;
   final VoidCallback onTap;
+  final VoidCallback onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -530,7 +575,7 @@ class _IncomingBookingTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy),
+            LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -549,7 +594,12 @@ class _IncomingBookingTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.notifications_none_rounded, color: AppColors.gold.withValues(alpha: 0.85), size: 20),
+            IconButton(
+              onPressed: onClear,
+              tooltip: 'Clear from feed (not declined)',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.close_rounded, color: Colors.white.withValues(alpha: 0.75), size: 20),
+            ),
           ],
         ),
       ),

@@ -84,14 +84,15 @@ class AuthRepository {
     });
   }
 
-  /// [adminPortal]: sent as `portal` — the admin console's sign-in only
-  /// accepts admin accounts, and the app's sign-in never does (enforced by
-  /// the server, see backend AuthService.login).
+  /// [portal]: which sign-in page this is — 'TENANT', 'LANDLORD' or
+  /// 'ADMIN'. The server only lets that kind of account in (a landlord on
+  /// the tenant page is refused with a message saying where to go), see
+  /// backend AuthService.login.
   Future<LoginResult> login({
     required String email,
     required String password,
     bool reactivate = false,
-    bool adminPortal = false,
+    String portal = 'APP',
   }) {
     return _client.call(() async {
       final deviceModel = await _deviceModel();
@@ -102,7 +103,7 @@ class AuthRepository {
           'password': password,
           if (reactivate) 'reactivate': true,
           if (deviceModel != null) 'deviceModel': deviceModel,
-          'portal': adminPortal ? 'ADMIN' : 'APP',
+          'portal': portal,
         },
         options: Options(extra: {'skipAuth': true}),
       );
@@ -134,6 +135,9 @@ class AuthRepository {
         data: {
           'idToken': idToken,
           'role': role.apiValue,
+          // The page the button is on: an existing account of another role
+          // is refused rather than signed into its own dashboard.
+          'portal': role.apiValue,
           if (reactivate) 'reactivate': true,
           if (deviceModel != null) 'deviceModel': deviceModel,
         },

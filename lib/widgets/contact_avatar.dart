@@ -25,7 +25,12 @@ class ContactAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final photoUrl = participant?.profilePhotoUrl;
     if (photoUrl != null && photoUrl.isNotEmpty) {
-      return CircleAvatar(radius: radius, backgroundColor: backgroundColor, backgroundImage: NetworkImage(photoUrl));
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: backgroundColor,
+        backgroundImage: NetworkImage(photoUrl),
+        onBackgroundImageError: (_, __) {},
+      );
     }
     return CircleAvatar(radius: radius, backgroundColor: backgroundColor, child: Icon(icon, color: iconColor, size: radius));
   }

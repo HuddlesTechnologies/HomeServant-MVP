@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show TextInput;
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -11,6 +12,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/terms_footer.dart';
 import '../../widgets/google_sign_in_button.dart';
+import '../../api/models/auth_user.dart';
 import '../../widgets/themed_scaffold.dart';
 
 /// Login screen for either tenant or landlord accounts — the two were
@@ -55,6 +57,14 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
   bool _submitting = false;
   String? _error;
 
+  /// Which sign-in page the last error sent the user to, if any.
+  UserRole? get _wrongPageTarget {
+    final error = _error ?? '';
+    if (error.contains('landlord page')) return UserRole.landlord;
+    if (error.contains('tenant page')) return UserRole.tenant;
+    return null;
+  }
+
   UserRole get _role => widget.role;
 
   @override
@@ -74,6 +84,8 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
         email: _email.text.trim(),
         password: _password.text,
         reactivate: reactivate,
+        // Only this page's kind of account gets in.
+        portal: widget.role.apiValue,
       );
       if (!mounted) return;
       // Tells the platform autofill service (Chrome's/iOS's save-password
@@ -141,6 +153,21 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: AppTextStyles.body(color: _role.errorColor, size: 13), textAlign: TextAlign.center),
+            // The server refused an account from the other side (see
+            // backend assertPortalAllows): offer a one-tap switch.
+            if (_wrongPageTarget case final target?)
+              Center(
+                child: TextButton(
+                  onPressed: () => context.pushReplacement(target == UserRole.landlord ? '/login-landlord' : '/login-tenant'),
+                  child: Text(
+                    target == UserRole.landlord ? 'Go to landlord sign in' : 'Go to tenant sign in',
+                    style: AppTextStyles.body(color: _role.foreground, size: 13.5, weight: FontWeight.w700).copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor: _role.foreground,
+                    ),
+                  ),
+                ),
+              ),
           ],
           const SizedBox(height: 24),
           PillButton(
@@ -163,6 +190,7 @@ class _LoginRoleScreenState extends State<LoginRoleScreen> {
           ),
           const SizedBox(height: 20),
           GoogleSignInButton(
+            role: widget.role,
             onSignedIn: widget.onGoogleSignedIn,
             onError: (message) => setState(() => _error = message),
           ),

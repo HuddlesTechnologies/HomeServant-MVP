@@ -1,4 +1,5 @@
-import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEnum, IsIn, IsOptional, IsString } from 'class-validator';
+import { SIGN_IN_PORTALS, SignInPortal } from './login.dto';
 import { UserRole } from '@prisma/client';
 
 export class GoogleAuthDto {
@@ -18,6 +19,13 @@ export class GoogleAuthDto {
   @IsOptional()
   @IsBoolean()
   reactivate?: boolean;
+
+  /// Same meaning as LoginDto.portal: the page the Google button was on
+  /// ('TENANT' / 'LANDLORD'). An existing account of another role is
+  /// refused (and not linked to this Google account).
+  @IsOptional()
+  @IsIn(SIGN_IN_PORTALS)
+  portal?: SignInPortal;
 
   /// Same meaning as LoginDto.deviceModel.
   @IsOptional()

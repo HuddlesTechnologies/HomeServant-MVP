@@ -274,13 +274,13 @@ class AppState extends ChangeNotifier {
     required String email,
     required String password,
     bool reactivate = false,
-    bool adminPortal = false,
+    String portal = 'APP',
   }) async {
     final result = await _authRepo.login(
       email: email,
       password: password,
       reactivate: reactivate,
-      adminPortal: adminPortal,
+      portal: portal,
     );
     this.email = email;
     if (result.requiresEmailVerification) {
@@ -314,11 +314,13 @@ class AppState extends ChangeNotifier {
   /// [idToken] is passed in on web, where Google's rendered button has
   /// already produced one (see GoogleAuthService); on mobile it's omitted
   /// and the native picker is opened here instead.
-  Future<LoginOutcome?> loginWithGoogle({String? idToken, bool reactivate = false}) async {
+  /// [role] is the sign-in/sign-up page's role (defaults to [role] state):
+  /// a new account gets it, and an existing account of another role is refused.
+  Future<LoginOutcome?> loginWithGoogle({String? idToken, bool reactivate = false, UserRole? role}) async {
     idToken = reactivate ? _pendingGoogleIdToken : (idToken ?? await GoogleAuthService.signInAndGetIdToken());
     if (idToken == null) return null;
     _pendingGoogleIdToken = idToken;
-    final result = await _authRepo.googleAuth(idToken: idToken, role: role, reactivate: reactivate);
+    final result = await _authRepo.googleAuth(idToken: idToken, role: role ?? this.role, reactivate: reactivate);
     if (result.requiresReactivation) {
       notifyListeners();
       return LoginOutcome.requiresReactivation;
@@ -857,6 +859,13 @@ class AppState extends ChangeNotifier {
     myBookings = await _bookingsRepo.mine();
     notifyListeners();
     unawaited(loadEvictions());
+  }
+
+  /// Clears requests from the landlord's home feed (or restores them, for
+  /// Undo), then refreshes. Nothing is declined.
+  Future<void> setIncomingFeedCleared({required bool cleared, List<String>? bookingIds}) async {
+    await _bookingsRepo.setFeedCleared(cleared: cleared, bookingIds: bookingIds);
+    await loadLandlordBookings();
   }
 
   Future<void> loadLandlordBookings() async {

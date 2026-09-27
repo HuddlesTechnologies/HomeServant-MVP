@@ -7,7 +7,15 @@ Flutter app (web and mobile), deployed on Render. It covers:
   Google sign-in (never for admins), profiles, deactivation.
 - **Rentals:** properties, bookings and inspections, Paystack **escrow**
   payments (held until move-in, refunds, landlord rejections, renewals),
-  tenancy agreements, reviews, favourites.
+  tenancy agreements, reviews, favourites, eviction requests (reviewed by
+  a super admin).
+- **Identity verification:** means of ID for everyone and ownership
+  documents for landlords, stored privately and reviewed by moderators;
+  Verified badges; Platform Controls (only verified landlords' listings,
+  hold payouts to unverified landlords).
+- **Money safety:** payouts and refunds are never sent twice (one money
+  action per payment at a time, and Paystack is asked first), with an
+  admin Payouts & Refunds screen for anything that didn't go through.
 - **Marketplace:** vendors (admin-approved), products, orders with held
   payments and auto-release.
 - **Chat:** tenant/landlord chats tied to payment, marketplace order chats,
@@ -32,7 +40,10 @@ data model, every endpoint and job, configuration). The source is
    (`openssl rand -hex 32` twice) for `JWT_ACCESS_SECRET` /
    `JWT_REFRESH_SECRET`.
 3. In Supabase Storage, create a **public** bucket named
-   `homeservant-uploads` (the `SUPABASE_STORAGE_BUCKET` default).
+   `homeservant-uploads` (the `SUPABASE_STORAGE_BUCKET` default). The
+   **private** bucket for ID documents (`homeservant-private`, the
+   `SUPABASE_PRIVATE_BUCKET` default) is created by the API on startup;
+   if you create it yourself, it must NOT be public.
 4. `npm install`
 5. `npm run prisma:migrate` — creates or upgrades the database schema.
 6. `npm run start:dev` — the API is at `http://localhost:3000/api` and
@@ -141,9 +152,32 @@ step needed.
 |---|---|
 | `PAYSTACK_SECRET_KEY` | Payments, payouts and bank-account checks. |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push. Generate the keys once with `npx web-push generate-vapid-keys`; the subject is a `mailto:` address or your site URL. Without them push is off. |
-| `APP_URL` | The web app's address for links in emails (falls back to the first `CORS_ORIGINS` entry). |
+| `APP_URL` | The web app's address for links in emails and where Paystack returns a payer after checkout (falls back to the first `CORS_ORIGINS` entry). |
+| `SUPABASE_PRIVATE_BUCKET` | Name of the private bucket for identity documents (default `homeservant-private`; created on startup if missing). |
 | `SUPPORT_AUTO_ASSIGN` | `false` stops auto-assigning new support chats to on-duty admins. |
 | `SUPPORT_UNCLAIMED_REMINDER_MINUTES`, `SUPPORT_UNCLAIMED_ESCALATION_MINUTES`, `SUPPORT_REPLY_ESCALATION_MINUTES` | Support reminder and escalation delays (defaults 5, 15, 10). |
+
+## Paystack setup
+
+1. **Keys:** Paystack Dashboard > Settings > API Keys & Webhooks. Put the
+   secret key in `PAYSTACK_SECRET_KEY` (test key while testing, live key
+   in production). Test and Live mode have separate keys *and* separate
+   webhook URLs.
+2. **Webhook URL:** on the same page, set the Webhook URL (for the mode
+   you're using) to `https://<your-api>/api/paystack/webhook` and save.
+   Paystack sends every event there; the API acts on `charge.success`
+   (payment confirmed) and `transfer.failed` / `transfer.reversed` (a
+   payout that didn't reach the landlord goes back to owed and shows on
+   the admin Payouts & Refunds screen). Each request is checked against
+   the `x-paystack-signature` header using `PAYSTACK_SECRET_KEY`, so the
+   key and the webhook must be from the same mode.
+3. **Transfers:** payouts are Paystack Transfers from your Paystack
+   balance. Turn off OTP for transfers (Settings > Preferences) or API
+   payouts wait for an OTP nobody enters, and keep enough balance (Paystack
+   settles card payments into it on its normal schedule).
+4. **Check it:** make a test payment in Test mode; the booking should move
+   to "paid" within seconds. If it doesn't, Paystack's webhook logs
+   (Settings > API Keys & Webhooks) show each delivery and the response.
 
 ## Resetting all chats (testing)
 

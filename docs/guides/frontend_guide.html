@@ -51,7 +51,7 @@
   <tr><td><code>lib/api/</code></td><td><code>ApiClient</code> (HTTP plus token refresh), one <em>repository</em> per backend area, <code>TokenStorage</code>, <code>api_config.dart</code>.</td></tr>
   <tr><td><code>lib/api/models/</code></td><td>Data classes that mirror API responses, each with a <code>fromApi</code> parser.</td></tr>
   <tr><td><code>lib/features/&lt;area&gt;/</code></td><td>Screens grouped by audience: <code>splash</code>, <code>onboarding</code>, <code>auth</code>, <code>dashboard</code> (tenant and shared), <code>landlord</code>, <code>Market place</code>, <code>admin</code>.</td></tr>
-  <tr><td><code>lib/widgets/</code></td><td>Reusable pieces: buttons, fields, bottom sheets, gates, the notification banner, the bank details screen, the Google button, and more.</td></tr>
+  <tr><td><code>lib/widgets/</code></td><td>Reusable pieces: buttons, fields, bottom sheets, gates, the notification banner, the bank details screen, the Google button, and more. Newer ones: <code>VerifiedBadge</code> / <code>VerifiedPill</code> / <code>VerificationStatusCard</code> (verification), <code>HiddenListingNotice</code> (listing hidden because the landlord is unverified), <code>FieldErrorText</code> (validation line that stays in the tree so form fields below keep their errors), <code>IdentificationPickerField</code> (means of ID with per-type number checks).</td></tr>
   <tr><td><code>lib/services/</code></td><td>Anything that isn't a screen or an API call: live connection (<code>ChatSocketService</code>), alert sound, browser pop-ups, Google sign-in, app icon switching.</td></tr>
   <tr><td><code>lib/core/</code></td><td>Colors, text styles, the Material theme, date and number formatting, responsive helpers.</td></tr>
   <tr><td><code>lib/models/</code></td><td><code>UserRole</code> and <code>DashboardTheme</code>, which drive the colors of each area.</td></tr>
@@ -215,8 +215,9 @@
 <table>
   <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
   <tr><td>LandlordDashboardScreen</td><td>Tabs: Home, Messages, Bookings, Profile.</td><td>(tabs below)</td></tr>
-  <tr><td>LandlordHomeTab</td><td>Stats (including the real booking-request count), an Upload a Property button, incoming bookings, uploads.</td><td><code>/bookings/landlord</code></td></tr>
+  <tr><td>LandlordHomeTab</td><td>Stats (including the real booking-request count), Upload a Property and My Tenants buttons, incoming bookings (tenant photos via <code>LandlordAvatar(photoUrl)</code>; ✕ / Clear all with Undo hide a request from the feed without declining it), uploads.</td><td><code>/bookings/landlord</code></td></tr>
   <tr><td>LandlordTenantsScreen, TenantProfileViewScreen</td><td>My Tenants: grouped from the landlord's bookings (moved in or paid shortlet), name search, Current/Former/All, rented and expiry dates. The profile shows contact details and a <code>LandlordTenancyCard</code> per tenancy with the eviction controls.</td><td><code>/bookings/landlord</code>, <code>/evictions/*</code></td></tr>
+  <tr><td>VerificationSubmitScreen (<code>features/profile</code>)</td><td>"Get verified" after signup (older accounts, or resubmitting after a rejection): same ID field, file rules (photo or PDF) and private upload as signup.</td><td><code>/verification/*</code></td></tr>
   <tr><td>LandlordEvictionPanel (<code>widgets/eviction_widgets.dart</code>)</td><td>On the owner's property page: current tenant, Request eviction, the pending request and Withdraw. <code>TenantEvictionNotice</code> shows it on the tenant's History card with Respond.</td><td><code>/evictions/*</code></td></tr>
   <tr><td>LandlordPropertiesScreen, LandlordAddPropertyScreen</td><td>Own listings; add or edit with photos and video.</td><td><code>/properties</code>, uploads</td></tr>
   <tr><td>LandlordBookingsScreen</td><td>Requests, inspections, move-ins, rejections.</td><td><code>/bookings/*</code></td></tr>
@@ -233,13 +234,20 @@
   <tr><td>VendorEditProfile, BankDetailsScreen.vendor()</td><td>Shop profile and payout account.</td><td><code>PATCH /vendors/me</code></td></tr>
 </table>
 <h2>Admin console (<code>features/admin</code>)</h2>
-<p><code>AdminShell</code> hosts the tabs: Dashboard, Users, Vendors, Reports, and a More sheet with Properties, Marketplace, Messages, Admins, Activity Log and Chat Log. Detail pages cover a user, vendor, property, order or report. What each admin level can see is described in the Admin Guide. The shell also:</p>
+<p><code>AdminShell</code> hosts the tabs: Dashboard, Users, Vendors, Reports, and a More sheet with Properties, Marketplace, Messages, Admins, Activity Log, ID Verifications (moderator+), and for super admins Chat Log, Support Insights, Eviction Requests, Platform Controls and Payouts &amp; Refunds (each with its badge count where relevant). Detail pages cover a user, vendor, property, order or report. What each admin level can see is described in the Admin Guide. The shell also:</p>
 <ul>
   <li>enforces the 15-minute idle sign-out;</li>
   <li>forces a password change when <code>mustChangePassword</code> is set;</li>
   <li>loads badge counts live;</li>
   <li>hosts Account Settings: 2FA, change password, On duty, alert sounds, browser pop-ups.</li>
 </ul>
+<table>
+  <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
+  <tr><td>AdminVerificationsTab, <code>AdminVerificationCard</code> (on the user detail page)</td><td>ID review queue (masked numbers) and the full record: number, image previews / Open PDF via 10-minute signed links, Verify / Reject with a note.</td><td><code>/admin/verifications/*</code></td></tr>
+  <tr><td>AdminEvictionsTab</td><td>Landlord eviction requests: reason, tenant's response, Approve / Reject.</td><td><code>/admin/evictions/*</code></td></tr>
+  <tr><td>AdminPlatformControlsScreen</td><td>"Only verified landlords" and "Pay unverified landlords" switches, with impact numbers, plain-language ON/OFF explanations and confirmations.</td><td><code>/admin/platform-settings</code></td></tr>
+  <tr><td>AdminPayoutsScreen</td><td>Payouts &amp; Refunds that didn't go through: reason, last error, Retry payout / Retry refund / Refund tenant. Every action is safe to repeat (the server locks and checks Paystack first).</td><td><code>/admin/payouts/*</code></td></tr>
+</table>
 
 <h1>9. Look and feel</h1>
 <ul>
