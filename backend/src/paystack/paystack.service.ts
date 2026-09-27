@@ -81,7 +81,15 @@ export class PaystackService {
     const response = await fetch('https://api.paystack.co/transaction/initialize', {
       method: 'POST',
       headers: { Authorization: `Bearer ${this.secretKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, amount: amountKobo, reference, metadata }),
+      body: JSON.stringify({
+        email,
+        amount: amountKobo,
+        reference,
+        metadata,
+        // The web app opens checkout in the same tab (a new tab opened after
+        // an API call gets popup-blocked), so send the payer back afterwards.
+        ...(this.appUrl() ? { callback_url: this.appUrl() } : {}),
+      }),
     });
     const body = (await response.json()) as {
       status: boolean;
@@ -97,6 +105,16 @@ export class PaystackService {
       accessCode: body.data.access_code,
       reference: body.data.reference,
     };
+  }
+
+  /// Where Paystack returns the payer after checkout: APP_URL, else the
+  /// first allowed CORS origin (the web app in production). Null means
+  /// Paystack falls back to the callback set on its dashboard, if any.
+  private appUrl(): string | null {
+    const explicit = this.config.get<string>('APP_URL');
+    if (explicit) return explicit;
+    const origin = this.config.get<string>('CORS_ORIGINS')?.split(',')[0]?.trim();
+    return origin && !origin.includes('localhost') ? origin : null;
   }
 
   /// HMAC-SHA512 of the raw request body, keyed by the secret key — the

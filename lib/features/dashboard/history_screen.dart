@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/booking.dart';
+import '../../api/models/eviction.dart';
 import '../../core/date_format.dart';
+import '../../core/open_payment_page.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/confirm_sheet.dart';
+import '../../widgets/eviction_widgets.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/empty_state.dart';
 import 'legal/tenancy_agreement_view_screen.dart';
@@ -129,8 +131,7 @@ class _HistoryTileState extends State<_HistoryTile> {
     setState(() => _busy = true);
     try {
       final payment = await appState.payForBooking(booking.id);
-      final uri = Uri.parse(payment.authorizationUrl);
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched = await openPaymentPage(payment.authorizationUrl);
       if (!launched && mounted) {
         messenger.showSnackBar(const SnackBar(content: Text("Couldn't open the payment page — try again.")));
       }
@@ -275,6 +276,7 @@ class _HistoryTileState extends State<_HistoryTile> {
               ],
             ),
           ),
+          TenantEvictionNotice(bookingId: booking.id, theme: theme),
           if (booking.status == BookingStatus.movedIn) ...[
             const SizedBox(height: 12),
             InkWell(
@@ -386,6 +388,8 @@ class _HistoryTileState extends State<_HistoryTile> {
         ];
       case BookingStatus.movedIn:
         if (booking.isShortlet || !withinRenewalWindow) return const [];
+        // An approved eviction ends the lease early; it can't be renewed.
+        if (context.read<AppState>().evictionForBooking(booking.id)?.status == EvictionStatus.approved) return const [];
         return [_ActionButton(label: 'Renew Lease', theme: theme, onTap: _renew)];
       case BookingStatus.pending:
       case BookingStatus.declined:

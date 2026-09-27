@@ -8,9 +8,16 @@ class AppTextStyles {
   static const String headingFont = 'Quity';
   static const String bodyFont = 'Givonic';
 
+  /// Givonic and Quity have no ₦, dashes, bullets, ellipsis or arrows.
+  /// Without a bundled fallback, Flutter web downloads one from
+  /// fonts.gstatic.com while the page runs, and those characters render
+  /// blank whenever that download is slow or blocked.
+  static const List<String> fallbackFonts = ['HSFallback'];
+
   static TextStyle display({required Color color, double size = 34}) =>
       TextStyle(
         fontFamily: bodyFont,
+        fontFamilyFallback: fallbackFonts,
         color: color,
         fontSize: size,
         fontWeight: FontWeight.w600,
@@ -20,6 +27,7 @@ class AppTextStyles {
   static TextStyle heading({required Color color, double size = 26}) =>
       TextStyle(
         fontFamily: headingFont,
+        fontFamilyFallback: fallbackFonts,
         color: color,
         fontSize: size,
         fontWeight: FontWeight.w500,
@@ -31,6 +39,7 @@ class AppTextStyles {
     FontWeight weight = FontWeight.w400,
   }) => TextStyle(
     fontFamily: bodyFont,
+    fontFamilyFallback: fallbackFonts,
     color: color,
     fontSize: size,
     fontWeight: weight,
@@ -39,6 +48,7 @@ class AppTextStyles {
   static TextStyle button({required Color color, double size = 16}) =>
       TextStyle(
         fontFamily: bodyFont,
+        fontFamilyFallback: fallbackFonts,
         color: color,
         fontSize: size,
         fontWeight: FontWeight.w700,

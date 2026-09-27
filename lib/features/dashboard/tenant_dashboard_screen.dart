@@ -142,18 +142,21 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
             : categoryPrices.reduce((a, b) => a > b ? a : b);
     final hasRange = boundsMax > boundsMin;
 
-    var priceRange = RangeValues(
-      _minPrice ?? boundsMin,
-      _maxPrice ?? boundsMax,
-    );
+    // Min/max start empty unless the tenant already applied a value, so they
+    // can type straight away; the category's range shows only as a hint.
+    double? minValue = _minPrice;
+    double? maxValue = _maxPrice;
     var priceSort = _priceSort;
     var selectedState = _selectedState;
     final locationController = TextEditingController(text: _locationQuery);
     final minPriceController = TextEditingController(
-      text: formatWithThousandsSeparator(priceRange.start),
+      text: minValue == null ? '' : formatWithThousandsSeparator(minValue),
     );
     final maxPriceController = TextEditingController(
-      text: formatWithThousandsSeparator(priceRange.end),
+      text: maxValue == null ? '' : formatWithThousandsSeparator(maxValue),
+    );
+    final priceHintStyle = AppTextStyles.body(
+      color: theme.onSurface.withValues(alpha: 0.45),
     );
 
     await showModalBottomSheet<void>(
@@ -209,6 +212,13 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                               prefixText: '₦ ',
                               labelText: 'Min',
                               labelStyle: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55)),
+                              floatingLabelBehavior: FloatingLabelBehavior.always,
+                              hintText:
+                                  hasRange
+                                      ? formatWithThousandsSeparator(boundsMin)
+                                      : 'No min',
+                              hintStyle: priceHintStyle,
+                              prefixStyle: AppTextStyles.body(color: theme.onSurface),
                               filled: true,
                               fillColor: theme.onSurface.withValues(
                                 alpha: 0.06,
@@ -226,15 +236,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                               final value = double.tryParse(
                                 text.replaceAll(',', ''),
                               );
-                              if (value == null) return;
-                              setSheetState(() {
-                                priceRange = RangeValues(
-                                  value,
-                                  value > priceRange.end
-                                      ? value
-                                      : priceRange.end,
-                                );
-                              });
+                              setSheetState(() => minValue = value);
                             },
                           ),
                         ),
@@ -252,6 +254,13 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                               prefixText: '₦ ',
                               labelText: 'Max',
                               labelStyle: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.55)),
+                              floatingLabelBehavior: FloatingLabelBehavior.always,
+                              hintText:
+                                  hasRange
+                                      ? formatWithThousandsSeparator(boundsMax)
+                                      : 'No max',
+                              hintStyle: priceHintStyle,
+                              prefixStyle: AppTextStyles.body(color: theme.onSurface),
                               filled: true,
                               fillColor: theme.onSurface.withValues(
                                 alpha: 0.06,
@@ -269,15 +278,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                               final value = double.tryParse(
                                 text.replaceAll(',', ''),
                               );
-                              if (value == null) return;
-                              setSheetState(() {
-                                priceRange = RangeValues(
-                                  value < priceRange.start
-                                      ? value
-                                      : priceRange.start,
-                                  value,
-                                );
-                              });
+                              setSheetState(() => maxValue = value);
                             },
                           ),
                         ),
@@ -286,16 +287,26 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                     const SizedBox(height: 8),
                     if (hasRange)
                       RangeSlider(
-                        values: RangeValues(
-                          priceRange.start.clamp(boundsMin, boundsMax),
-                          priceRange.end.clamp(boundsMin, boundsMax),
-                        ),
+                        values: () {
+                          final start = (minValue ?? boundsMin).clamp(
+                            boundsMin,
+                            boundsMax,
+                          );
+                          final end = (maxValue ?? boundsMax).clamp(
+                            boundsMin,
+                            boundsMax,
+                          );
+                          return start <= end
+                              ? RangeValues(start, end)
+                              : RangeValues(end, start);
+                        }(),
                         min: boundsMin,
                         max: boundsMax,
                         activeColor: theme.accent,
                         onChanged:
                             (values) => setSheetState(() {
-                              priceRange = values;
+                              minValue = values.start;
+                              maxValue = values.end;
                               minPriceController.text =
                                   formatWithThousandsSeparator(values.start);
                               maxPriceController.text =
@@ -430,13 +441,17 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                         ),
                         onPressed: () {
                           setState(() {
-                            if (categoryPrices.isEmpty) {
-                              _minPrice = null;
-                              _maxPrice = null;
-                            } else {
-                              _minPrice = priceRange.start;
-                              _maxPrice = priceRange.end;
+                            // An empty field means "no limit" on that side;
+                            // swap if the tenant typed them the wrong way round.
+                            var min = minValue;
+                            var max = maxValue;
+                            if (min != null && max != null && min > max) {
+                              final swap = min;
+                              min = max;
+                              max = swap;
                             }
+                            _minPrice = min;
+                            _maxPrice = max;
                             _priceSort = priceSort;
                             _selectedState = selectedState;
                             _locationQuery =

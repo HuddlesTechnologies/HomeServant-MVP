@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { EvictionsModule } from './evictions/evictions.module';
 import { ChatModule } from './chat/chat.module';
 import { PresenceModule } from './chat/presence.module';
 import { FavoritesModule } from './favorites/favorites.module';
@@ -44,6 +45,7 @@ import { VendorsModule } from './vendors/vendors.module';
     UsersModule,
     PropertiesModule,
     BookingsModule,
+    EvictionsModule,
     FavoritesModule,
     StorageModule,
     ReviewsModule,

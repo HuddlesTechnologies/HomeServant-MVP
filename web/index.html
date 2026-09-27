@@ -37,6 +37,31 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <script>
+    // Phone browsers scroll the whole page up to make room for the keyboard
+    // when a text field (e.g. the tenant search) is focused, and don't always
+    // scroll back when it closes. Flutter draws into a fixed full-screen
+    // canvas, so a leftover page offset shows as a shifted/cut-off UI with
+    // dead taps, and Safari restores that offset on reload, so only a new
+    // tab fixed it. Never restore scroll, and snap the page back to the top
+    // once the keyboard is gone.
+    (function () {
+      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+      function resetScroll() {
+        if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+      }
+      window.addEventListener('load', resetScroll);
+      window.addEventListener('pageshow', resetScroll);
+      document.addEventListener('focusout', function () { setTimeout(resetScroll, 50); }, true);
+      var vv = window.visualViewport;
+      if (vv) {
+        vv.addEventListener('resize', function () {
+          // Keyboard closed: the visual viewport is back to (almost) full height.
+          if (vv.height >= window.innerHeight - 1) resetScroll();
+        });
+      }
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

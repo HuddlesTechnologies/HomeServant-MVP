@@ -37,17 +37,24 @@
 <h1>3. Tenants</h1>
 <h2>Finding a home</h2>
 <ul>
-  <li>The dashboard opens on <strong>All</strong> listings, each labelled with its category; tabs narrow it to House, Shortlet, Self-Con or Apartment. Search by name or area, and filter by price and location.</li>
+  <li>The dashboard opens on <strong>All</strong> listings, each labelled with its category; tabs narrow it to House, Shortlet, Self-Con or Apartment. Search by name or area, and filter by price and location. The price boxes start empty (the category's price range shows as a hint), so tenants just type a minimum, a maximum or both.</li>
   <li>A property page shows photos, video, details, rating and reviews. Save favourites to the <strong>Wishlist</strong>.</li>
 </ul>
 <h2>Renting a home (House, Self-Con, Apartment)</h2>
 <ol>
-  <li><strong>Rent Now</strong> takes payment straight away. The money is <em>held</em> by HomeServant, not paid to the landlord yet.</li>
+  <li><strong>Rent Now</strong> takes payment straight away: the Paystack checkout opens in the same tab and returns to HomeServant afterwards. The money is <em>held</em> by HomeServant, not paid to the landlord yet.</li>
   <li>Book an inspection date (now or later from History). The landlord confirms or declines it; a declined date can be re-proposed.</li>
   <li>After inspecting, the tenant confirms they've <strong>moved in</strong>, which releases the payment to the landlord and starts the lease.</li>
   <li>Before moving in, the tenant can ask for a <strong>refund</strong>, or the landlord can reject the booking (a full refund).</li>
   <li>Rent reminders arrive 30, 15 and 0 days before the lease ends; <strong>Renew Lease</strong> pays for the next period.</li>
 </ol>
+<h2>Eviction requests</h2>
+<ul>
+  <li>A landlord can ask to end a current tenancy early from the property's page (<em>Request eviction</em>), giving a written reason.</li>
+  <li>The tenant is notified and emailed straight away, sees the reason on the booking in History, and can <strong>respond</strong> with their side.</li>
+  <li><strong>Nothing changes</strong> until a HomeServant <em>super admin</em> reviews the case and decides. The landlord can withdraw the request while it's under review.</li>
+  <li>If approved, the lease ends that day and the property is listed again; the tenancy can't be renewed. If rejected, the tenancy carries on. Both sides are notified and emailed with the decision.</li>
+</ul>
 <h2>Booking a shortlet</h2>
 <p>The tenant requests dates; the owner accepts or declines; the tenant then pays, and the payment goes to the owner straight away.</p>
 <h2>Paperwork</h2>
@@ -56,10 +63,11 @@
 <h1>4. Landlords</h1>
 <ul>
   <li><strong>Payout account first:</strong> a landlord adds a bank account (checked against the bank) before listing.</li>
-  <li><strong>Add a property</strong> with photos, video, price, rooms, lease length (or unit details for a shortlet), and whether tenants may message them.</li>
+  <li><strong>Add a property</strong> from the <em>Upload a Property</em> button on the dashboard home (or Profile), with photos, video, price, rooms, lease length (or unit details for a shortlet), and whether tenants may message them.</li>
   <li><strong>My Properties:</strong> search, filter by status and category, sort (price, name, rent expiring), and see each listing's price, rooms, pending requests, tenant and rent expiry at a glance.</li>
   <li><strong>Bookings:</strong> accept or decline shortlet requests, confirm inspection dates, reject a paid booking (refunding the tenant), view a tenant's profile, and see the rent roll.</li>
   <li><strong>Delete a listing</strong> only when nobody lives there and no tenant's money is being held.</li>
+  <li><strong>Request an eviction</strong> from an occupied property's page, with a reason; a super admin must approve it (see Eviction requests above).</li>
 </ul>
 
 <h1>5. Money: escrow, refunds and payouts</h1>

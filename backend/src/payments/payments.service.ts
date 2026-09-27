@@ -281,6 +281,10 @@ export class PaymentsService {
     if (booking.property.category === PropertyCategory.SHORTLET) {
       throw new BadRequestException('Shortlet bookings cannot be renewed');
     }
+    const evicted = await this.prisma.evictionRequest.count({ where: { bookingId, status: 'APPROVED' } });
+    if (evicted > 0) {
+      throw new BadRequestException('This tenancy was ended by an approved eviction and cannot be renewed');
+    }
     if (!booking.property.rentDurationMonths) {
       throw new BadRequestException('This property has no rent duration configured — contact the landlord');
     }

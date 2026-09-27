@@ -294,6 +294,9 @@ model User {
 
   properties             Property[]          @relation("LandlordProperties")
   bookings               Booking[]           @relation("TenantBookings")
+  evictionsFiled         EvictionRequest[]   @relation("EvictionLandlord")
+  evictionsReceived      EvictionRequest[]   @relation("EvictionTenant")
+  evictionsReviewed      EvictionRequest[]   @relation("EvictionReviewer")
   favorites              Favorite[]
   refreshTokens          RefreshToken[]
   otpCodes               OtpCode[]
@@ -843,10 +846,50 @@ model Booking {
 
   payments         Payment[]
   tenancyAgreement TenancyAgreement?
+  evictionRequests EvictionRequest[]
 
   @@index([propertyId])
   @@index([tenantId])
   @@index([leaseEndDate])
+}
+
+enum EvictionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  /// Withdrawn by the landlord before a super admin decided.
+  CANCELLED
+}
+
+/// A landlord asking to end a current tenant's lease early. Nothing happens
+/// to the tenancy until a SUPER_ADMIN reviews the case (the landlord's
+/// reason, the tenant's response, the booking) and approves it — see
+/// EvictionsService. At most one PENDING request per booking. This row is
+/// also the audit record of who decided and why.
+model EvictionRequest {
+  id                String         @id @default(uuid())
+  bookingId         String
+  booking           Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  landlordId        String
+  landlord          User           @relation("EvictionLandlord", fields: [landlordId], references: [id], onDelete: Cascade)
+  tenantId          String
+  tenant            User           @relation("EvictionTenant", fields: [tenantId], references: [id], onDelete: Cascade)
+  reason            String
+  /// The tenant's side of the story, optional, editable while PENDING.
+  tenantResponse    String?
+  tenantRespondedAt DateTime?
+  status            EvictionStatus @default(PENDING)
+  reviewedById      String?
+  reviewedBy        User?          @relation("EvictionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewNote        String?
+  reviewedAt        DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([bookingId])
+  @@index([status])
+  @@index([landlordId])
+  @@index([tenantId])
 }
 
 /// Generated once, at the moment a rental Booking's payment is released

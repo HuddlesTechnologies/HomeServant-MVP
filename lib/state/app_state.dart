@@ -18,6 +18,8 @@ import '../api/models/booking.dart';
 import '../api/notifications_repository.dart';
 import '../api/paystack_repository.dart';
 import '../api/properties_repository.dart';
+import '../api/evictions_repository.dart';
+import '../api/models/eviction.dart';
 import '../api/push_repository.dart';
 import '../services/browser_notifications.dart';
 import '../api/support_tools_repository.dart';
@@ -59,6 +61,7 @@ class AppState extends ChangeNotifier {
     _chatRepo = ChatRepository(_apiClient);
     _supportToolsRepo = SupportToolsRepository(_apiClient);
     _pushRepo = PushRepository(_apiClient);
+    _evictionsRepo = EvictionsRepository(_apiClient);
     _uploadsRepo = UploadsRepository(_apiClient);
     _vendorsRepo = VendorsRepository(_apiClient);
     _marketplaceProductsRepo = MarketplaceProductsRepository(_apiClient);
@@ -98,6 +101,7 @@ class AppState extends ChangeNotifier {
   late final ChatRepository _chatRepo;
   late final SupportToolsRepository _supportToolsRepo;
   late final PushRepository _pushRepo;
+  late final EvictionsRepository _evictionsRepo;
   late final UploadsRepository _uploadsRepo;
   late final VendorsRepository _vendorsRepo;
   late final MarketplaceProductsRepository _marketplaceProductsRepo;
@@ -117,6 +121,7 @@ class AppState extends ChangeNotifier {
   MarketplaceOrdersRepository get marketplaceOrders => _marketplaceOrdersRepo;
   PaystackRepository get paystack => _paystackRepo;
   AdminRepository get admin => _adminRepo;
+  EvictionsRepository get evictionsRepo => _evictionsRepo;
 
   /// True once [load] has finished restoring (or found nothing to restore).
   /// AppLockGate waits for this before deciding whether a cold start should
@@ -485,6 +490,7 @@ class AppState extends ChangeNotifier {
     _landlordProperties = [];
     myBookings = [];
     landlordBookings = [];
+    evictions = [];
     _myReviews = [];
     notifications = [];
     unreadNotificationCount = 0;
@@ -830,12 +836,55 @@ class AppState extends ChangeNotifier {
     if (userId == null) return;
     myBookings = await _bookingsRepo.mine();
     notifyListeners();
+    unawaited(loadEvictions());
   }
 
   Future<void> loadLandlordBookings() async {
     if (userId == null) return;
     landlordBookings = await _bookingsRepo.forLandlord();
     notifyListeners();
+    unawaited(loadEvictions());
+  }
+
+  // --- Eviction requests (landlord files, tenant responds, super admin decides)
+
+  /// Every eviction request this user is a party to, newest first.
+  List<EvictionRequest> evictions = [];
+
+  /// The most recent eviction request on [bookingId], if any.
+  EvictionRequest? evictionForBooking(String bookingId) {
+    for (final e in evictions) {
+      if (e.bookingId == bookingId) return e;
+    }
+    return null;
+  }
+
+  /// Refreshed with the bookings lists (so a BOOKING_STATUS notification,
+  /// which every eviction event also sends, updates it live). Best-effort:
+  /// a failure here must never break the bookings screens.
+  Future<void> loadEvictions() async {
+    if (userId == null) return;
+    try {
+      evictions = await _evictionsRepo.mine();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  void _upsertEviction(EvictionRequest updated) {
+    evictions = [updated, for (final e in evictions) if (e.id != updated.id) e];
+    notifyListeners();
+  }
+
+  Future<void> requestEviction(String bookingId, String reason) async {
+    _upsertEviction(await _evictionsRepo.create(bookingId, reason));
+  }
+
+  Future<void> cancelEviction(String id) async {
+    _upsertEviction(await _evictionsRepo.cancel(id));
+  }
+
+  Future<void> respondToEviction(String id, String response) async {
+    _upsertEviction(await _evictionsRepo.respond(id, response));
   }
 
   /// See the subscription set up in the constructor — refetches whichever

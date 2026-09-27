@@ -95,6 +95,14 @@ flutter:
     - family: Givonic
       fonts:
         - asset: assets/fonts/Givonic-Regular.otf
+    # Punctuation/currency/arrows (₦ — – · … • →) that Givonic and Quity
+    # don't have: a subset of DejaVu Sans, used as fontFamilyFallback so the
+    # browser never has to download a fallback font at runtime.
+    - family: HSFallback
+      fonts:
+        - asset: assets/fonts/HSFallback.ttf
+        - asset: assets/fonts/HSFallback-Bold.ttf
+          weight: 700
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
