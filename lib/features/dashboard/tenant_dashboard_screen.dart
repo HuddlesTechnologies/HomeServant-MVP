@@ -518,23 +518,36 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.location_on,
-                                color: theme.locationPinColor,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Ikeja, Lagos',
-                                style: AppTextStyles.body(
-                                  color: theme.foreground,
-                                  weight: FontWeight.w700,
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.location_on,
+                                  color: theme.locationPinColor,
+                                  size: 20,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 4),
+                                // The address this tenant gave at signup
+                                // (signup-tenant-2) or last saved in Edit
+                                // Profile — used to be a hardcoded
+                                // "Ikeja, Lagos" for everyone.
+                                Flexible(
+                                  child: Text(
+                                    context.watch<AppState>().houseAddress.trim().isEmpty
+                                        ? 'Location not set'
+                                        : context.watch<AppState>().houseAddress.trim(),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.body(
+                                      color: theme.foreground,
+                                      weight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 12),
                           Row(
                             children: [
                               GestureDetector(

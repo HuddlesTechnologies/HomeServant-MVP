@@ -36,6 +36,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _occupationFocus = FocusNode();
   DateTime? _dateOfBirth;
   String? _photoPath;
+
+  /// The picked file's real name (with its extension). On web the picked
+  /// [_photoPath] is a `blob:` URL whose last segment is an extensionless
+  /// id, which the upload endpoint rejects — so the name must come from
+  /// the picker, not the path.
+  String? _photoFileName;
   Gender? _genderValue;
   MaritalStatus? _maritalStatusValue;
   bool _saving = false;
@@ -138,7 +144,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _pickPhoto() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 85);
     if (picked != null) {
-      setState(() => _photoPath = picked.path);
+      setState(() {
+        _photoPath = picked.path;
+        _photoFileName = picked.name;
+      });
     }
   }
 
@@ -172,7 +181,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // first; an unchanged photo is already a persisted URL.
       String? photoUrl = _photoPath;
       if (photoUrl != null && !photoUrl.startsWith('http')) {
-        final fileName = photoUrl.split('/').last;
+        final fileName = _photoFileName ?? photoUrl.split('/').last;
         photoUrl = await appState.uploads.upload(
           file: PickedUpload(path: photoUrl, fileName: fileName, isImage: true),
           folder: 'profile-photos',
