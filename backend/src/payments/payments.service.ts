@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory } from '@prisma/client';
+import { ChatService } from '../chat/chat.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
@@ -68,6 +69,7 @@ export class PaymentsService {
     private readonly paystack: PaystackService,
     private readonly notifications: NotificationsService,
     private readonly mail: MailService,
+    private readonly chat: ChatService,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -473,6 +475,14 @@ export class PaymentsService {
 
     const landlord = await this.prisma.user.findUnique({ where: { id: booking.property.landlordId }, select: { id: true, email: true } });
 
+    // Messaging between them closes on a refund (ChatService.landlordTenantBlockReason);
+    // say so in their existing chat, if they have one.
+    await this.postBookingSystemMessage(
+      booking,
+      `Refund initiated by the tenant for ${booking.property.title}. Further messaging is no longer available unless the tenant books and pays again.`,
+      false,
+    );
+
     await this.notifyBoth(
       booking.tenantId,
       booking.tenant.email,
@@ -531,12 +541,21 @@ export class PaymentsService {
       }),
     ]);
 
+    // The tenant hears about it in Messages too (a thread is started if
+    // they never chatted), and the notification opens that chat.
+    const threadId = await this.postBookingSystemMessage(
+      booking,
+      `The landlord rejected this booking for ${booking.property.title} and the tenant has been fully refunded. Further messaging is no longer available unless the tenant books and pays again.`,
+      true,
+    );
+
     await this.notifyBoth(
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Booking rejected',
       `The landlord was unable to proceed with your booking for ${booking.property.title}. You've been fully refunded.`,
+      threadId ?? undefined,
     );
 
     return updatedBooking;
@@ -778,8 +797,36 @@ export class PaymentsService {
   /// landlord/vendor id, not yet the fetched User row) don't need an extra
   /// query just to skip the email half — MailService itself is already
   /// best-effort and never throws.
-  private async notifyBoth(userId: string, email: string | undefined, type: NotificationType, title: string, body: string): Promise<void> {
-    await this.notifications.create(userId, type, title, body);
+  /// The money has already moved by the time this runs, so a failure here
+  /// is logged rather than failing the refund/rejection itself.
+  private async postBookingSystemMessage(
+    booking: { tenantId: string; propertyId: string; property: { landlordId: string } },
+    body: string,
+    createIfMissing: boolean,
+  ): Promise<string | null> {
+    try {
+      return await this.chat.postBookingSystemMessage({
+        tenantId: booking.tenantId,
+        landlordId: booking.property.landlordId,
+        propertyId: booking.propertyId,
+        body,
+        createIfMissing,
+      });
+    } catch (err) {
+      this.logger.error(`Couldn't post the booking system message: ${err}`);
+      return null;
+    }
+  }
+
+  private async notifyBoth(
+    userId: string,
+    email: string | undefined,
+    type: NotificationType,
+    title: string,
+    body: string,
+    threadId?: string,
+  ): Promise<void> {
+    await this.notifications.create(userId, type, title, body, threadId);
     if (email) {
       await this.mail.send(email, title, `<p>${body}</p>`, body);
     }

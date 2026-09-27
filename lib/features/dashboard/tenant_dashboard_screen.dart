@@ -28,8 +28,13 @@ class TenantDashboardScreen extends StatefulWidget {
 enum _PriceSort { none, lowToHigh, highToLow }
 
 class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
-  static const _categories = ['House', 'Shortlet', 'Self-Con', 'Apartment'];
+  // 'All' is first and the default: it lists every category together, and
+  // each card then carries a badge naming the category it was listed under.
+  static const _allCategory = 'All';
+  static const _categories = [_allCategory, 'House', 'Shortlet', 'Self-Con', 'Apartment'];
   int _selectedCategory = 0;
+
+  bool get _showingAllCategories => _categories[_selectedCategory] == _allCategory;
   int _navIndex = 0;
 
   final _searchController = TextEditingController();
@@ -87,7 +92,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
           // though a Shortlet in Lekki exists) and made the search box look
           // broken. With no query, the category tabs filter as normal.
           final matchesCategory =
-              query.isNotEmpty || property.category == selectedCategory;
+              query.isNotEmpty || selectedCategory == _allCategory || property.category == selectedCategory;
           final matchesState =
               _selectedState == null || property.state == _selectedState;
           final matchesLocation =
@@ -120,7 +125,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
         context
             .read<AppState>()
             .properties
-            .where((p) => p.category == _categories[_selectedCategory])
+            .where((p) => _showingAllCategories || p.category == _categories[_selectedCategory])
             .map((p) => p.price.toDouble())
             .toList();
     final boundsMin =
@@ -748,11 +753,19 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                         final columns = gridColumnsForWidth(
                           constraints.maxWidth,
                         );
+                        // Mixed-category lists (the All tab, or a search,
+                        // which spans every category) label each card.
+                        final showCategoryLabels =
+                            _showingAllCategories || _searchQuery.trim().isNotEmpty;
                         if (columns <= 1) {
                           return Column(
                             children: [
                               for (final property in _filteredProperties)
-                                PropertyCard(property: property, theme: theme),
+                                PropertyCard(
+                                  property: property,
+                                  theme: theme,
+                                  showCategoryLabel: showCategoryLabels,
+                                ),
                             ],
                           );
                         }
@@ -769,6 +782,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                 child: PropertyCard(
                                   property: property,
                                   theme: theme,
+                                  showCategoryLabel: showCategoryLabels,
                                 ),
                               ),
                           ],

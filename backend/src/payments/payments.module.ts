@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { ChatModule } from '../chat/chat.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaystackModule } from '../paystack/paystack.module';
@@ -12,7 +13,7 @@ import { PaymentsService } from './payments.service';
 /// needs PaystackService), hence forwardRef on both sides — see
 /// PaystackModule.
 @Module({
-  imports: [forwardRef(() => PaystackModule), NotificationsModule, MailModule],
+  imports: [forwardRef(() => PaystackModule), NotificationsModule, MailModule, ChatModule],
   providers: [PaymentsService],
   exports: [PaymentsService],
 })
