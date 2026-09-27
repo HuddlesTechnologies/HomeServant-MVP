@@ -14,22 +14,30 @@ import '../../widgets/pill_text_field.dart';
 import '../../widgets/themed_scaffold.dart';
 import '../../widgets/upload_picker.dart';
 
-class SignupLandlord2Screen extends StatefulWidget {
-  const SignupLandlord2Screen({super.key, required this.onFinish});
+/// Signup step 2 (profile photo, identification, gender, occupation,
+/// marital status) for both tenants and landlords. The two used to be
+/// separate near-identical screens, and fixes kept landing in only one of
+/// them (landlord signup was missing gender/occupation/marital status
+/// entirely for a while). The only role differences are below: a tenant
+/// gives a home address; a landlord uploads a verification document.
+class SignupDetailsScreen extends StatefulWidget {
+  const SignupDetailsScreen({super.key, required this.role, required this.onFinish});
 
+  final UserRole role;
   final VoidCallback onFinish;
 
   @override
-  State<SignupLandlord2Screen> createState() => _SignupLandlord2ScreenState();
+  State<SignupDetailsScreen> createState() => _SignupDetailsScreenState();
 }
 
-class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
-  static const _role = UserRole.landlord;
+class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
+  UserRole get _role => widget.role;
 
   final _formKey = GlobalKey<FormState>();
+  final _addressController = TextEditingController();
   final _occupationController = TextEditingController();
-  PickedUpload? _document;
   PickedUpload? _photo;
+  PickedUpload? _document;
   Gender? _gender;
   MaritalStatus? _maritalStatus;
   bool _showGenderError = false;
@@ -37,10 +45,10 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
   bool _submitting = false;
   String? _error;
 
-  /// The verification document/ID number aren't persisted anywhere yet —
-  /// the backend has no KYC model, so they're collected here for UI
-  /// completeness but only the profile photo and the fields below actually
-  /// save.
+  /// Means of identification and a landlord's verification document aren't
+  /// persisted anywhere yet — the backend has no KYC/verification model, so
+  /// they're collected here for UI completeness but only the photo, a
+  /// tenant's address and the fields below actually save.
   Future<void> _finish() async {
     final formValid = _formKey.currentState?.validate() ?? false;
     final missingGender = _gender == null;
@@ -64,6 +72,7 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
         photoUrl = await appState.uploads.upload(file: photo, folder: 'profile-photos');
       }
       await appState.completeProfile(
+        houseAddress: _role.isLandlord ? null : _addressController.text.trim(),
         profilePhotoUrl: photoUrl,
         gender: _gender,
         occupation: _occupationController.text.trim(),
@@ -81,6 +90,7 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
 
   @override
   void dispose() {
+    _addressController.dispose();
     _occupationController.dispose();
     super.dispose();
   }
@@ -127,7 +137,7 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
 
   @override
   Widget build(BuildContext context) {
-    const panelColor = AppColors.offWhite;
+    final panelColor = _role.isLandlord ? AppColors.offWhite : const Color(0xFF1B3255);
     return ThemedScaffold(
       role: _role,
       child: Form(
@@ -175,12 +185,24 @@ class _SignupLandlord2ScreenState extends State<SignupLandlord2Screen> {
               ),
             ),
             const SizedBox(height: 24),
-            PillOutlineButton(
-              label: _document?.fileName ?? 'Upload your document',
-              textColor: AppColors.navy,
-              icon: Icons.upload_file_rounded,
-              onPressed: _pickDocument,
-            ),
+            if (_role.isLandlord)
+              PillOutlineButton(
+                label: _document?.fileName ?? 'Upload your document',
+                textColor: AppColors.navy,
+                icon: Icons.upload_file_rounded,
+                onPressed: _pickDocument,
+              )
+            else ...[
+              Text("What's your address?", style: AppTextStyles.body(color: _role.foreground, weight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              PillTextField(
+                hint: 'Enter your address',
+                controller: _addressController,
+                minLines: 3,
+                maxLines: 5,
+                borderRadius: 20,
+              ),
+            ],
             const SizedBox(height: 22),
             IdentificationPickerField(labelColor: _role.foreground),
             const SizedBox(height: 22),

@@ -9,12 +9,10 @@ import '../features/auth/forgot_password_screen.dart';
 import '../features/auth/login_role_screen.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/reset_password_screen.dart';
-import '../features/auth/signup_landlord1_screen.dart';
-import '../features/auth/signup_landlord2_screen.dart';
+import '../features/auth/signup_basics_screen.dart';
+import '../features/auth/signup_details_screen.dart';
 import '../features/auth/signup_role_screen.dart';
 import '../features/auth/signup_screen.dart';
-import '../features/auth/signup_tenant1_screen.dart';
-import '../features/auth/signup_tenant2_screen.dart';
 import '../features/auth/verify_otp_screen.dart';
 import '../features/landlord/landlord_dashboard_screen.dart';
 import '../features/dashboard/tenant_dashboard_screen.dart';
@@ -370,7 +368,8 @@ GoRouter buildAppRouter(AppState appState) {
       ),
       GoRoute(
         path: '/signup-landlord-1',
-        builder: (context, state) => SignupLandlord1Screen(
+        builder: (context, state) => SignupBasicsScreen(
+          role: UserRole.landlord,
           onContinue: (fields) {
             context.read<AppState>().setProfileBasics(
                   name: fields['name'] ?? '',
@@ -383,13 +382,15 @@ GoRouter buildAppRouter(AppState appState) {
       ),
       GoRoute(
         path: '/signup-landlord-2',
-        builder: (context, state) => SignupLandlord2Screen(
+        builder: (context, state) => SignupDetailsScreen(
+          role: UserRole.landlord,
           onFinish: () => context.go('/dashboard'),
         ),
       ),
       GoRoute(
         path: '/signup-tenant-1',
-        builder: (context, state) => SignupTenant1Screen(
+        builder: (context, state) => SignupBasicsScreen(
+          role: UserRole.tenant,
           onContinue: (fields) {
             context.read<AppState>().setProfileBasics(
                   name: fields['name'] ?? '',
@@ -401,7 +402,8 @@ GoRouter buildAppRouter(AppState appState) {
       ),
       GoRoute(
         path: '/signup-tenant-2',
-        builder: (context, state) => SignupTenant2Screen(
+        builder: (context, state) => SignupDetailsScreen(
+          role: UserRole.tenant,
           onFinish: () => context.go('/dashboard'),
         ),
       ),
