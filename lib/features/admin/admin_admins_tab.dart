@@ -16,7 +16,7 @@ import 'widgets/admin_filter_chip.dart';
 /// forcing the admin to start over. Never holds the OTP itself: that's only
 /// ever emailed, never returned to the client (see AdminService.confirmAdminOtp).
 class _AdminCreateDraft {
-  _AdminCreateDraft({required this.step, required this.email, required this.fullName, required this.level});
+  _AdminCreateDraft({required this.step, required this.email, required this.fullName, required this.level, this.savedAt});
 
   /// 'request' — still filling the first form, nothing sent yet.
   /// 'confirm' — requestAdmin succeeded; a code/temp password is already
@@ -26,7 +26,21 @@ class _AdminCreateDraft {
   final String fullName;
   final AdminLevel level;
 
-  Map<String, dynamic> toJson() => {'step': step, 'email': email, 'fullName': fullName, 'level': level.apiValue};
+  /// When a 'confirm' draft was saved — the emailed code only lives
+  /// [_inviteCodeLifetime], so after that there's nothing left to resume.
+  final DateTime? savedAt;
+
+  /// True while the emailed confirmation code can still be entered. A draft
+  /// saved before this was recorded has no [savedAt] and counts as expired.
+  bool get codeStillValid => savedAt != null && DateTime.now().difference(savedAt!) < _inviteCodeLifetime;
+
+  Map<String, dynamic> toJson() => {
+    'step': step,
+    'email': email,
+    'fullName': fullName,
+    'level': level.apiValue,
+    if (savedAt != null) 'savedAt': savedAt!.toIso8601String(),
+  };
 
   static _AdminCreateDraft? tryParse(String raw) {
     try {
@@ -36,6 +50,7 @@ class _AdminCreateDraft {
         email: json['email'] as String,
         fullName: json['fullName'] as String,
         level: AdminLevel.fromApi(json['level'] as String),
+        savedAt: json['savedAt'] != null ? DateTime.tryParse(json['savedAt'] as String) : null,
       );
     } catch (_) {
       return null;
@@ -44,6 +59,10 @@ class _AdminCreateDraft {
 }
 
 const _adminDraftPrefsKey = 'admin_create_draft_v1';
+
+/// Matches the backend's OTP lifetime (CODE_TTL_MINUTES in
+/// backend/src/otp/otp.service.ts).
+const _inviteCodeLifetime = Duration(minutes: 10);
 
 Future<_AdminCreateDraft?> _loadAdminDraft() async {
   final prefs = await SharedPreferences.getInstance();
@@ -134,7 +153,7 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
         backgroundColor: Colors.white,
         title: Text('Continue inviting $email?', style: AppTextStyles.heading(color: AppColors.navy, size: 17)),
         content: Text(
-          "This invite wasn't finished last time. A confirmation code and one-time password were already sent — you can enter that code now, or start the invite over.",
+          "This invite wasn't finished. A confirmation code and one-time password were sent in the last 10 minutes — you can enter that code now, or start the invite over.",
           style: AppTextStyles.body(color: AppColors.hintGrey, size: 13.5),
         ),
         actions: [
@@ -157,15 +176,29 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
   }
 
   Future<void> _createAdmin() async {
-    final existingDraft = await _loadAdminDraft();
+    var existingDraft = await _loadAdminDraft();
     if (!mounted) return;
 
     String? prefillEmail;
     String? prefillName;
     AdminLevel? prefillLevel;
 
+    // An invite that has since been completed (e.g. from another device)
+    // leaves nothing to resume.
+    final draftEmail = existingDraft?.email.toLowerCase();
+    if (draftEmail != null && (_admins ?? const []).any((a) => a.email.toLowerCase() == draftEmail)) {
+      await _clearAdminDraft();
+      if (!mounted) return;
+      existingDraft = null;
+    }
+
     if (existingDraft != null) {
-      if (existingDraft.step == 'confirm') {
+      // Only offer to resume while the emailed code still works. This used
+      // to prompt forever: closing the code sheet any way other than its
+      // Cancel button (swipe down, tap outside, back, or "Not Now") kept
+      // the draft, long after the 10-minute code had expired. An expired
+      // one now just pre-fills the form instead.
+      if (existingDraft.step == 'confirm' && existingDraft.codeStillValid) {
         final action = await _showResumeAdminDialog(existingDraft.email);
         if (!mounted) return;
         if (action == _DraftAction.resume) {
@@ -303,7 +336,9 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
     if (!mounted) return;
     // The server now has a pending invite regardless of what happens to this
     // screen next, so persist enough to resume straight into the confirm step.
-    await _saveAdminDraft(_AdminCreateDraft(step: 'confirm', email: email, fullName: fullName, level: level));
+    await _saveAdminDraft(
+      _AdminCreateDraft(step: 'confirm', email: email, fullName: fullName, level: level, savedAt: DateTime.now()),
+    );
     await _confirmAdmin(email, fullName: fullName, level: level);
   }
 
@@ -344,6 +379,16 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                           final messenger = ScaffoldMessenger.of(context);
                           try {
                             await context.read<AppState>().admin.requestAdmin(email: email, fullName: fullName, level: level);
+                            // A fresh code restarts the resume window.
+                            await _saveAdminDraft(
+                              _AdminCreateDraft(
+                                step: 'confirm',
+                                email: email,
+                                fullName: fullName,
+                                level: level,
+                                savedAt: DateTime.now(),
+                              ),
+                            );
                             messenger.showSnackBar(const SnackBar(content: Text('Code resent')));
                           } on ApiException catch (e) {
                             messenger.showSnackBar(SnackBar(content: Text(e.message)));
