@@ -1,4 +1,7 @@
 import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
+
+export const SIGN_IN_PORTALS = ['APP', 'ADMIN', 'TENANT', 'LANDLORD'] as const;
+export type SignInPortal = (typeof SIGN_IN_PORTALS)[number];
 import { IsBoolean, IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
 
 export class LoginDto {
@@ -24,11 +27,12 @@ export class LoginDto {
   @IsString()
   deviceModel?: string;
 
-  /// Which sign-in page this came from: 'ADMIN' (the admin console) only
-  /// accepts admin accounts, 'APP' (tenant/landlord/vendor) never does.
-  /// Checked right after the password, before any code is sent or token
-  /// issued. Optional so an older client build keeps working.
+  /// Which sign-in page this came from, and so which accounts it takes:
+  /// 'TENANT' / 'LANDLORD' only that role, 'ADMIN' (the admin console)
+  /// only admins, 'APP' (older app builds) any non-admin. Checked right
+  /// after the password, before any code is sent or token issued.
+  /// Optional so an older client build keeps working.
   @IsOptional()
-  @IsIn(['APP', 'ADMIN'])
-  portal?: 'APP' | 'ADMIN';
+  @IsIn(SIGN_IN_PORTALS)
+  portal?: SignInPortal;
 }

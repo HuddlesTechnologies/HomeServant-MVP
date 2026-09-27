@@ -205,6 +205,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
             ),
             const SizedBox(height: 24),
             GoogleSignInButton(
+              role: widget.role,
               onSignedIn: widget.onGoogleSignedIn,
               onError: (message) => setState(() => _error = message),
             ),

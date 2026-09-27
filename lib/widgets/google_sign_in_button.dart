@@ -7,6 +7,7 @@ import '../api/api_exception.dart';
 import '../core/theme/app_text_styles.dart';
 import '../services/google_auth_service.dart';
 import '../state/app_state.dart';
+import '../models/user_role.dart';
 import 'login_outcome_handler.dart';
 
 /// "Continue with Google" button that runs the whole Google sign-in: gets
@@ -20,7 +21,11 @@ import 'login_outcome_handler.dart';
 /// that yields an ID token — see GoogleAuthService) and picks up each
 /// completed sign-in from [GoogleAuthService.webIdTokens].
 class GoogleSignInButton extends StatefulWidget {
-  const GoogleSignInButton({super.key, required this.onSignedIn, required this.onError});
+  const GoogleSignInButton({super.key, required this.onSignedIn, required this.onError, this.role});
+
+  /// The page's role: a new account gets it, and an existing account of
+  /// another role is refused (see AppState.loginWithGoogle).
+  final UserRole? role;
 
   /// Called once the account is signed in (the caller decides where to go
   /// next, e.g. the profile-setup wizard for a first-time account).
@@ -42,7 +47,7 @@ class _GoogleSignInButtonState extends State<GoogleSignInButton> {
     setState(() => _busy = true);
     widget.onError(null);
     try {
-      final outcome = await context.read<AppState>().loginWithGoogle(idToken: idToken, reactivate: reactivate);
+      final outcome = await context.read<AppState>().loginWithGoogle(idToken: idToken, reactivate: reactivate, role: widget.role);
       if (!mounted || outcome == null) return;
       await handleLoginOutcome(
         context,

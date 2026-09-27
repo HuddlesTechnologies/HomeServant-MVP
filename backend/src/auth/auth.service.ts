@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { ActivityLogType, OtpPurpose, User } from '@prisma/client';
+import { ActivityLogType, OtpPurpose, User, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
 import { StorageService } from '../storage/storage.service';
@@ -18,6 +18,7 @@ import { LoginDto } from './dto/login.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
+import { SignInPortal } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
 /// What comes back to the client after signup/login — never the password
@@ -119,12 +120,7 @@ export class AuthService {
     }
     // Each sign-in page takes only its own kind of account. (Safe to say
     // after the password check: only the account's owner learns its role.)
-    if (dto.portal === 'APP' && user.role === 'ADMIN') {
-      throw new ForbiddenException('Admin accounts sign in on the admin console, not here.');
-    }
-    if (dto.portal === 'ADMIN' && user.role !== 'ADMIN') {
-      throw new ForbiddenException('This account is not an admin account.');
-    }
+    assertPortalAllows(dto.portal, user.role);
     if (!user.emailVerifiedAt) {
       // Used to be a dead end: a 403 with no way to get a new code, while
       // signup refused the email as taken. The password is already proven
@@ -264,6 +260,10 @@ export class AuthService {
     if (user?.role === 'ADMIN') {
       throw new ForbiddenException('Admin accounts sign in with email and password on the admin console.');
     }
+    // An existing account on the wrong page (e.g. a landlord's Google
+    // account on the tenant page) is refused before it's linked to Google.
+    // A brand-new account takes the page's role, so there's nothing to check.
+    if (user) assertPortalAllows(dto.portal, user.role);
 
     if (user) {
       if (!user.googleId) {
@@ -494,5 +494,23 @@ export class AuthService {
       mustChangePassword: user.mustChangePassword,
       profileCompletedAt: user.profileCompletedAt,
     };
+  }
+}
+
+/// Refuses an account on another kind of sign-in page, telling the owner
+/// where to go instead (see LoginDto.portal). No portal (very old clients)
+/// allows any account.
+function assertPortalAllows(portal: SignInPortal | undefined, role: UserRole): void {
+  if (!portal) return;
+  if (portal === 'ADMIN') {
+    if (role !== 'ADMIN') throw new ForbiddenException('This account is not an admin account.');
+    return;
+  }
+  if (role === 'ADMIN') throw new ForbiddenException('Admin accounts sign in on the admin console, not here.');
+  if (portal === 'TENANT' && role === 'LANDLORD') {
+    throw new ForbiddenException('This is a landlord account. Please sign in on the landlord page.');
+  }
+  if (portal === 'LANDLORD' && role !== 'LANDLORD') {
+    throw new ForbiddenException('This is a tenant account. Please sign in on the tenant page.');
   }
 }

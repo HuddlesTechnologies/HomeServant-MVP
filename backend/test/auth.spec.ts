@@ -80,4 +80,38 @@ describeDb('sign-in pages and account types (real Postgres)', () => {
     await expect(auth.googleAuth({ idToken: 'x' } as never)).rejects.toThrow(/admin console/);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: admin.id } })).googleId).toBeNull();
   });
+
+  it('the tenant page refuses a landlord, and the landlord page refuses a tenant', async () => {
+    await account(UserRole.TENANT, 'tenant@test.local');
+    await account(UserRole.LANDLORD, 'landlord@test.local');
+    await expect(auth.login({ email: 'landlord@test.local', password: 'secret-pass', portal: 'TENANT' })).rejects.toThrow(
+      /landlord account.*landlord page/,
+    );
+    await expect(auth.login({ email: 'tenant@test.local', password: 'secret-pass', portal: 'LANDLORD' })).rejects.toThrow(
+      /tenant account.*tenant page/,
+    );
+    await expect(auth.login({ email: 'tenant@test.local', password: 'secret-pass', portal: 'TENANT' })).resolves.toHaveProperty('accessToken');
+    await expect(auth.login({ email: 'landlord@test.local', password: 'secret-pass', portal: 'LANDLORD' })).resolves.toHaveProperty(
+      'accessToken',
+    );
+    // A wrong password still reveals nothing about the account's role.
+    await expect(auth.login({ email: 'landlord@test.local', password: 'wrong', portal: 'TENANT' })).rejects.toThrow(
+      /Incorrect email or password/,
+    );
+    // Older app builds ('APP') still let either in.
+    await expect(auth.login({ email: 'landlord@test.local', password: 'secret-pass', portal: 'APP' })).resolves.toHaveProperty(
+      'accessToken',
+    );
+  });
+
+  it('Google on the wrong page is refused and the account is not linked', async () => {
+    const landlord = await account(UserRole.LANDLORD, 'landlord@test.local');
+    const googleClient = (auth as unknown as { googleClient: { verifyIdToken: unknown } }).googleClient;
+    googleClient.verifyIdToken = async () => ({
+      getPayload: () => ({ sub: 'google-456', email: 'landlord@test.local', email_verified: true }),
+    });
+    await expect(auth.googleAuth({ idToken: 'x', portal: 'TENANT' } as never)).rejects.toThrow(/landlord page/);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: landlord.id } })).googleId).toBeNull();
+    await expect(auth.googleAuth({ idToken: 'x', portal: 'LANDLORD' } as never)).resolves.toHaveProperty('accessToken');
+  });
 });
