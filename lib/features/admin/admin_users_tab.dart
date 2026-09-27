@@ -56,7 +56,9 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
       );
       if (!mounted) return;
       setState(() {
-        _users = page.items;
+        // Admin accounts are managed on the Admins screen, never here (the
+        // server already leaves them out; this covers an older server).
+        _users = page.items.where((u) => !u.role.isAdmin).toList();
         _error = null;
       });
     } catch (_) {
@@ -169,9 +171,13 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
         const SizedBox(height: 8),
         Expanded(
           child: users == null
-              ? Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator())
+              ? Center(
+                  child: _error != null
+                      ? Text(_error!, style: AppTextStyles.body(color: AppColors.navy))
+                      : const CircularProgressIndicator(color: AppColors.navy),
+                )
               : users.isEmpty
-              ? const Center(child: Text('No users found'))
+              ? Center(child: Text('No users found', style: AppTextStyles.body(color: AppColors.hintGrey)))
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView.separated(

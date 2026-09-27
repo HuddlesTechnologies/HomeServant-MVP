@@ -46,6 +46,12 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     try {
       final user = await context.read<AppState>().admin.findUserDetail(widget.userId);
       if (!mounted) return;
+      // Admin accounts can't be viewed or edited as users (the server
+      // refuses too); they're managed on the Admins screen.
+      if (user.role.isAdmin) {
+        setState(() => _error = 'Admin accounts are managed on the Admins screen.');
+        return;
+      }
       setState(() {
         _user = user;
         _error = null;
@@ -358,7 +364,14 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
         ],
       ),
       body: user == null
-          ? Center(child: _error != null ? Text(_error!) : const CircularProgressIndicator())
+          ? Center(
+              child: _error != null
+                  ? Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(_error!, textAlign: TextAlign.center, style: AppTextStyles.body(color: AppColors.navy)),
+                    )
+                  : const CircularProgressIndicator(color: AppColors.navy),
+            )
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
