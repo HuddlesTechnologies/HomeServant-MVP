@@ -326,7 +326,9 @@ export class AdminService {
       marketplaceOrders,
       deactivatedAccounts,
     ] = await Promise.all([
-      this.prisma.user.count(),
+      // Admin accounts aren't users of the app (they're managed on the
+      // Admins screen), so they're left out of every user count.
+      this.prisma.user.count({ where: { role: { not: 'ADMIN' } } }),
       this.prisma.user.count({ where: { role: 'TENANT' } }),
       this.prisma.user.count({ where: { role: 'LANDLORD' } }),
       // A vendor keeps their original User.role (typically TENANT) — a
@@ -341,7 +343,7 @@ export class AdminService {
       this.prisma.property.count(),
       this.prisma.booking.count(),
       this.prisma.marketplaceOrder.count(),
-      this.prisma.user.count({ where: { deactivatedAt: { not: null } } }),
+      this.prisma.user.count({ where: { deactivatedAt: { not: null }, role: { not: 'ADMIN' } } }),
     ]);
     return {
       totalUsers,
@@ -482,7 +484,14 @@ export class AdminService {
       // A vendor keeps their original role (TENANT, in practice) — nothing
       // ever sets User.role = 'VENDOR', so that value never actually
       // matches by itself. "Vendor" here means "has a VendorProfile".
-      ...(query.role === 'VENDOR' ? { vendorProfile: { isNot: null } } : { role: query.role }),
+      //
+      // Admin accounts never appear here: they're managed on the Admins
+      // screen, and nothing on the user screens applies to them.
+      ...(query.role === 'VENDOR' || query.role === 'ADMIN' || !query.role
+        ? { role: { not: 'ADMIN' } }
+        : { role: query.role }),
+      ...(query.role === 'VENDOR' ? { vendorProfile: { isNot: null } } : {}),
+      ...(query.role === 'ADMIN' ? { id: { in: [] } } : {}),
       ...(query.deactivatedOnly ? { deactivatedAt: { not: null } } : {}),
       ...(query.search
         ? {
@@ -574,7 +583,8 @@ export class AdminService {
         },
       },
     });
-    if (!user) throw new NotFoundException('User not found');
+    // Admin accounts are managed on the Admins screen, never as users.
+    if (!user || user.role === 'ADMIN') throw new NotFoundException('User not found');
     const { passwordHash, properties, bookings, marketplaceOrders, ...rest } = user;
     return {
       ...rest,
