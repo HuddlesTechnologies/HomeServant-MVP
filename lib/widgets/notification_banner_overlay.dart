@@ -6,6 +6,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
 import '../features/dashboard/notifications_screen.dart';
 import '../routes/app_router.dart';
+import '../services/browser_notifications.dart';
 import '../services/chat_sound_service.dart';
 import '../state/app_state.dart';
 
@@ -83,6 +84,18 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
     if (appState.adminLevel != null && appState.adminAlertSound && _chatSoundTypes.contains(notification.type)) {
       unawaited(ChatSoundService.instance.play());
     }
+    // An admin looking at another tab (or with the window minimised)
+    // wouldn't see the in-page banner below — show the browser's own
+    // pop-up too. Clicking it brings the console back and opens the
+    // notification.
+    if (appState.adminLevel != null && appState.adminBrowserNotifications && browserTabHidden) {
+      showBrowserNotification(
+        title: notification.title,
+        body: notification.body,
+        tag: notification.threadId ?? notification.id,
+        onClick: () => _openNotification(notification),
+      );
+    }
     _dismissTimer?.cancel();
     setState(() => _visible = notification);
     if (appState.bannerAutoDismiss) {
@@ -101,6 +114,21 @@ class _NotificationBannerOverlayState extends State<NotificationBannerOverlay> {
   /// routed page tree (same position as SessionExpiredGate/AppLockGate),
   /// so a plain `Navigator.of(context)` here wouldn't find the app's real
   /// Navigator the way it does from inside an actual screen.
+  /// From a browser pop-up: straight to that notification's detail (for a
+  /// chat, that's where its status and the Reply button are).
+  void _openNotification(AppNotification notification) {
+    if (!mounted) return;
+    _dismiss();
+    final navigatorState = rootNavigatorKey.currentState;
+    final navContext = navigatorState?.context;
+    if (navigatorState == null || navContext == null) return;
+    final appState = navContext.read<AppState>();
+    unawaited(appState.markNotificationRead(notification.id));
+    navigatorState.push(
+      MaterialPageRoute(builder: (_) => NotificationDetailScreen(theme: appState.dashboardTheme, item: notification)),
+    );
+  }
+
   void _openNotifications() {
     final notification = _visible;
     _dismiss();

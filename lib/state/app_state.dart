@@ -520,6 +520,17 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Admin console on web, per device: show a browser pop-up for alerts
+  /// that arrive while the console tab isn't in view (another tab in front,
+  /// window minimised). Only takes effect once the browser's permission has
+  /// been granted — see browser_notifications_web.dart.
+  bool adminBrowserNotifications = true;
+
+  void setAdminBrowserNotifications(bool value) {
+    adminBrowserNotifications = value;
+    notifyListeners();
+  }
+
   Future<void> _loadAdminLevel() async {
     try {
       final me = await _adminRepo.me();
@@ -945,6 +956,7 @@ class AppState extends ChangeNotifier {
     'promotionalNotifications': promotionalNotifications,
     'bannerAutoDismiss': bannerAutoDismiss,
     'adminAlertSound': adminAlertSound,
+    'adminBrowserNotifications': adminBrowserNotifications,
     'appLockEnabled': appLockEnabled,
     // appLockPin is deliberately excluded — it lives in TokenStorage
     // (secure storage), not this plaintext SharedPreferences blob. See
@@ -963,6 +975,7 @@ class AppState extends ChangeNotifier {
     promotionalNotifications = json['promotionalNotifications'] as bool? ?? false;
     bannerAutoDismiss = json['bannerAutoDismiss'] as bool? ?? true;
     adminAlertSound = json['adminAlertSound'] as bool? ?? true;
+    adminBrowserNotifications = json['adminBrowserNotifications'] as bool? ?? true;
     appLockEnabled = json['appLockEnabled'] as bool? ?? false;
     // appLockPin is restored separately from secure storage — see [load].
   }
