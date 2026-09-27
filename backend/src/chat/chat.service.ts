@@ -9,6 +9,7 @@ import { ChatGateway } from './chat.gateway';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { PresenceService } from './presence.service';
+import { adminCanAccessSupportThread } from './support-access';
 
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_LOG_WINDOW_DAYS = 30;
@@ -261,13 +262,16 @@ export class ChatService {
 
   /// Sets `status: RESOLVED` — from that point [findForUser] hides this
   /// thread from the *user's* inbox (see its `isAdmin` param); the admin
-  /// side still shows it until the 30-day cleanup cron purges it. Any admin
-  /// can resolve it, not just whoever's assigned, same as any admin can
-  /// see the shared queue. [adminId] is only used for the activity-log
-  /// entry — it plays no part in authorization.
+  /// side still shows it until the 30-day cleanup cron purges it. Only an
+  /// admin allowed into the thread can resolve it: the one handling it, any
+  /// admin while it's still unclaimed, or a SUPER_ADMIN (see
+  /// adminCanAccessSupportThread).
   async resolveSupportThread(threadId: string, adminId: string): Promise<void> {
     const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, include: { participants: true } });
     if (!thread || !thread.isSupport) throw new NotFoundException('Support thread not found');
+    if (!(await adminCanAccessSupportThread(this.prisma, thread, adminId))) {
+      throw new ForbiddenException('Another admin is handling this conversation');
+    }
     if (thread.status === 'RESOLVED') return;
     await this.prisma.thread.update({ where: { id: threadId }, data: { status: 'RESOLVED', resolvedAt: new Date() } });
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_RESOLVED, { actorId: adminId });
@@ -288,10 +292,10 @@ export class ChatService {
   /// when someone opens a chat notification: still waiting for an admin,
   /// being handled (by them or by whom), transferred away, or resolved,
   /// and whether they can open it ([canView]) and reply ([canReply]).
-  /// Visible to participants, to any admin for a support thread, and to an
-  /// admin who transferred the thread away (so their "new message"
-  /// notification can say where it went, even if they can no longer open
-  /// a non-support thread).
+  /// Visible to participants, to admins allowed into a support thread (see
+  /// adminCanAccessSupportThread), and to an admin who transferred the
+  /// thread away — they get the status (so their notification can say where
+  /// it went) but canView false, since it's no longer theirs to read.
   async getThreadSummary(threadId: string, userId: string, role: UserRole) {
     const thread = await this.prisma.thread.findUnique({
       where: { id: threadId },
@@ -312,7 +316,7 @@ export class ChatService {
     const transferredByMe =
       isAdmin &&
       (await this.prisma.threadTransferLog.count({ where: { threadId, fromAdminId: userId } })) > 0;
-    const canView = isParticipant || (isAdmin && thread.isSupport);
+    const canView = isParticipant || (isAdmin && (await adminCanAccessSupportThread(this.prisma, thread, userId)));
     if (!canView && !transferredByMe) throw new ForbiddenException('Not a participant of this thread');
 
     const resolved = thread.status === 'RESOLVED';
@@ -453,8 +457,10 @@ export class ChatService {
 
   /// [senderRole] lets any admin read/reply to an unclaimed support thread
   /// even before they're a [ThreadParticipant] of it (see [sendMessage]'s
-  /// auto-claim, which is what actually adds them as one) — every other
-  /// thread, and every other role, still requires real participancy.
+  /// auto-claim, which is what actually adds them as one). A support thread
+  /// another admin is handling is closed to other admins except a
+  /// SUPER_ADMIN (see adminCanAccessSupportThread) — every other thread,
+  /// and every other role, still requires real participancy.
   private async assertParticipant(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
     const membership = await this.prisma.threadParticipant.findUnique({
       where: { threadId_userId: { threadId, userId } },
@@ -462,7 +468,7 @@ export class ChatService {
     if (membership) return;
     if (senderRole === 'ADMIN') {
       const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
-      if (thread?.isSupport) return;
+      if (thread && (await adminCanAccessSupportThread(this.prisma, thread, userId))) return;
     }
     throw new ForbiddenException('Not a participant of this thread');
   }

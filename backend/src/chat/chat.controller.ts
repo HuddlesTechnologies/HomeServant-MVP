@@ -95,8 +95,9 @@ export class ChatController {
     }
   }
 
-  /// Admin-only — any admin can resolve a support thread, not just whoever
-  /// claimed it (mirrors the shared-queue visibility above).
+  /// Admin-only — the admin handling the thread (or any admin while it's
+  /// unclaimed, or a SUPER_ADMIN) can resolve it; see
+  /// ChatService.resolveSupportThread.
   @Patch(':id/resolve')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(RolesGuard)

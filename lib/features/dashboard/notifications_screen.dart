@@ -254,12 +254,17 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
           : 'You are handling this conversation.';
     }
     if (assigned != null) {
-      return summary.lastTransferFrom?.id == myId
-          ? 'You transferred this conversation to ${assigned.displayName}.'
-          : 'Transferred to ${assigned.displayName}, who is handling it now.';
+      if (summary.lastTransferFrom?.id == myId) {
+        return 'You transferred this conversation to ${assigned.displayName}.';
+      }
+      return summary.lastTransferTo?.id == assigned.id
+          ? 'Transferred to ${assigned.displayName}, who is handling it now.'
+          : '${_capitalized(assigned.displayName)} is handling this conversation.';
     }
     return summary.canReply ? 'You can reply to this conversation.' : "You can't reply to this conversation.";
   }
+
+  static String _capitalized(String text) => text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
 
   Future<void> _openThread(ThreadSummary summary) async {
     final appState = context.read<AppState>();

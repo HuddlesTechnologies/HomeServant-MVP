@@ -14,6 +14,7 @@ import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../auth/strategies/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { PresenceService } from './presence.service';
+import { adminCanAccessSupportThread } from './support-access';
 
 /// Same allow-list `main.ts` builds from CORS_ORIGINS for the REST API —
 /// duplicated here because `@WebSocketGateway`'s options are evaluated at
@@ -81,7 +82,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /// the client knows the socket is live.
   ///
   /// Mirrors ChatService.assertParticipant's membership check (a real
-  /// ThreadParticipant row, or an admin on a support thread) — without it,
+  /// ThreadParticipant row, or an admin allowed into a support thread — see
+  /// adminCanAccessSupportThread) — without it,
   /// any authenticated socket could join an arbitrary thread id it merely
   /// guessed or came across and silently receive every message
   /// [broadcastMessage] emits into that thread's room, regardless of
@@ -96,8 +98,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!membership) {
       const role = client.data.role as string | undefined;
       if (role !== 'ADMIN') return;
-      const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { isSupport: true } });
-      if (!thread?.isSupport) return;
+      const thread = await this.prisma.thread.findUnique({
+        where: { id: threadId },
+        select: { isSupport: true, assignedAdminId: true },
+      });
+      if (!thread || !(await adminCanAccessSupportThread(this.prisma, thread, userId))) return;
     }
 
     client.join(this.threadRoom(threadId));
