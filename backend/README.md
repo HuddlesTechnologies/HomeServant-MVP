@@ -1,34 +1,70 @@
 # HomeServant API
 
-NestJS + Prisma + PostgreSQL (Supabase) backend for the HomeServant Flutter
-app (mobile and web). Covers auth (including Google Sign-In), user
-profiles, properties, bookings, favorites, file uploads, reviews, chat,
-and the marketplace (vendors, products, orders) — the pieces the current
-app screens actually call. See **Not built yet** below for what's
-intentionally out of scope for this pass.
+NestJS 10 + Prisma 5 + PostgreSQL (Supabase) backend for the HomeServant
+Flutter app (web and mobile), deployed on Render. It covers:
+
+- **Accounts:** email + password with email codes and optional two-factor,
+  Google sign-in (never for admins), profiles, deactivation.
+- **Rentals:** properties, bookings and inspections, Paystack **escrow**
+  payments (held until move-in, refunds, landlord rejections, renewals),
+  tenancy agreements, reviews, favourites.
+- **Marketplace:** vendors (admin-approved), products, orders with held
+  payments and auto-release.
+- **Chat:** tenant/landlord chats tied to payment, marketplace order chats,
+  and customer-support chats with auto-assignment, transfers, internal
+  notes, saved replies, ratings and a support dashboard.
+- **Reach:** in-app notifications over Socket.IO, Web Push, and emails for
+  codes and unread messages.
+- **Admin console:** three admin levels, moderation, reports, activity log.
+
+**Full documentation:** `docs/Backend Developer Guide.pdf` (architecture,
+data model, every endpoint and job, configuration). The source is
+`docs/guides/backend_guide.html`; rebuild with `python3 docs/guides/build.py`.
 
 ## Local setup
 
 1. Create a free project at [supabase.com](https://supabase.com). Project
    Settings > Database gives you the pooled and direct connection
-   strings; Project Settings > API gives you the URL and service role
-   key.
-2. `cp .env.example .env` and fill in `DATABASE_URL`, `DIRECT_URL`,
-   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, plus two random secrets
+   strings; Project Settings > API gives you the URL and service role key.
+2. `cp .env.example .env` and fill it in. `.env.example` lists every
+   setting with a comment; at minimum `DATABASE_URL`, `DIRECT_URL`,
+   `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and two random secrets
    (`openssl rand -hex 32` twice) for `JWT_ACCESS_SECRET` /
    `JWT_REFRESH_SECRET`.
-3. In Supabase Storage, create a bucket named `homeservant-uploads`
-   (matches `SUPABASE_STORAGE_BUCKET`'s default) and mark it **public** —
-   uploaded property/profile images are read via their public URL
-   directly, no signed read needed.
+3. In Supabase Storage, create a **public** bucket named
+   `homeservant-uploads` (the `SUPABASE_STORAGE_BUCKET` default).
 4. `npm install`
-5. `npm run prisma:migrate` — creates the database schema.
-6. `npm run start:dev` — API is at `http://localhost:3000/api`, restarts on
-   file changes.
+5. `npm run prisma:migrate` — creates or upgrades the database schema.
+6. `npm run start:dev` — the API is at `http://localhost:3000/api` and
+   restarts on file changes.
 
-With `OTP_PROVIDER=console` (the default), signup/login verification codes
-print to the server's terminal instead of being emailed/texted — check
-there while testing locally.
+With `OTP_PROVIDER=console` (the default), verification codes print to
+this terminal instead of being emailed.
+
+## Tests
+
+The tests in `test/` run the real services against a real, **disposable**
+Postgres (every table is emptied before each test — never point this at a
+real database). Only sockets, email and push are faked.
+
+```bash
+createdb hs_test
+DATABASE_URL=postgresql://localhost/hs_test npx prisma migrate deploy
+TEST_DATABASE_URL=postgresql://localhost/hs_test npm test
+```
+
+`npx tsc --noEmit -p tsconfig.json` type-checks. GitHub Actions
+(`.github/workflows/ci.yml`) runs the type check, applies the migrations and
+checks they match `prisma/schema.prisma`, runs these tests, and runs the
+Flutter analyzer and tests, on every pull request.
+
+## Changing the database
+
+Edit `prisma/schema.prisma`, then add a migration folder under
+`prisma/migrations/` (`npx prisma migrate dev --name what_changed`, or
+hand-write the SQL and verify it with `npx prisma migrate diff
+--from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma`).
+Prefer additive changes so the running app keeps working during a deploy.
 
 ## Real OTP email via Resend
 
@@ -92,17 +128,35 @@ container.
    and takes 30-50s to cold-start the next request. That's a bad
    experience for login/OTP, and drops every open chat socket (see
    **Real-time chat** below) — move to a paid instance before real users
-   depend on this.
+   depend on this. (Open chats reconnect on their own when the service
+   wakes — the app fetches a fresh sign-in token for every reconnect.)
 
 The Dockerfile runs `prisma migrate deploy` on every boot, so pushing a new
 migration and redeploying is enough to apply it — no separate migration
 step needed.
 
-## Admin console
+## Optional features and their settings
 
-There's no public "become an admin" path — `role: ADMIN` is refused by
-both `/api/auth/signup` and `/api/auth/google` (see `AuthService`). The
-very first admin account is created once via:
+| Setting | What it turns on |
+|---|---|
+| `PAYSTACK_SECRET_KEY` | Payments, payouts and bank-account checks. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push. Generate the keys once with `npx web-push generate-vapid-keys`; the subject is a `mailto:` address or your site URL. Without them push is off. |
+| `APP_URL` | The web app's address for links in emails (falls back to the first `CORS_ORIGINS` entry). |
+| `SUPPORT_AUTO_ASSIGN` | `false` stops auto-assigning new support chats to on-duty admins. |
+| `SUPPORT_UNCLAIMED_REMINDER_MINUTES`, `SUPPORT_UNCLAIMED_ESCALATION_MINUTES`, `SUPPORT_REPLY_ESCALATION_MINUTES` | Support reminder and escalation delays (defaults 5, 15, 10). |
+
+## Resetting all chats (testing)
+
+`scripts/clear_all_chats.sql` deletes every conversation, message, internal
+note, transfer record, chat notification and support-dashboard row, and
+nothing else (users, listings, bookings and payments stay). Run it in the
+Supabase SQL Editor: preview first (part 1), then delete (part 2, one
+transaction). It is permanent, so take a backup first.
+
+## The first admin
+
+Admin accounts can't sign up or use Google sign-in. The very first admin is
+created once with:
 
 ```bash
 curl -X POST https://<your-api>/api/admin/bootstrap \
@@ -111,207 +165,21 @@ curl -X POST https://<your-api>/api/admin/bootstrap \
   -d '{"email":"you@example.com","password":"…","fullName":"…"}'
 ```
 
-using the `ADMIN_BOOTSTRAP_SECRET` env var (set on Render — `render.yaml`
-generates one on first provision, but since the service already existed
-before this shipped, add it by hand on the Environment tab the same way
-as `PAYSTACK_SECRET_KEY`). That endpoint refuses once any admin exists;
-every admin after the first is created from inside the console itself
-(`POST /api/admin/admins`, admin-only) instead. Sign in at the Flutter
-app's `/admin-login` route — not linked from anywhere in the normal UI —
-with the admin account's email/password.
-
-The console (`GET/PATCH/DELETE /api/admin/*`, all `@Roles(ADMIN)`) covers
-platform stats, and full moderation of users (deactivate/delete),
-vendors (approve/reject/suspend a vendor's onboarding application),
-properties, and marketplace products/orders. A new vendor signup starts
-`VendorProfile.status: PENDING` and can set their shop up immediately,
-but nothing they list is visible in the public Marketplace feed (see
-`MarketplaceProductsService.findMany`) until an admin approves them;
-approval/rejection also sends the vendor an email and an in-app
-notification.
-
-## Real-time chat
-
-`ChatGateway` (`src/chat/chat.gateway.ts`, socket.io via
-`@nestjs/platform-socket.io`) pushes a `message:new` event to every other
-thread participant the moment `POST /threads/:id/messages` persists a
-message — before this, a thread only ever loaded once, when the screen
-opened, with no polling and no push. The socket authenticates once, at
-connection (`auth: { token: <access token> }`, verified the same way as
-the JWT guard on regular routes), not per-event; each connected socket
-joins a room named after its own user id. This is a plain in-process
-gateway — it doesn't survive the free-tier Render service sleeping/
-restarting (see **Deploying to Render** above), and doesn't fan out
-across multiple instances if this is ever scaled horizontally (would
-need a Redis adapter for that).
-
-## API shape
-
-Every route is prefixed `/api`. Auth:
-
-- `POST /api/auth/signup` — creates the user (unverified), sends a 4-digit
-  code (matches the Flutter client's 4-box OTP input).
-- `POST /api/auth/verify-signup` — verifies that code, returns
-  `{ accessToken, refreshToken, user }`.
-- `POST /api/auth/login` — returns tokens directly, or
-  `{ requiresTwoFactor: true, email }` if the account has 2FA on.
-- `POST /api/auth/verify-2fa` — completes a 2FA login the same way
-  verify-signup completes signup.
-- `POST /api/auth/google` with `{ idToken, role? }` — verifies the ID
-  token the client's Google Sign-In SDK returned, then finds-or-creates
-  the matching user (matched by Google's `sub` claim first, falling back
-  to email — so an existing email/password account gets linked rather
-  than erroring on first Google sign-in). `role` is required only when no
-  matching user exists yet. Skips OTP entirely — Google already verified
-  the email. See **Google Sign-In** below for the Cloud Console setup.
-- `POST /api/auth/refresh` — rotates a refresh token for a new pair; the
-  old one is revoked the moment this succeeds, so a leaked-and-replayed
-  refresh token stops working as soon as the real client refreshes.
-- `POST /api/auth/logout` — revokes one refresh token.
-- `PATCH /api/auth/password` (authenticated) with `{ currentPassword,
-  newPassword }` — also revokes every other refresh token, so changing
-  your password signs other sessions out.
-
-Everything else (`/api/users/me`, `/api/properties`, `/api/bookings`,
-`/api/favorites`, `/api/uploads`, `/api/reviews`, `/api/threads`,
-`/api/vendors`, `/api/marketplace/*`) expects `Authorization: Bearer
-<accessToken>` except `GET /api/properties`, `GET /api/properties/:id`,
-`GET /api/reviews`, and `GET /api/marketplace/products*`, which are
-public so the browse feeds don't require login.
-
-### File uploads
-
-`POST /api/uploads/sign` with `{ fileName, folder }` (`folder` is
-`"properties"`, `"profile-photos"`, `"marketplace-products"`, or
-`"vendor-logos"`) returns a one-time `{ path, signedUrl, token,
-publicUrl }`. The client `PUT`s the raw file bytes to `signedUrl`
-(`Content-Type` matching the file), then saves `publicUrl` wherever it
-belongs (property `imageUrl`/`galleryUrls`, a user's `profilePhotoUrl`, a
-product's `imageUrls`, a vendor's `logoUrl`) via the relevant update
-endpoint — this API never receives the file itself, Supabase Storage
-does.
-
-### Reviews
-
-`GET /api/reviews?propertyId=` lists a property's reviews (public).
-`GET /api/reviews/mine` (authenticated) lists every review the caller has
-left, across properties.
-`POST /api/reviews` (tenant only) upserts the caller's review for
-`{ propertyId, rating, comment? }` — resubmitting updates the existing one
-rather than erroring, since there's a one-review-per-tenant-per-property
-constraint. `properties.avgRating`/`reviewCount` on every property response
-are computed from this table, not stored on `Property` itself.
-
-### Chat
-
-- `GET /api/threads` — the caller's conversations, each with the other
-  participant(s), the property it's about (if any), the last message, and
-  an unread count.
-- `POST /api/threads` with `{ recipientId, propertyId? }` or `{
-  recipientId, orderId? }` — opens a thread, reusing an existing one
-  between the same two people about the same property/order instead of
-  duplicating it. `orderId` is how marketplace pickup-coordination chats
-  (buyer <-> vendor) plug into the same chat system as property chats.
-- `GET /api/threads/:id/messages` (optional `?before=<ISO timestamp>` to
-  page backwards) / `POST /api/threads/:id/messages` with `{ body }`.
-- `PATCH /api/threads/:id/read` — marks the other participant's messages
-  as read.
-
-Messages are persisted here, not on Supabase Realtime directly — the
-Flutter client currently polls (refetch on screen focus / after sending)
-rather than holding a live subscription. Supabase Realtime's Postgres
-change feed is the natural next step for push delivery, but it authorizes
-subscribers via Supabase Auth (`auth.uid()` in Row Level Security policies),
-and this API has its own JWT auth instead — wiring it up means either
-switching auth to Supabase Auth, or issuing this API's access tokens signed
-with Supabase's own JWT secret so `auth.jwt()` resolves correctly in RLS.
-Neither is done here; treat it as a deliberate follow-up, not an oversight.
-
-### Marketplace
-
-A vendor is a `VENDOR`-role `User` (same signup/login/OTP/Google-auth flow
-as everything else) with a 1:1 `VendorProfile` — deliberately *not* a
-second, parallel auth system, so vendors get real sessions/password
-handling/2FA for free instead of the app's previous "any email/password
-logs in, signup form data is discarded" placeholder.
-
-- `POST /api/vendors/me` with `{ businessName, category, state, rcNumber?,
-  logoUrl? }` — creates the caller's shop (`VENDOR` role only, one per
-  account). `GET/PATCH /api/vendors/me` read/update it; `PATCH` also
-  accepts `bankName`/`accountNumber`/`accountName` (payout details — see
-  **Not built yet**, payouts themselves aren't automated), and `isActive:
-  false` is "Deactivate Shop" — hides every one of the vendor's products
-  from the public catalog without deleting anything.
-- `GET /api/marketplace/products` (public; `?category=`, `?search=`,
-  `?vendorId=`) / `GET /api/marketplace/products/:id` (public) — only
-  ever returns `isAvailable` products from `isActive` vendors.
-  `GET /api/marketplace/products/mine` (vendor only) includes unavailable
-  ones too, so a vendor can see and re-enable something they deleted.
-  `POST`/`PATCH /api/marketplace/products/:id` (vendor, own products
-  only) create/update a listing; `DELETE` is a soft delete
-  (`isAvailable = false`) rather than a real row delete, since a hard
-  delete would orphan any past order that references it.
-- `POST /api/marketplace/orders` with `{ items: [{ productId, quantity,
-  fulfillment }], paymentMethod }` — buyer info (`customerName/Phone/
-  Address`) comes from the authenticated account's own profile, not a
-  separate checkout form. Stock is checked and decremented atomically per
-  item inside a transaction (a conditional update guarded by `stock >=
-  quantity`, not a plain read-then-write), so two concurrent buyers can't
-  both oversell the last unit. `GET /api/marketplace/orders/mine` is the
-  buyer's own order history (scoped by buyer id — every buyer used to see
-  every order ever placed, by everyone, before this existed).
-  `GET /api/marketplace/orders/vendor` (vendor only) is the flattened
-  order-item view for that vendor's own sales.
-  `PATCH /api/marketplace/orders/items/:itemId/status` (vendor, own items
-  only) with `{ status: "COMPLETED" | "CANCELLED" }`, and `PATCH
-  .../items/:itemId/read` mark a notification seen.
-- **No payment gateway is wired up** — an order is recorded with whatever
-  `paymentMethod` label the client sends; nothing actually charges the
-  buyer. See **Not built yet**.
-
-## Wiring this into the Flutter app
-
-The client's `lib/api/` layer (`ApiClient` + one repository per resource —
-`AuthRepository`, `PropertiesRepository`, `BookingsRepository`,
-`FavoritesRepository`, `ReviewsRepository`, `ChatRepository`,
-`UploadsRepository`, `UsersRepository`) calls every endpoint above, with
-access/refresh tokens in `flutter_secure_storage` (never `SharedPreferences`)
-and the base URL read from `--dart-define=API_BASE_URL=...`. `lib/state/app_state.dart`
-owns the signed-in session and the live lists screens read from
-(`properties`, `landlordProperties`, `favoriteProperties`, `myBookings`,
-`landlordBookings`, `rentalHistory`) — it holds no mock/seed data. Device-only
-preferences (theme, notification toggles, app lock) still live in
-`SharedPreferences`, since they have no server model.
+That route refuses once any admin exists. Every later admin is invited from
+the console by a super admin (an emailed code plus a temporary password),
+and the console records who invited them. Admins sign in only at the web
+app's `/#/admin-login` page — the regular sign-in pages refuse admin
+accounts. See `docs/Admin Guide.pdf`, including how to recover if the
+console is ever taken over.
 
 ## Not built yet
 
-Scoped out of this pass on purpose, to ship something real rather than a
-half-built everything:
-
-- **Tenancy agreement storage** — PDF generation is client-side only
-  (`lib/features/dashboard/legal/tenancy_agreement_pdf.dart`); nothing
-  persists the generated document server-side yet.
-- **Payments** — no Paystack/Flutterwave integration for rent or
-  marketplace checkout; a marketplace order is recorded with whatever
-  `paymentMethod` label the client sends, nothing actually charges
-  anyone. Needs a real merchant account and API keys.
-- **Landlord/vendor payouts** — `User.bankCode/bankName/accountNumber/
-  accountName` (landlords, via `PATCH /users/me/bank-details`) and
-  `VendorProfile.bankName/accountNumber/accountName` (vendors) are
-  captured and verified against Paystack's account-resolution API (see
-  `src/paystack/`), so what's stored is a real, confirmed account — but
-  nothing automates actually paying either of them out yet. That's tied
-  to the payments gap above.
-- **SMS OTP delivery** — email (`OTP_PROVIDER=resend`, see below) is
-  wired up; SMS via Termii (for Nigerian phone numbers) isn't. Implement
-  `OtpProvider` (see `src/otp/otp-provider.interface.ts`) for it if a
-  phone-based flow is ever needed.
-- **KYC / identity verification** — the signup flow's "means of
-  identification" step (NIN, driver's license, etc.) and the landlord's
-  certificate-of-ownership upload are UI-only; nothing about them reaches
-  this API. There's no verification-document model to add them to yet.
-- **Email/account changes** — `EditProfileScreen` shows the account email
-  but doesn't let it be changed (no rename-email endpoint — changing the
-  login identifier usually wants re-verification, deliberately left out
-  of this pass). Password changes go through `PATCH /api/auth/password`
-  instead, from Settings.
+- **SMS codes** — email (Resend) is wired up; SMS isn't. Implement
+  `OtpProvider` (`src/otp/otp-provider.interface.ts`) if needed.
+- **KYC / identity verification** — the signup ID and ownership-document
+  steps are UI-only; nothing verifies them server-side yet.
+- **Changing an account's email** — deliberately not offered (it would
+  need re-verification). Passwords change via `PATCH /api/auth/password`.
+- **Scaling beyond one instance** — the Socket.IO gateway and online
+  presence are in-process; running several instances would need a Redis
+  adapter.

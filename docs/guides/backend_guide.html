@@ -250,6 +250,8 @@ npx tsc --noEmit -p tsconfig.json   # type-check</code></pre>
 DATABASE_URL=postgresql://localhost/hs_test npx prisma migrate deploy
 TEST_DATABASE_URL=postgresql://localhost/hs_test npm test</code></pre>
 <p>Every table is emptied before each test, so never point <code>TEST_DATABASE_URL</code> at a real database. GitHub Actions (<code>.github/workflows/ci.yml</code>) runs the type check, the migrations (and checks they match the schema), these tests, and the Flutter analyzer and tests on every pull request.</p>
+<h2>Resetting all chats</h2>
+<p><code>backend/scripts/clear_all_chats.sql</code> is a one-off reset for testing. It deletes every conversation (with its messages, participants, transfer history and internal notes), chat notifications and support-dashboard rows, and leaves users, listings, bookings, payments, orders and saved replies alone. Run part 1 (a preview) and then part 2 (the delete, in one transaction) in the Supabase SQL Editor after taking a backup. Chat photos stay in Storage under <code>chat/</code> unless deleted there too.</p>
 <h2>Deploying</h2>
 <p>Render builds the Docker image. On start the container runs <code>npx prisma migrate deploy</code> (applying any new migrations) and then <code>node dist/main.js</code>. Deploy the backend <strong>before or together with</strong> any web release that depends on new fields.</p>
 
