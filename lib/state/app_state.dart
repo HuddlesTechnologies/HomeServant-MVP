@@ -18,6 +18,9 @@ import '../api/models/booking.dart';
 import '../api/notifications_repository.dart';
 import '../api/paystack_repository.dart';
 import '../api/properties_repository.dart';
+import '../api/push_repository.dart';
+import '../services/browser_notifications.dart';
+import '../api/support_tools_repository.dart';
 import '../api/reviews_repository.dart';
 import '../api/token_storage.dart';
 import '../api/web_session_storage_stub.dart' if (dart.library.html) '../api/web_session_storage_web.dart' as web_storage;
@@ -54,6 +57,8 @@ class AppState extends ChangeNotifier {
     _favoritesRepo = FavoritesRepository(_apiClient);
     _reviewsRepo = ReviewsRepository(_apiClient);
     _chatRepo = ChatRepository(_apiClient);
+    _supportToolsRepo = SupportToolsRepository(_apiClient);
+    _pushRepo = PushRepository(_apiClient);
     _uploadsRepo = UploadsRepository(_apiClient);
     _vendorsRepo = VendorsRepository(_apiClient);
     _marketplaceProductsRepo = MarketplaceProductsRepository(_apiClient);
@@ -91,6 +96,8 @@ class AppState extends ChangeNotifier {
   late final FavoritesRepository _favoritesRepo;
   late final ReviewsRepository _reviewsRepo;
   late final ChatRepository _chatRepo;
+  late final SupportToolsRepository _supportToolsRepo;
+  late final PushRepository _pushRepo;
   late final UploadsRepository _uploadsRepo;
   late final VendorsRepository _vendorsRepo;
   late final MarketplaceProductsRepository _marketplaceProductsRepo;
@@ -103,6 +110,7 @@ class AppState extends ChangeNotifier {
   /// screen-local concerns (each screen manages its own fetch/paginate) —
   /// exposed directly rather than mirrored into AppState's own fields.
   ChatRepository get chat => _chatRepo;
+  SupportToolsRepository get supportTools => _supportToolsRepo;
   UploadsRepository get uploads => _uploadsRepo;
   VendorsRepository get vendors => _vendorsRepo;
   MarketplaceProductsRepository get marketplaceProducts => _marketplaceProductsRepo;
@@ -369,6 +377,10 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // Stop this browser receiving the signed-out user's push notifications
+    // (the next person to use it would otherwise get them). Needs the
+    // session, so it runs before the server logout.
+    await _forgetWebPush();
     try {
       await _authRepo.logout();
     } finally {
@@ -559,7 +571,44 @@ class AppState extends ChangeNotifier {
 
   Future<void> _connectChatSocket() async {
     final token = await _tokens.readAccessToken();
-    if (token != null) _chatSocket.connect(_apiClient.freshAccessToken);
+    if (token != null) {
+      _chatSocket.connect(_apiClient.freshAccessToken);
+      unawaited(syncWebPush());
+    }
+  }
+
+  // --- Web Push ------------------------------------------------------------
+
+  /// Keeps this browser's push subscription registered for the signed-in
+  /// user. Does nothing unless notifications are already allowed and the
+  /// server has push configured — asking for permission is [enableWebPush]'s
+  /// job, from a tap.
+  Future<void> syncWebPush() async {
+    if (!webPushSupported || browserNotificationPermission != 'granted' || userId == null) return;
+    try {
+      final key = await _pushRepo.publicKey();
+      if (key == null) return;
+      final subscription = await subscribeWebPush(key);
+      if (subscription != null) await _pushRepo.subscribe(subscription);
+    } catch (_) {
+      // Best-effort: the in-app banners still work without push.
+    }
+  }
+
+  /// From a user tap: asks the browser for notification permission, then
+  /// registers for push. Returns whether notifications are now allowed.
+  Future<bool> enableWebPush() async {
+    final permission = await requestBrowserNotificationPermission();
+    if (permission != 'granted') return false;
+    await syncWebPush();
+    return true;
+  }
+
+  Future<void> _forgetWebPush() async {
+    try {
+      final endpoint = await unsubscribeWebPush();
+      if (endpoint != null) await _pushRepo.unsubscribe(endpoint);
+    } catch (_) {}
   }
 
   // --- Notifications -----------------------------------------------------

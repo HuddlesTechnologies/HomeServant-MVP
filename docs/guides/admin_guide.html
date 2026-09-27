@@ -104,13 +104,40 @@
 <p>The <strong>bell</strong> opens your notifications, the <strong>gear</strong> opens Account Settings, and the <strong>door icon</strong> signs you out.</p>
 
 <h1>5. Support chats</h1>
-<p>When a user taps <em>Contact Support &rarr; Live Chat</em>, a support conversation starts. Here's how it moves through the team:</p>
+<p>When a user taps <em>Contact Support &rarr; Live Chat</em>, they first pick what it's about (Payments, Booking, Account, Listing, Marketplace or Other), and a support conversation starts. Here's how it moves through the team:</p>
 <ol>
+  <li><strong>Auto-assigned:</strong> when the customer sends a message, the chat goes straight to an admin who is <em>On duty</em> and online, whoever has the fewest open chats (ties rotate). You're notified like any new message. If nobody on duty is online, it waits in the queue instead. A super admin can switch auto-assignment off (server setting <code>SUPPORT_AUTO_ASSIGN=false</code>).</li>
   <li><strong>Unclaimed:</strong> it appears in <em>Messages &rarr; Support Queue</em> for every admin, and every admin gets one notification.</li>
   <li><strong>Claimed:</strong> the first admin to open it from the queue, or to reply, takes it on. It leaves everyone else's queue and their notifications clear. From then on only that admin is notified of new messages.</li>
   <li><strong>Resolved:</strong> the handling admin taps <em>Mark as Resolved</em>. The conversation disappears from the user's inbox; if they need help again, a fresh conversation starts.</li>
 </ol>
+<h2>Tools inside a support chat</h2>
+<p>The admin handling a chat, and any super admin, get these at the top of the chat (on a phone they're under the headset icon):</p>
+<ul>
+  <li><strong>Customer details</strong>: who they are, their recent bookings (or bookings on their listings), recent payments, reports, and their other support chats.</li>
+  <li><strong>Internal notes</strong>: notes for other admins, never shown to the customer. Useful before a transfer.</li>
+  <li><strong>Topic &amp; priority</strong>: set what it's about and how urgent it is (Low, Normal, High, Urgent). The queue shows the most urgent first, and the inbox and queue show both as badges.</li>
+  <li><strong>Handling history</strong>: who took it up and every hand-off.</li>
+  <li><strong>Saved replies</strong> (the lightning icon by the message box): shared ready-made answers. Tap one to drop it into your reply and adjust it before sending. Anyone can add one; the author, moderators and super admins can edit or delete it.</li>
+</ul>
+<p>Your sent messages show <em>Sending&hellip;</em> until they arrive, and <em>Not sent &middot; Tap to retry</em> if they fail.</p>
+<h2>If nobody is available</h2>
+<ul>
+  <li>The customer is told once, in the chat, that nobody is available right now, that they're in the queue, and that they'll get a notification (and an email if they're away) when someone replies.</li>
+  <li>Every minute, waiting chats are handed to anyone who has come online and on duty, most urgent and oldest first. Turning <em>On duty</em> on does it straight away. The admin gets "A waiting conversation was assigned to you".</li>
+  <li>After 5 minutes unclaimed, every admin gets a reminder. After 15 minutes, every super admin gets an alert <strong>and an email</strong>. Both happen once per chat. (A claimed chat whose customer has waited 10 minutes for a reply also alerts super admins, as before.)</li>
+</ul>
+<h2>Support Insights (Super Admin)</h2>
+<p><em>More &rarr; Support Insights</em> shows how support is doing over the last 7, 30 or 90 days:</p>
+<ul>
+  <li><strong>Right now:</strong> chats waiting for an admin, the longest wait, admins on duty and online, and open chats being handled.</li>
+  <li><strong>Totals:</strong> conversations, % resolved, time to first reply (median, and the time 9 in 10 are answered within), time to resolve, customer rating, transfers, and chats never answered.</li>
+  <li><strong>Charts:</strong> conversations per day and busiest hours (Lagos time). Hover or long-press a bar for its numbers.</li>
+  <li><strong>By topic</strong> and <strong>by admin</strong> (open now, first replies, resolved, reply time, rating), plus the latest customer ratings and comments.</li>
+</ul>
+<p>Customers are asked to rate a chat (1&ndash;5 stars, optional comment) when it's resolved. These figures are kept even after chat messages are deleted at 30 days. Use the per-admin numbers to plan cover and support people, not to rank them.</p>
 <h2>Transferring and reassigning</h2>
+<p>The transfer list shows every admin's level (Support, Moderator, Super Admin), whether they're on duty and online, and how many open chats they have. Filter by level or to on-duty admins only, so the chat goes to someone who can actually help. The most available people are listed first. The customer sees a notice in the chat: "This conversation has been transferred to Ada from HomeServant Support" (first name only).</p>
 <ul>
   <li><strong>Transfer</strong> (the &#8644; icon in the chat): the handling admin hands the chat to another admin. The new admin is notified in the app and by email, and the old admin loses access.</li>
   <li><strong>Reassign</strong> (super admins only): for a chat stuck with an admin who's away, or one nobody has picked up. A super admin opens it from the <em>Chat Log</em> or from a notification and taps <em>Reassign</em>. Both the new and previous admin are notified.</li>
@@ -143,6 +170,7 @@
 
 <h1>7. Managing other admins</h1>
 <p>All of this is in <em>More &rarr; Admins</em>.</p>
+<p>Moderators and super admins can open the <em>Admins</em> page. It shows a headcount at the top (all admins, then super admins, moderators and support), and each admin's account creation date in the list. Tap any admin to see which super admin invited them. Only super admins can invite, remove or change an admin's level. Admins created before this was recorded, the very first admin, and admins promoted directly in the database show "Not recorded".</p>
 <h2>Inviting a new admin (Super Admin)</h2>
 <ol>
   <li>Tap <strong>New Admin</strong> and enter their full name, email and level, then <strong>Send Code</strong>.</li>

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api/api_exception.dart';
+import '../api/models/support_tools.dart';
 import '../core/theme/app_text_styles.dart';
 import '../features/dashboard/chat_thread_screen.dart';
 import '../models/dashboard_theme.dart';
@@ -68,8 +69,12 @@ Future<void> showSupportOptionsSheet(BuildContext context, {required DashboardTh
 /// left the device.
 Future<void> _openLiveChat(BuildContext context, DashboardTheme theme) async {
   final messenger = ScaffoldMessenger.of(context);
+  // What it's about routes it to the right admin and lets them triage it
+  // before reading a word. Dismissing the picker cancels.
+  final topic = await _pickTopic(context, theme);
+  if (topic == null || !context.mounted) return;
   try {
-    final thread = await context.read<AppState>().chat.openSupportThread();
+    final thread = await context.read<AppState>().chat.openSupportThread(topic: topic);
     if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -83,6 +88,48 @@ Future<void> _openLiveChat(BuildContext context, DashboardTheme theme) async {
   } on ApiException catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
   }
+}
+
+Future<SupportTopic?> _pickTopic(BuildContext context, DashboardTheme theme) {
+  const hints = {
+    SupportTopic.payments: 'Charges, refunds, payouts',
+    SupportTopic.booking: 'Requests, inspections, moving in',
+    SupportTopic.account: 'Signing in, profile, verification',
+    SupportTopic.listing: 'A property listing',
+    SupportTopic.marketplace: 'Orders and vendors',
+    SupportTopic.other: 'Something else',
+  };
+  // theme.surface/onSurface: a fixed light-surface/navy-text pair.
+  return showModalBottomSheet<SupportTopic>(
+    context: context,
+    backgroundColor: theme.surface,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (sheetContext) => SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('What do you need help with?', style: AppTextStyles.heading(color: theme.onSurface, size: 18)),
+            const SizedBox(height: 14),
+            for (final topic in SupportTopic.values)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(topic.label, style: AppTextStyles.body(color: theme.onSurface, size: 15, weight: FontWeight.w600)),
+                subtitle: Text(
+                  hints[topic]!,
+                  style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 12.5),
+                ),
+                trailing: Icon(Icons.chevron_right_rounded, color: theme.onSurface.withValues(alpha: 0.5)),
+                onTap: () => Navigator.of(sheetContext).pop(topic),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 Future<void> _callSupport(BuildContext context) async {

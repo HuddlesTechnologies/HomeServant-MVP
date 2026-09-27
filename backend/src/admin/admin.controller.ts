@@ -64,10 +64,13 @@ export class AdminController {
     return this.admin.activityFeed(limit ? Number(limit) : undefined);
   }
 
-  // --- Admin management (SUPER_ADMIN only) --------------------------------
+  // --- Admin management -----------------------------------------------------
 
+  /// The admin roster (with who created each account) — MODERATOR+, the
+  /// same as the Admins tab that shows it. Changing levels, inviting and
+  /// removing admins stay SUPER_ADMIN-only below.
   @Get('admins')
-  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  @MinAdminLevel(AdminLevel.MODERATOR)
   findAdmins() {
     return this.admin.findAdmins();
   }
@@ -83,14 +86,14 @@ export class AdminController {
 
   @Post('admins/request')
   @MinAdminLevel(AdminLevel.SUPER_ADMIN)
-  requestAdmin(@Body() dto: RequestAdminDto) {
-    return this.admin.requestAdminOtp(dto);
+  requestAdmin(@Body() dto: RequestAdminDto, @CurrentUser() actingAdmin: AuthenticatedUser) {
+    return this.admin.requestAdminOtp(dto, actingAdmin.sub);
   }
 
   @Post('admins/confirm')
   @MinAdminLevel(AdminLevel.SUPER_ADMIN)
-  confirmAdmin(@Body() dto: ConfirmAdminDto) {
-    return this.admin.confirmAdminOtp(dto);
+  confirmAdmin(@Body() dto: ConfirmAdminDto, @CurrentUser() actingAdmin: AuthenticatedUser) {
+    return this.admin.confirmAdminOtp(dto, actingAdmin.sub);
   }
 
   @Patch('admins/:id/level')

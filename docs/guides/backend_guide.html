@@ -157,6 +157,10 @@
   <li>When messaging closes on a refund, <code>PaymentsService</code> posts a <code>SYSTEM</code> message (no sender) through <code>ChatService.postBookingSystemMessage</code> so both sides see why in the chat. A tenant's own refund adds it only to an existing conversation; a landlord's rejection starts one if needed, and the tenant's "Booking rejected" notification links to that chat.</li>
   <li>A support thread starts with just the user. It sits in the shared queue until an admin claims it, either by opening it (<code>PATCH /threads/:id/claim</code>) or by replying, which is race-safe. It can then be transferred, reassigned by a super admin, or resolved.</li>
   <li><code>ThreadTransferLog</code> records every hand-off with a <code>kind</code> (CLAIM, TRANSFER, REASSIGN) and the <code>actorId</code> who made it. <code>GET /threads/:id/handling-history</code> (handling admin or super admin) returns the timeline, first handler and current admin. Reading a thread (<code>PATCH /threads/:id/read</code>) also marks the caller's notifications about it read, and for admins refreshes the Messages badge, which counts conversations with unread messages plus unclaimed support chats.</li>
+  <li>Support tools (<code>SupportToolsController</code>, admin only): <code>GET|POST /threads/:id/notes</code> (internal notes), <code>PATCH /threads/:id/triage</code> (topic, priority), <code>GET /threads/:id/customer-context</code>, <code>GET|POST|PATCH|DELETE /support/saved-replies</code>, and <code>GET /support/admins</code> (every active admin with level, on-duty, online and open-chat count, for transfers). Notes, triage and context need the same access as the thread: the handling admin, any admin while unclaimed, or a super admin.</li>
+  <li>Auto-assignment (<code>ChatService.pickAssignee</code>): when a customer writes into an unclaimed support thread it goes to an on-duty, online admin with the fewest open support chats, ties broken by who was assigned longest ago; logged as <code>AUTO_ASSIGN</code>. Transfers and reassignments post a <code>SYSTEM</code> notice into the chat (<code>postThreadSystemMessage</code>).</li>
+  <li>Support dashboard: <code>SupportChatStat</code> keeps one row per support conversation, deliberately not linked to <code>Thread</code> so it outlives the 30-day cleanup. It is written as the chat moves along (first customer message, first admin reply, current admin, transfers, resolution, rating) and was backfilled for older chats. <code>GET /support/metrics?days=7..90</code> (super admin, <code>SupportMetricsService</code>) returns live queue state, totals (median and 90th-percentile first reply, median resolution, rating), and breakdowns by topic, admin, hour, weekday and day. The customer rates with <code>POST /threads/:id/rating</code> (once, after resolution); the summary's <code>canRate</code> says when. When nobody is available, a one-time <code>SYSTEM</code> notice tells the customer they're queued.</li>
+  <li>Web Push (<code>PushService</code>, <code>POST|DELETE /push/subscriptions</code>, <code>GET /push/public-key</code>): every non-silent notification is also pushed to the user's subscribed browsers; subscriptions the push service reports gone (404/410) are deleted.</li>
   <li>Notifications for unclaimed threads are collapsed into one per admin (<code>NotificationsService.upsertThreadAlert</code>) and cleared for everyone else on claim.</li>
   <li>Admins marked Away get them silently (<code>User.adminOnDuty</code>).</li>
   <li>Resolved support threads are removed after 30 days.</li>
@@ -186,11 +190,12 @@
 <p>Scheduled with <code>@nestjs/schedule</code>. If Render's free plan has the server asleep, a job runs on the first tick after it wakes. Every job is written to catch up safely.</p>
 <table>
   <tr><th style="width:30%">Job</th><th style="width:16%">When</th><th>What</th></tr>
-  <tr><td><code>SupportAlertsService</code></td><td>Every minute</td><td>Unclaimed support chat older than 5 minutes: one reminder to all admins. Customer unanswered for 10 minutes: one alert to super admins.</td></tr>
+  <tr><td><code>SupportAlertsService</code></td><td>Every minute</td><td>Assigns waiting chats to admins who have come online and on duty (<code>ChatService.assignWaitingQueue</code>). Unclaimed after 5 minutes: one reminder to all admins. Unclaimed after 15 (<code>SUPPORT_UNCLAIMED_ESCALATION_MINUTES</code>): an alert and email to every super admin. Customer unanswered for 10 minutes in a claimed chat: one alert to super admins.</td></tr>
   <tr><td><code>AccountCleanupService</code></td><td>Daily, 03:00</td><td>Permanently deletes accounts deactivated more than 30 days ago (skipping ones with active leases or orders).</td></tr>
   <tr><td><code>SupportChatCleanupService</code></td><td>Daily, 03:00</td><td>Deletes support messages older than 30 days, and emptied threads.</td></tr>
   <tr><td><code>LeaseLifecycleService</code></td><td>Daily, 04:00</td><td>Re-lists properties whose lease ended without renewal; sends rent-expiry reminders 30, 15 and 0 days before.</td></tr>
   <tr><td><code>MarketplaceAutoReleaseService</code></td><td>Daily, 05:00</td><td>Releases held marketplace payments after 7 days, unless disputed.</td></tr>
+  <tr><td><code>UnreadMessageEmailService</code></td><td>Every 5 minutes</td><td>Emails tenants, landlords and vendors about messages unread for 15 minutes (one email per conversation per run, each message at most once via <code>Message.emailNotifiedAt</code>, nothing older than 24 hours). Admins aren't emailed; they have the console's alerts.</td></tr>
 </table>
 
 <h1>10. Files, email and other outside services</h1>
@@ -218,6 +223,9 @@
   <tr><td><code>SUPPORT_UNCLAIMED_REMINDER_MINUTES</code>, <code>SUPPORT_REPLY_ESCALATION_MINUTES</code></td><td>Support reminder delays (defaults 5 and 10).</td></tr>
   <tr><td><code>DELIVERY_PROVIDER</code>, <code>GIG_API_KEY</code>, <code>GIG_API_BASE_URL</code></td><td>Courier integration.</td></tr>
   <tr><td><code>PORT</code></td><td>HTTP port (Render uses 3000).</td></tr>
+  <tr><td><code>VAPID_PUBLIC_KEY</code>, <code>VAPID_PRIVATE_KEY</code>, <code>VAPID_SUBJECT</code></td><td>Web Push keys (generate once with <code>npx web-push generate-vapid-keys</code>). Without them push is off; everything else works.</td></tr>
+  <tr><td><code>APP_URL</code></td><td>The web app's address for links in emails (falls back to the first <code>CORS_ORIGINS</code> entry).</td></tr>
+  <tr><td><code>SUPPORT_AUTO_ASSIGN</code></td><td>Set to <code>false</code> to stop auto-assigning new support chats; they then wait in the queue.</td></tr>
 </table>
 
 <h1>12. Running, migrating and deploying</h1>
@@ -235,6 +243,12 @@ npx tsc --noEmit -p tsconfig.json   # type-check</code></pre>
   <li>Run <code>npx prisma migrate dev --name what_changed</code>, or hand-write <code>prisma/migrations/&lt;timestamp&gt;_&lt;name&gt;/migration.sql</code>. Prefer additive changes (new nullable columns, or columns with defaults) so the live app keeps working during deploys.</li>
   <li>Commit the migration folder with the code.</li>
 </ol>
+<h2>Tests</h2>
+<p>The tests in <code>backend/test</code> run the real services against a real, disposable Postgres (only sockets, email and push are faked). They cover the tenant/landlord payment and refund rules, auto-assignment, claims, transfers and handling history, notes and saved-reply permissions, read state and the Messages badge, unread-message emails, push cleanup and listing deletion.</p>
+<pre><code>createdb hs_test
+DATABASE_URL=postgresql://localhost/hs_test npx prisma migrate deploy
+TEST_DATABASE_URL=postgresql://localhost/hs_test npm test</code></pre>
+<p>Every table is emptied before each test, so never point <code>TEST_DATABASE_URL</code> at a real database. GitHub Actions (<code>.github/workflows/ci.yml</code>) runs the type check, the migrations (and checks they match the schema), these tests, and the Flutter analyzer and tests on every pull request.</p>
 <h2>Deploying</h2>
 <p>Render builds the Docker image. On start the container runs <code>npx prisma migrate deploy</code> (applying any new migrations) and then <code>node dist/main.js</code>. Deploy the backend <strong>before or together with</strong> any web release that depends on new fields.</p>
 

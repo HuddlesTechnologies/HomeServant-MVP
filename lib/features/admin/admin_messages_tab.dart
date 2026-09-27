@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/chat.dart';
+import '../../api/models/support_tools.dart';
 import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -11,6 +12,7 @@ import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../dashboard/chat_thread_screen.dart';
+import 'widgets/support_triage_badges.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/support_thread_actions.dart';
 import 'widgets/admin_badge.dart';
@@ -298,6 +300,8 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
                           ),
                           if (thread.isSupport) ...[
                             const SizedBox(width: 8),
+                            SupportTriageBadges(topic: thread.supportTopic, priority: thread.priority),
+                            const SizedBox(width: 4),
                             AdminBadge(
                               size: AdminBadgeSize.small,
                               text: thread.resolved ? 'Resolved' : 'Read',
@@ -360,6 +364,10 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
                           thread.requesterName?.isNotEmpty == true ? thread.requesterName! : 'A user',
                           style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w700),
                         ),
+                        if (thread.supportTopic != null || thread.priority != SupportPriority.normal) ...[
+                          const SizedBox(height: 4),
+                          SupportTriageBadges(topic: thread.supportTopic, priority: thread.priority),
+                        ],
                         if (thread.lastMessage != null) ...[
                           const SizedBox(height: 2),
                           Text(

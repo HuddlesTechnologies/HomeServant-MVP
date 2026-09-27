@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
+import '../../api/models/support_tools.dart';
 import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -10,7 +11,7 @@ import 'admin_property_detail_screen.dart';
 import 'admin_user_detail_screen.dart';
 import 'admin_vendor_detail_screen.dart';
 import 'widgets/admin_filter_chip.dart';
-import 'widgets/admin_picker_sheet.dart';
+import 'widgets/transfer_target_sheet.dart';
 import '../../widgets/labeled_value_row.dart';
 import 'widgets/report_status_badge.dart';
 
@@ -69,16 +70,18 @@ class _AdminReportDetailScreenState extends State<AdminReportDetailScreen> {
 
   Future<void> _transfer(AdminReport report) async {
     final messenger = ScaffoldMessenger.of(context);
-    List<AdminAccount> admins;
+    List<TransferTarget> admins;
     try {
-      admins = await context.read<AppState>().admin.findAdmins();
+      // Open to every admin (/admin/admins is super-admin-only, so other
+      // admins couldn't transfer at all), with level/duty/load shown.
+      admins = await context.read<AppState>().supportTools.transferTargets();
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
       return;
     }
     if (!mounted) return;
     final myId = context.read<AppState>().userId;
-    final chosen = await showAdminPickerSheet(
+    final chosen = await showTransferTargetSheet(
       context,
       admins: admins,
       title: 'Transfer report to',
@@ -87,7 +90,7 @@ class _AdminReportDetailScreenState extends State<AdminReportDetailScreen> {
     if (chosen == null || !mounted) return;
     try {
       await context.read<AppState>().admin.transferReport(report.id, chosen.id);
-      messenger.showSnackBar(SnackBar(content: Text('Transferred to ${chosen.email}')));
+      messenger.showSnackBar(SnackBar(content: Text('Transferred to ${chosen.displayName}')));
       _load();
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));

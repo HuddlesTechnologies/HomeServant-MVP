@@ -9,3 +9,9 @@ Future<String> requestBrowserNotificationPermission() async => 'unsupported';
 bool get browserTabHidden => false;
 
 void showBrowserNotification({required String title, required String body, String? tag, void Function()? onClick}) {}
+
+bool get webPushSupported => false;
+
+Future<Map<String, dynamic>?> subscribeWebPush(String vapidPublicKey) async => null;
+
+Future<String?> unsubscribeWebPush() async => null;

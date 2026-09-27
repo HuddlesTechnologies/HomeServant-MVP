@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'models/chat.dart';
+import 'models/support_tools.dart';
 
 /// Wraps `/threads`. Live updates come from ChatSocketService; inbox
 /// screens refetch on its onThreadsChanged stream.
@@ -27,9 +28,9 @@ class ChatRepository {
   /// Finds-or-creates the caller's own "Contact Support" thread — see
   /// backend ChatService.openSupportThread. Unlike [openThread], there's no
   /// recipient to pick; any admin can pick it up from the shared queue.
-  Future<ChatThread> openSupportThread() {
+  Future<ChatThread> openSupportThread({SupportTopic? topic}) {
     return _client.call(() async {
-      final response = await _client.dio.post('/threads/support');
+      final response = await _client.dio.post('/threads/support', data: {if (topic != null) 'topic': topic.apiValue});
       final threadId = response.data['id'] as String;
       final threads = await myThreads();
       onLocalChange?.call();
@@ -82,6 +83,16 @@ class ChatRepository {
       final threads = await myThreads();
       onLocalChange?.call();
       return threads.firstWhere((t) => t.id == threadId);
+    });
+  }
+
+  /// The customer's 1–5 rating of a resolved support conversation.
+  Future<void> rateSupportThread(String threadId, int rating, {String? comment}) {
+    return _client.call(() async {
+      await _client.dio.post(
+        '/threads/$threadId/rating',
+        data: {'rating': rating, if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim()},
+      );
     });
   }
 

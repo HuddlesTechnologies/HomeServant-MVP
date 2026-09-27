@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../widgets/notification_offer.dart';
 import '../../api/models/marketplace_api.dart';
 import '../../api/models/vendor.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -39,6 +40,9 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) offerBrowserNotifications(context, message: 'Get notified about new orders and messages, even when HomeServant is closed?');
+    });
   }
 
   Future<void> _load() async {

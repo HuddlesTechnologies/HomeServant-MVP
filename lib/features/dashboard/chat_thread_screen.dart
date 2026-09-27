@@ -14,14 +14,19 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
+import '../../widgets/support_rating_card.dart';
 import '../../widgets/contact_avatar.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
 import '../Market place/models/order_options.dart';
+import '../admin/widgets/support_tool_sheets.dart';
 import '../admin/chat_transcript_pdf.dart';
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
+
+/// Where one of *our* messages is on its way to the server.
+enum SendState { sending, sent, failed }
 
 class ChatMessage {
   ChatMessage({
@@ -34,6 +39,7 @@ class ChatMessage {
     this.previewPropertyPrice,
     this.previewPropertyPriceUnit,
     this.read = false,
+    this.sendState = SendState.sent,
   });
 
   final String text;
@@ -52,6 +58,11 @@ class ChatMessage {
   /// `Message.readAt`) — only ever rendered for [fromMe] bubbles, the way
   /// every social/messaging app shows "Seen" on your own last sent message.
   bool read;
+
+  /// Only meaningful for [fromMe]: shown as "Sending…", or "Not sent · Tap
+  /// to retry" — a failed send used to leave the bubble looking delivered,
+  /// with only a passing snackbar to say otherwise.
+  SendState sendState;
 }
 
 class ChatThreadScreen extends StatefulWidget {
@@ -174,6 +185,31 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   /// took the conversation up and every hand-off since. Null when not
   /// applicable (or not allowed) — the history UI is simply not shown.
   ThreadHandlingHistory? _history;
+
+  /// Customer side: this resolved support chat can still be rated.
+  bool _canRate = false;
+
+  Future<void> _openTriage() async {
+    final threadId = widget.threadId;
+    if (threadId == null) return;
+    try {
+      final summary = await context.read<AppState>().chat.summary(threadId);
+      if (!mounted) return;
+      await showTriageSheet(context, threadId, topic: summary.supportTopic, priority: summary.priority);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Drops the chosen saved reply into the message box (appending to any
+  /// text already there) for the admin to adjust before sending.
+  Future<void> _insertSavedReply() async {
+    final body = await showSavedRepliesSheet(context);
+    if (body == null || !mounted) return;
+    final current = _inputController.text.trimRight();
+    final text = current.isEmpty ? body : '$current\n$body';
+    _inputController.value = TextEditingValue(text: text, selection: TextSelection.collapsed(offset: text.length));
+  }
 
   void _showHistorySheet() {
     final history = _history;
@@ -299,6 +335,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     String? notice;
     try {
       final summary = await appState.chat.summary(threadId);
+      if (mounted && summary.canRate != _canRate) setState(() => _canRate = summary.canRate);
       if (summary.lockedReason != null) {
         notice = summary.lockedReason;
       } else if (isAdmin && !summary.canReply) {
@@ -384,6 +421,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       final remote = await appState.chat.messages(threadId);
       unawaited(appState.chat.markRead(threadId));
       if (!mounted) return;
+      // Our own not-yet-delivered messages aren't on the server — keep
+      // them (still sending, or failed and waiting for a retry).
+      final unsent = _messages.where((m) => m.fromMe && m.sendState != SendState.sent).toList();
       setState(() {
         _messages
           ..clear()
@@ -401,7 +441,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 read: m.readAt != null,
               ),
             ),
-          );
+          )
+          ..addAll(unsent);
         _loadingRemote = false;
       });
       _scrollToBottom();
@@ -518,37 +559,54 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   }
 
   Future<void> _send([String? text]) async {
-    final message = (text ?? _inputController.text).trim();
-    if (message.isEmpty) return;
+    final body = (text ?? _inputController.text).trim();
+    if (body.isEmpty) return;
+    final threadId = widget.threadId;
+    final message = ChatMessage(
+      text: body,
+      fromMe: true,
+      sendState: threadId == null ? SendState.sent : SendState.sending,
+    );
     setState(() {
-      _messages.add(ChatMessage(text: message, fromMe: true));
+      _messages.add(message);
       _inputController.clear();
     });
     _scrollToBottom();
-
-    final threadId = widget.threadId;
     if (threadId == null) return;
+    await _deliver(message, threadId);
+  }
+
+  /// Sends [message] (already shown in the list) and records the outcome
+  /// on it: sent, or failed with the reason in a snackbar.
+  Future<void> _deliver(ChatMessage message, String threadId) async {
     try {
-      await context.read<AppState>().chat.send(threadId, message);
+      await context.read<AppState>().chat.send(threadId, message.text, attachmentUrl: message.attachmentUrl);
+      if (mounted) setState(() => message.sendState = SendState.sent);
     } on ApiException catch (e) {
       if (!mounted) return;
+      setState(() => message.sendState = SendState.failed);
       // e.g. the booking was refunded while this chat was open — show the
       // server's reason and swap the composer for it.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
       unawaited(_refreshAccess());
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't send — try again.")));
+      setState(() => message.sendState = SendState.failed);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't send — tap the message to retry.")));
     }
+  }
+
+  Future<void> _retry(ChatMessage message) async {
+    final threadId = widget.threadId;
+    if (threadId == null || message.sendState != SendState.failed || _readOnly) return;
+    setState(() => message.sendState = SendState.sending);
+    await _deliver(message, threadId);
   }
 
   /// Uploads through the same generic signed-upload flow every other image
   /// in this app uses (folder: 'chat'), then sends it as an IMAGE message.
-  /// Unlike [_send], there's no optimistic local echo before the network
-  /// call — the upload itself already takes a moment, so the bubble only
-  /// appears once it's actually sent, with [_sendingImage] disabling the
-  /// attach button meanwhile instead of showing a placeholder that could
-  /// end up wrong if the upload fails.
+  /// The bubble appears once the upload is done (the attach button shows
+  /// progress meanwhile) and then tracks sending/sent/failed like text.
   Future<void> _pickAndSendImage() async {
     if (_sendingImage) return;
     final threadId = widget.threadId;
@@ -560,18 +618,30 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       return;
     }
     setState(() => _sendingImage = true);
+    String url;
     try {
-      final appState = context.read<AppState>();
-      final url = await appState.uploads.upload(file: picked, folder: 'chat');
-      await appState.chat.send(threadId, '', attachmentUrl: url);
-      if (!mounted) return;
-      setState(() => _messages.add(ChatMessage(text: '', fromMe: true, type: MessageType.image, attachmentUrl: url)));
-      _scrollToBottom();
+      url = await context.read<AppState>().uploads.upload(file: picked, folder: 'chat');
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't send photo — try again.")));
-    } finally {
-      if (mounted) setState(() => _sendingImage = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't upload photo — try again.")));
+        setState(() => _sendingImage = false);
+      }
+      return;
     }
+    if (!mounted) return;
+    final message = ChatMessage(
+      text: '',
+      fromMe: true,
+      type: MessageType.image,
+      attachmentUrl: url,
+      sendState: SendState.sending,
+    );
+    setState(() {
+      _messages.add(message);
+      _sendingImage = false;
+    });
+    _scrollToBottom();
+    await _deliver(message, threadId);
   }
 
   Future<void> _bookInspection() async {
@@ -661,12 +731,52 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           ],
         ),
         actions: [
-          if (_history != null)
+          // Support tools — shown to the admin handling a support chat and
+          // to super admins (the same people the handling history is for).
+          if (_history != null && widget.threadId != null && MediaQuery.of(context).size.width < 700)
+            // Phone width: one menu instead of four icons. The menu is a
+            // light Material surface, so items use onSurface (fixed navy).
+            PopupMenuButton<String>(
+              icon: Icon(Icons.support_agent_rounded, color: theme.foreground),
+              tooltip: 'Support tools',
+              onSelected: (action) => switch (action) {
+                'customer' => showCustomerContextSheet(context, widget.threadId!),
+                'notes' => showSupportNotesSheet(context, widget.threadId!),
+                'triage' => _openTriage(),
+                _ => Future.sync(_showHistorySheet),
+              },
+              itemBuilder: (_) => [
+                for (final (value, label) in const [
+                  ('customer', 'Customer details'),
+                  ('notes', 'Internal notes'),
+                  ('triage', 'Topic & priority'),
+                  ('history', 'Handling history'),
+                ])
+                  PopupMenuItem(value: value, child: Text(label, style: AppTextStyles.body(color: theme.onSurface, size: 14))),
+              ],
+            )
+          else if (_history != null && widget.threadId != null) ...[
+            IconButton(
+              onPressed: () => showCustomerContextSheet(context, widget.threadId!),
+              icon: Icon(Icons.badge_outlined, color: theme.foreground),
+              tooltip: 'Customer details',
+            ),
+            IconButton(
+              onPressed: () => showSupportNotesSheet(context, widget.threadId!),
+              icon: Icon(Icons.sticky_note_2_outlined, color: theme.foreground),
+              tooltip: 'Internal notes',
+            ),
+            IconButton(
+              onPressed: _openTriage,
+              icon: Icon(Icons.flag_outlined, color: theme.foreground),
+              tooltip: 'Topic & priority',
+            ),
             IconButton(
               onPressed: _showHistorySheet,
               icon: Icon(Icons.history_rounded, color: theme.foreground),
               tooltip: 'Handling history',
             ),
+          ],
           if (widget.adminViewOfUserId != null)
             IconButton(
               onPressed: _toggleInfoPanel,
@@ -760,6 +870,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     // not rescanned per item, so this stays O(n) over the
                     // whole list instead of O(n²) as history grows.
                     final showSeen = message.fromMe && message.read && index == lastFromMeIndex;
+                    final statusLabel = !message.fromMe
+                        ? null
+                        : switch (message.sendState) {
+                            SendState.sending => 'Sending…',
+                            SendState.failed => 'Not sent · Tap to retry',
+                            SendState.sent => showSeen ? 'Seen' : null,
+                          };
                     final Widget bubble;
                     if (message.type == MessageType.system) {
                       // Centred notice, not a bubble — theme.surface/onSurface
@@ -835,19 +952,38 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                         ),
                       );
                     }
-                    if (!showSeen) return bubble;
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        bubble,
-                        Padding(
-                          padding: const EdgeInsets.only(right: 4, bottom: 8, top: 2),
-                          child: Text(
-                            'Seen',
-                            style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.45), size: 11),
+                    if (statusLabel == null) return bubble;
+                    final failed = message.sendState == SendState.failed;
+                    return GestureDetector(
+                      onTap: failed ? () => _retry(message) : null,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Opacity(opacity: message.sendState == SendState.sent ? 1 : 0.6, child: bubble),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4, bottom: 8, top: 2),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Red is only the icon; the label stays
+                                // theme.foreground on theme.background.
+                                if (failed) ...[
+                                  const Icon(Icons.error_outline_rounded, color: Color(0xFFD64545), size: 14),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  statusLabel,
+                                  style: AppTextStyles.body(
+                                    color: theme.foreground.withValues(alpha: failed ? 0.85 : 0.45),
+                                    size: 11,
+                                    weight: failed ? FontWeight.w700 : FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -871,6 +1007,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                       ),
                     ),
                   ),
+                ),
+              if (_canRate && widget.threadId != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: SupportRatingCard(theme: theme, threadId: widget.threadId!),
                 ),
               if (_accessNotice != null)
                 // theme.surface/onSurface: a fixed light-surface/navy-text
@@ -898,6 +1039,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   child: Row(
                     children: [
+                      if (_history != null)
+                        IconButton(
+                          onPressed: _insertSavedReply,
+                          icon: Icon(Icons.bolt_rounded, color: theme.foreground),
+                          tooltip: 'Saved replies',
+                        ),
                       IconButton(
                         onPressed: _sendingImage ? null : _pickAndSendImage,
                         icon: _sendingImage

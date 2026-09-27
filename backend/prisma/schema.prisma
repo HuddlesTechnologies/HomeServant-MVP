@@ -312,6 +312,16 @@ model User {
   supportThreadsAssigned Thread[]            @relation("SupportThreadsAssigned")
   threadTransfersFrom    ThreadTransferLog[] @relation("ThreadTransfersFrom")
   threadTransfersTo      ThreadTransferLog[] @relation("ThreadTransfersTo")
+  supportNotes           SupportNote[]       @relation("SupportNotesAuthored")
+  savedReplies           SavedReply[]        @relation("SavedRepliesCreated")
+  pushSubscriptions      PushSubscription[]
+  /// Admins only: the super admin who created this account through the
+  /// console's invite flow. Null for the first admin (bootstrap route), for
+  /// admins promoted directly in the database, and for admins created
+  /// before this was recorded.
+  createdByAdminId       String?
+  createdByAdmin         User?               @relation("AdminsCreated", fields: [createdByAdminId], references: [id], onDelete: SetNull)
+  adminsCreated          User[]              @relation("AdminsCreated")
 
   @@index([role])
 }
@@ -526,6 +536,8 @@ model PendingAdmin {
   fullName         String
   level            AdminLevel
   tempPasswordHash String
+  /// The super admin who sent the invite (see User.createdByAdminId).
+  invitedById      String?
   createdAt        DateTime   @default(now())
 }
 
@@ -608,44 +620,50 @@ model Review {
 /// this isn't locked to exactly two people if group threads are ever
 /// needed.
 model Thread {
-  id              String            @id @default(uuid())
-  propertyId      String?
-  property        Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  id                   String            @id @default(uuid())
+  propertyId           String?
+  property             Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
   /// Set instead of propertyId for a marketplace pickup-coordination
   /// thread (buyer <-> vendor about a specific order) — mutually
   /// exclusive with propertyId in practice, though nothing enforces that
   /// at the schema level since a thread with neither is also valid (not
   /// used today, but not wrong).
-  orderId         String?
-  order           MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId              String?
+  order                MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
   /// True for a "Contact Support" thread (started via `POST
   /// /threads/support`, not the normal `POST /threads`) — these show up in
   /// every admin's shared Support Queue rather than only for a specific
   /// participant, and are the only threads the 30-day cleanup cron and the
   /// "hide once resolved" rule (see [status]) apply to.
-  isSupport       Boolean           @default(false)
+  isSupport            Boolean           @default(false)
   /// When the one-time "still waiting for an admin" reminder went out for
   /// this unclaimed support thread (SupportAlertsService), so it's never
   /// repeated.
-  unclaimedReminderAt DateTime?
+  /// Set when a still-unclaimed conversation was escalated to super admins
+  /// by email (SupportAlertsService), so it happens once.
+  unclaimedEscalatedAt DateTime?
+  unclaimedReminderAt  DateTime?
   /// When super admins were last alerted that the customer's latest
   /// message on this claimed support thread had gone unanswered
   /// (SupportAlertsService) — one alert per unanswered stretch: a newer
   /// customer message after this can trigger the next one.
-  replyEscalatedAt    DateTime?
-  status          ThreadStatus      @default(OPEN)
+  replyEscalatedAt     DateTime?
+  supportTopic         SupportTopic?
+  priority             SupportPriority   @default(NORMAL)
+  supportNotes         SupportNote[]
+  status               ThreadStatus      @default(OPEN)
   /// The admin who claimed this support thread — set automatically the
   /// first time any admin replies (see ChatService.sendMessage), the same
   /// "first responder claims it" idea Report.assignedAdminId already uses.
   /// Always null for a non-support thread.
-  assignedAdminId String?
-  assignedAdmin   User?             @relation("SupportThreadsAssigned", fields: [assignedAdminId], references: [id], onDelete: SetNull)
+  assignedAdminId      String?
+  assignedAdmin        User?             @relation("SupportThreadsAssigned", fields: [assignedAdminId], references: [id], onDelete: SetNull)
   /// Set once an admin marks a support thread resolved — from that point
   /// [findForUser] hides it from the *user's* inbox (not the admin's; the
   /// 30-day cleanup cron is what eventually removes it for everyone).
-  resolvedAt      DateTime?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  resolvedAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   participants ThreadParticipant[]
   messages     Message[]
@@ -659,6 +677,24 @@ model Thread {
 enum ThreadStatus {
   OPEN
   RESOLVED
+}
+
+/// What a support conversation is about — picked by the user when they
+/// open it (or set by the admin), shown in the queue and inbox.
+enum SupportTopic {
+  PAYMENTS
+  BOOKING
+  ACCOUNT
+  LISTING
+  MARKETPLACE
+  OTHER
+}
+
+enum SupportPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
 }
 
 /// One row per transfer of a thread from one admin to another — unlike
@@ -675,22 +711,25 @@ enum ThreadHandoffKind {
   CLAIM
   TRANSFER
   REASSIGN
+  /// The system assigned a new conversation to an on-duty admin
+  /// (SupportAssignmentService) — no actor.
+  AUTO_ASSIGN
 }
 
 model ThreadTransferLog {
-  id          String   @id @default(uuid())
+  id          String            @id @default(uuid())
   threadId    String
-  thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  thread      Thread            @relation(fields: [threadId], references: [id], onDelete: Cascade)
   kind        ThreadHandoffKind @default(TRANSFER)
   /// Who performed the hand-off — the claimer, the transferring admin, or
   /// the reassigning super admin. No relation, just an id: names are
   /// looked up when the history is read (ChatService.getHandlingHistory).
   actorId     String?
   fromAdminId String?
-  fromAdmin   User?    @relation("ThreadTransfersFrom", fields: [fromAdminId], references: [id], onDelete: SetNull)
+  fromAdmin   User?             @relation("ThreadTransfersFrom", fields: [fromAdminId], references: [id], onDelete: SetNull)
   toAdminId   String?
-  toAdmin     User?    @relation("ThreadTransfersTo", fields: [toAdminId], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
+  toAdmin     User?             @relation("ThreadTransfersTo", fields: [toAdminId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
 
   @@index([threadId])
 }
@@ -744,6 +783,9 @@ model Message {
   /// Set only when [type] is IMAGE — a Supabase Storage public URL,
   /// checked at send time by StorageService.assertIsOwnImage the same way
   /// every other client-supplied image URL in this app is.
+  /// Set once the recipient was emailed about this message because it
+  /// sat unread (UnreadMessageEmailService) — so it's emailed at most once.
+  emailNotifiedAt          DateTime?
   attachmentUrl            String?
   previewPropertyTitle     String?
   previewPropertyImageUrl  String?
@@ -986,4 +1028,74 @@ model MarketplaceOrderItem {
 
   @@index([orderId])
   @@index([vendorId])
+}
+
+/// Admin-only notes on a support conversation — never shown to the
+/// customer. Visible to whoever can see into the thread as an admin.
+model SupportNote {
+  id        String   @id @default(uuid())
+  threadId  String
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation("SupportNotesAuthored", fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+/// Ready-made answers admins can drop into a support reply, shared by
+/// every admin.
+model SavedReply {
+  id          String   @id @default(uuid())
+  title       String
+  body        String
+  createdById String?
+  createdBy   User?    @relation("SavedRepliesCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// A browser's Web Push subscription (see PushService) — one per browser
+/// a user has allowed notifications in.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// One row per support conversation, kept for the support dashboard
+/// (SupportMetricsService). Deliberately not a foreign key to Thread: support
+/// messages and emptied threads are deleted after 30 days
+/// (SupportChatCleanupService), and these numbers must outlive them.
+/// Written as the conversation moves along (ChatService) and backfilled for
+/// conversations that existed before it.
+model SupportChatStat {
+  id                     String          @id @default(uuid())
+  threadId               String          @unique
+  customerId             String?
+  customerRole           UserRole?
+  topic                  SupportTopic?
+  priority               SupportPriority @default(NORMAL)
+  createdAt              DateTime        @default(now())
+  firstCustomerMessageAt DateTime?
+  firstResponseAt        DateTime?
+  firstResponderId       String?
+  currentAdminId         String?
+  transferCount          Int             @default(0)
+  resolvedAt             DateTime?
+  resolvedById           String?
+  /// 1–5, given by the customer after the conversation is resolved.
+  rating                 Int?
+  ratingComment          String?
+  ratedAt                DateTime?
+
+  @@index([createdAt])
+  @@index([resolvedAt])
 }

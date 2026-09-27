@@ -12,6 +12,7 @@ import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import { OpenSupportThreadDto, RateSupportThreadDto } from './dto/support-tools.dto';
 import { TransferThreadDto } from './dto/transfer-thread.dto';
 
 @Controller('threads')
@@ -36,8 +37,8 @@ export class ChatController {
   /// starts) the calling user's own open support thread; see
   /// ChatService.openSupportThread.
   @Post('support')
-  openSupport(@CurrentUser() user: AuthenticatedUser) {
-    return this.chat.openSupportThread(user.sub);
+  openSupport(@CurrentUser() user: AuthenticatedUser, @Body() dto: OpenSupportThreadDto) {
+    return this.chat.openSupportThread(user.sub, dto.topic);
   }
 
   /// The admin console's shared "Support Queue" — every open support
@@ -89,6 +90,13 @@ export class ChatController {
   @Roles(UserRole.ADMIN)
   handlingHistory(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.chat.getHandlingHistory(id, user.sub);
+  }
+
+  /// The customer rates their resolved support conversation (1–5, once).
+  @Post(':id/rating')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async rate(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: RateSupportThreadDto): Promise<void> {
+    await this.chat.rateSupportThread(id, user.sub, dto.rating, dto.comment);
   }
 
   @Get(':id/messages')

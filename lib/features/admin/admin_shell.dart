@@ -16,6 +16,7 @@ import '../../services/browser_notifications.dart';
 import '../dashboard/notifications_screen.dart';
 import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
+import 'admin_support_insights_tab.dart';
 import 'admin_chat_log_screen.dart';
 import 'admin_dashboard_tab.dart';
 import 'admin_marketplace_tab.dart';
@@ -200,8 +201,10 @@ class _AdminShellState extends State<AdminShell> {
           label: 'Turn on',
           textColor: AppColors.gold,
           onPressed: () async {
-            final permission = await requestBrowserNotificationPermission();
-            appState.setAdminBrowserNotifications(permission == 'granted');
+            // Also registers this browser for push, so alerts arrive
+            // even when the console isn't open.
+            final granted = await appState.enableWebPush();
+            appState.setAdminBrowserNotifications(granted);
           },
         ),
       ),
@@ -441,6 +444,8 @@ class _AdminShellState extends State<AdminShell> {
     // AdminController.findChatLog) since it's not scoped to the viewing
     // admin's own conversations the way Messages is.
     if (isSuperAdmin) const _MoreItem(icon: Icons.history_edu_rounded, label: 'Chat Log', builder: AdminChatLogScreen.new),
+    if (isSuperAdmin)
+      const _MoreItem(icon: Icons.insights_rounded, label: 'Support Insights', builder: AdminSupportInsightsTab.new),
   ];
 
   int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
+import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../state/app_state.dart';
@@ -115,6 +116,52 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
       if (!mounted) return;
       setState(() => _error = "Couldn't load admins.");
     }
+  }
+
+  void _showAdminDetails(AdminAccount admin, List<AdminAccount> all) {
+    final created = admin.createdAt.toLocal();
+    final time = '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
+    final creatorStillAdmin = admin.createdById != null && all.any((a) => a.id == admin.createdById);
+    final createdBy = admin.createdByName != null
+        ? '${admin.createdByName}${creatorStillAdmin ? '' : ' (no longer an admin)'}'
+        : 'Not recorded. This account was set up before this was tracked, as the first admin, or directly in the database.';
+    Widget row(String label, String value) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 120, child: Text(label, style: AppTextStyles.body(color: AppColors.hintGrey, size: 13))),
+          Expanded(child: Text(value, style: AppTextStyles.body(color: AppColors.navy, size: 13.5, weight: FontWeight.w600))),
+        ],
+      ),
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                admin.fullName?.isNotEmpty == true ? admin.fullName! : admin.email,
+                style: AppTextStyles.heading(color: AppColors.navy, size: 18),
+              ),
+              const SizedBox(height: 10),
+              row('Email', admin.email),
+              row('Level', admin.level.label),
+              row('Account created', '${formatShortDate(created)}, $time'),
+              row('Invited by', createdBy),
+              row('Two-factor', admin.twoFactorEnabled ? 'On' : 'Off'),
+              row('Password', admin.mustChangePassword ? 'Still using the temporary password' : 'Set by them'),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _changeLevel(AdminAccount admin, AdminLevel level) async {
@@ -574,12 +621,18 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
               onRefresh: _load,
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-                itemCount: admins.length,
+                // A headcount by level above the list.
+                itemCount: admins.length + 1,
                 separatorBuilder: (_, _) => const SizedBox(height: 10),
-                itemBuilder: (context, index) {
-                  final admin = admins[index];
+                itemBuilder: (context, rawIndex) {
+                  if (rawIndex == 0) return _AdminCounts(admins: admins);
+                  final admin = admins[rawIndex - 1];
                   final isSelf = admin.id == myId;
-                  return Container(
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    // Tap for who invited this admin (and when the account was created).
+                    onTap: () => _showAdminDetails(admin, admins),
+                    child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: adminCardDecoration,
                     child: Row(
@@ -605,6 +658,11 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                               ),
                               const SizedBox(height: 2),
                               Text(admin.email, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Created ${formatShortDate(admin.createdAt.toLocal())}',
+                                style: AppTextStyles.body(color: AppColors.navy, size: 11.5, weight: FontWeight.w600),
+                              ),
                               if (admin.mustChangePassword) ...[
                                 const SizedBox(height: 4),
                                 Text(
@@ -663,10 +721,47 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                           ),
                       ],
                     ),
+                    ),
                   );
                 },
               ),
             ),
+    );
+  }
+}
+
+/// Headcount by level, for super admins: total, then each level.
+class _AdminCounts extends StatelessWidget {
+  const _AdminCounts({required this.admins});
+
+  final List<AdminAccount> admins;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget tile(String label, int count) => Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        decoration: adminCardDecoration,
+        child: Column(
+          children: [
+            Text('$count', style: AppTextStyles.heading(color: AppColors.navy, size: 20)),
+            const SizedBox(height: 2),
+            Text(label, textAlign: TextAlign.center, style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5, weight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+    int count(AdminLevel level) => admins.where((a) => a.level == level).length;
+    return Row(
+      children: [
+        tile('All admins', admins.length),
+        const SizedBox(width: 8),
+        tile('Super admins', count(AdminLevel.superAdmin)),
+        const SizedBox(width: 8),
+        tile('Moderators', count(AdminLevel.moderator)),
+        const SizedBox(width: 8),
+        tile('Support', count(AdminLevel.support)),
+      ],
     );
   }
 }

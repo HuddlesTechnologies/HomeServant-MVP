@@ -42,6 +42,7 @@ const adminSelect = {
   twoFactorEnabled: true,
   mustChangePassword: true,
   createdAt: true,
+  createdByAdmin: { select: { id: true, fullName: true, email: true } },
 } as const;
 
 @Injectable()
@@ -96,7 +97,7 @@ export class AdminService {
   /// password's hash in PendingAdmin until [confirmAdminOtp] is called
   /// with that code — no User row exists for this email yet, so re-
   /// requesting before confirming just overwrites the pending invite.
-  async requestAdminOtp(dto: RequestAdminDto): Promise<{ message: string }> {
+  async requestAdminOtp(dto: RequestAdminDto, invitedById?: string): Promise<{ message: string }> {
     const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (existing) throw new ConflictException('An account with this email already exists');
 
@@ -106,8 +107,8 @@ export class AdminService {
 
     await this.prisma.pendingAdmin.upsert({
       where: { email: dto.email },
-      create: { email: dto.email, fullName: dto.fullName, level: dto.level, tempPasswordHash },
-      update: { fullName: dto.fullName, level: dto.level, tempPasswordHash },
+      create: { email: dto.email, fullName: dto.fullName, level: dto.level, tempPasswordHash, invitedById },
+      update: { fullName: dto.fullName, level: dto.level, tempPasswordHash, invitedById },
     });
 
     await this.mail.send(
@@ -134,7 +135,9 @@ export class AdminService {
   /// Step 2: the code from that same email, entered back in the console,
   /// actually creates the admin account with the temp password from step
   /// 1 — see requestAdminOtp's doc comment for why both live there.
-  async confirmAdminOtp(dto: ConfirmAdminDto) {
+  /// [confirmingAdminId] is recorded as the creator if the invite didn't
+  /// record who sent it.
+  async confirmAdminOtp(dto: ConfirmAdminDto, confirmingAdminId?: string) {
     await this.otp.verify(dto.email, OtpPurpose.ADMIN_CREATE, dto.code);
     const pending = await this.prisma.pendingAdmin.findUnique({ where: { email: dto.email } });
     if (!pending) throw new BadRequestException('No pending invite for this email — request a new code');
@@ -148,6 +151,7 @@ export class AdminService {
         fullName: pending.fullName,
         emailVerifiedAt: new Date(),
         mustChangePassword: true,
+        createdByAdminId: pending.invitedById ?? confirmingAdminId,
       },
       select: adminSelect,
     });
@@ -1105,6 +1109,8 @@ export class AdminService {
       data: { adminOnDuty: onDuty },
       select: { adminOnDuty: true },
     });
+    // Someone just became available: pick up anyone waiting in the queue.
+    if (onDuty) await this.chat.assignWaitingQueue();
     return { onDuty: admin.adminOnDuty };
   }
 

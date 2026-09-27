@@ -8,6 +8,7 @@ import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/support_rating_card.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/empty_state.dart';
 import '../admin/widgets/support_thread_actions.dart';
@@ -408,6 +409,10 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
                 if (item.threadId != null) ...[
                   const SizedBox(height: 24),
                   _conversationPanel(theme),
+                ],
+                if (item.threadId != null && (_summary?.canRate ?? false)) ...[
+                  const SizedBox(height: 16),
+                  SupportRatingCard(theme: theme, threadId: item.threadId!),
                 ],
               ],
             ),
