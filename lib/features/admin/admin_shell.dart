@@ -478,10 +478,16 @@ class _AdminShellState extends State<AdminShell> {
   int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>
       _moreItems(canSeeAdmins, isSuperAdmin).fold<int>(0, (sum, item) => sum + item.count);
 
+  /// A super admin has a dozen entries here, more than a bottom sheet's
+  /// default height (9/16 of the screen) can show, so the sheet may grow to
+  /// 90% of the screen and its list scrolls: nothing is ever cut off.
   void _openMoreSheet(BuildContext context, bool canSeeAdmins, bool isSuperAdmin) {
+    final items = _moreItems(canSeeAdmins, isSuperAdmin);
     showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9, maxWidth: 640),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (sheetContext) => SafeArea(
         child: Column(
@@ -492,17 +498,24 @@ class _AdminShellState extends State<AdminShell> {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
               child: Text('More', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
             ),
-            for (final item in _moreItems(canSeeAdmins, isSuperAdmin))
-              ListTile(
-                leading: Icon(item.icon, color: AppColors.navy),
-                title: Text(item.label, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
-                trailing: item.count > 0 ? _CountBadge(count: item.count) : null,
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
-                },
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 8),
+                children: [
+                  for (final item in items)
+                    ListTile(
+                      leading: Icon(item.icon, color: AppColors.navy),
+                      title: Text(item.label, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+                      trailing: item.count > 0 ? _CountBadge(count: item.count) : null,
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
+                      },
+                    ),
+                ],
               ),
-            const SizedBox(height: 8),
+            ),
           ],
         ),
       ),
