@@ -181,7 +181,9 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     final appState = context.watch<AppState>();
     final photoPath = appState.profilePhotoPath;
     final allBookings = appState.landlordBookings;
-    final pendingBookings = allBookings.where((b) => b.status == api.BookingStatus.pending).toList();
+    // Only a Shortlet waits on the landlord before payment; a pending
+    // rental is an unfinished Rent Now checkout, not a request.
+    final pendingBookings = allBookings.where((b) => b.status == api.BookingStatus.pending && b.isShortlet).toList();
     // MOVED_IN (non-Shortlet) / PAID (Shortlet) are the only statuses that
     // mean "currently paying rent on this property" — BookingStatus.accepted
     // is only ever a Shortlet's pre-payment approval step, so filtering on
