@@ -12,7 +12,7 @@ import '../../widgets/pill_text_field.dart';
 import '../../widgets/payout_required_dialog.dart';
 import '../../widgets/upload_picker.dart';
 import '../dashboard/models/property.dart';
-import 'landlord_bank_details_screen.dart';
+import '../../widgets/bank_details_screen.dart';
 
 const _categories = ['House', 'Shortlet', 'Self-Con', 'Apartment'];
 const _minImages = 2;
@@ -143,7 +143,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
           'Tenant rent payments are held in escrow and released to your bank account.',
     );
     if (proceed == true && mounted) {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LandlordBankDetailsScreen()));
+      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => BankDetailsScreen.landlord()));
     }
     return false;
   }

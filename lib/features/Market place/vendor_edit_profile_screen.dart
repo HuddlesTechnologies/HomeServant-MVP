@@ -9,7 +9,7 @@ import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
-import 'vendor_bank_details_screen.dart';
+import '../../widgets/bank_details_screen.dart';
 
 /// Lets the vendor update their shop's public details, logo, and payout
 /// bank account.
@@ -65,7 +65,7 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
 
   Future<void> _openBankDetails() async {
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => VendorBankDetailsScreen(theme: widget.theme)),
+      MaterialPageRoute(builder: (_) => BankDetailsScreen.vendor(widget.theme)),
     );
     _load();
   }

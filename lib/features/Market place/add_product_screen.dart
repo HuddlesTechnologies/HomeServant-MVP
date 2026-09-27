@@ -12,7 +12,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
 import 'models/order_options.dart';
-import 'vendor_bank_details_screen.dart';
+import '../../widgets/bank_details_screen.dart';
 
 const _minImages = 2;
 const _maxImages = 5;
@@ -108,7 +108,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         );
         if (proceed == true && mounted) {
           await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => VendorBankDetailsScreen(theme: widget.theme)),
+            MaterialPageRoute(builder: (_) => BankDetailsScreen.vendor(widget.theme)),
           );
         }
         return;

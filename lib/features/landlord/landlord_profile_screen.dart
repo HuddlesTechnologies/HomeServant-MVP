@@ -9,7 +9,7 @@ import '../../widgets/theme_picker_sheet.dart';
 import '../dashboard/edit_profile_screen.dart';
 import '../dashboard/notifications_screen.dart';
 import 'landlord_add_property_screen.dart';
-import 'landlord_bank_details_screen.dart';
+import '../../widgets/bank_details_screen.dart';
 
 /// Profile Settings tab of the redesigned landlord dashboard — a fixed
 /// dark-navy screen (independent of the switchable [DashboardTheme], which
@@ -65,7 +65,7 @@ class LandlordProfileScreen extends StatelessWidget {
           icon: Icons.account_balance_rounded,
           label: 'Bank Details',
           onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const LandlordBankDetailsScreen()),
+            MaterialPageRoute(builder: (_) => BankDetailsScreen.landlord()),
           ),
         ),
         ProfileMenuItemSpec(
