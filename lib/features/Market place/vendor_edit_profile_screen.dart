@@ -7,9 +7,9 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/pill_button.dart';
-import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
 import '../../widgets/bank_details_screen.dart';
+import 'widgets/vendor_form_fields.dart';
 
 /// Lets the vendor update their shop's public details, logo, and payout
 /// bank account.
@@ -206,11 +206,11 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _Field(theme: theme, label: 'Business Name', controller: _businessName, hint: 'e.g. Comfort Home Furniture'),
+              VendorTextField(theme: theme, label: 'Business Name', controller: _businessName, hint: 'e.g. Comfort Home Furniture'),
               const SizedBox(height: 16),
-              _Field(theme: theme, label: "Owner's Full Name", controller: _ownerName, hint: 'Full name'),
+              VendorTextField(theme: theme, label: "Owner's Full Name", controller: _ownerName, hint: 'Full name'),
               const SizedBox(height: 16),
-              _Dropdown(theme: theme, label: 'Business Category', value: _category.label, onTap: _pickCategory),
+              VendorDropdownField(theme: theme, label: 'Business Category', value: _category.label, onTap: _pickCategory),
               const SizedBox(height: 28),
               Text('Payout Account', style: AppTextStyles.heading(color: theme.foreground, size: 16)),
               const SizedBox(height: 8),
@@ -277,68 +277,6 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _Field extends StatelessWidget {
-  const _Field({required this.theme, required this.label, required this.controller, this.hint = ''});
-
-  final DashboardTheme theme;
-  final String label;
-  final TextEditingController controller;
-  final String hint;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w600, size: 13.5)),
-        const SizedBox(height: 8),
-        PillTextField(
-          hint: hint,
-          controller: controller,
-          fillColor: theme.surface,
-          textColor: theme.onSurface,
-        ),
-      ],
-    );
-  }
-}
-
-class _Dropdown extends StatelessWidget {
-  const _Dropdown({required this.theme, required this.label, required this.value, required this.onTap});
-
-  final DashboardTheme theme;
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w600, size: 13.5)),
-        const SizedBox(height: 8),
-        InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
-            decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(28)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(value, style: AppTextStyles.body(color: theme.onSurface, size: 15)),
-                Icon(Icons.keyboard_arrow_down_rounded, color: theme.onSurface.withValues(alpha: 0.6)),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
