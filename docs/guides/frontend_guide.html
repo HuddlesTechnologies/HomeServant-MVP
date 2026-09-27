@@ -139,7 +139,7 @@
   <tr><td><code>AuthRepository</code></td><td><code>/auth/*</code>: signup, verify, login, Google, 2FA, refresh, logout, password reset and change, deactivate, delete.</td></tr>
   <tr><td><code>UsersRepository</code></td><td><code>/users/me</code>, <code>/users/me/bank-details</code>.</td></tr>
   <tr><td><code>PropertiesRepository</code></td><td><code>/properties</code>.</td></tr>
-  <tr><td><code>BookingsRepository</code></td><td><code>/bookings</code>: create, pay, inspection, move-in, refund, renew, landlord responses, tenancy agreement.</td></tr>
+  <tr><td><code>BookingsRepository</code></td><td><code>/bookings</code>: create, pay, inspection, move-in, refund, renewal quote and renew, landlord responses, tenancy agreement. <em>Renew Lease</em> (History) fetches the quote, confirms the amount with <code>showConfirmSheet</code> (its <code>notice</code> flags a rent increase), then opens Paystack; the lease updates when the webhook confirms payment.</td></tr>
   <tr><td><code>FavoritesRepository</code>, <code>ReviewsRepository</code></td><td><code>/favorites</code>, <code>/reviews</code>.</td></tr>
   <tr><td><code>ChatRepository</code></td><td><code>/threads</code>: inbox, messages, support chat, claim, resolve, transfer, reassign, summary.</td></tr>
   <tr><td><code>NotificationsRepository</code></td><td><code>/notifications</code>.</td></tr>

@@ -6,9 +6,10 @@ Flutter app (web and mobile), deployed on Render. It covers:
 - **Accounts:** email + password with email codes and optional two-factor,
   Google sign-in (never for admins), profiles, deactivation.
 - **Rentals:** properties, bookings and inspections, Paystack **escrow**
-  payments (held until move-in, refunds, landlord rejections, renewals),
-  tenancy agreements, reviews, favourites, eviction requests (reviewed by
-  a super admin).
+  payments (held until move-in, refunds, landlord rejections, renewals
+  quoted and confirmed before charging), tenancy agreements (updated on
+  renewal), rent-change notices to a listing's tenants, reviews,
+  favourites, eviction requests (reviewed by a super admin).
 - **Identity verification:** means of ID for everyone and ownership
   documents for landlords, stored privately and reviewed by moderators;
   Verified badges; Platform Controls (only verified landlords' listings,

@@ -10,6 +10,7 @@ import { CreateBookingDto } from './dto/create-booking.dto';
 import { ProposeInspectionDto } from './dto/propose-inspection.dto';
 import { RespondBookingDto } from './dto/respond-booking.dto';
 import { FeedClearDto } from './dto/feed-clear.dto';
+import { RenewBookingDto } from './dto/renew-booking.dto';
 
 @Controller('bookings')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -84,9 +85,15 @@ export class BookingsController {
     return this.bookings.refund(id, user.sub);
   }
 
+  @Get(':id/renewal-quote')
+  @Roles(UserRole.TENANT)
+  renewalQuote(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.renewalQuote(id, user.sub);
+  }
+
   @Post(':id/renew')
   @Roles(UserRole.TENANT)
-  renew(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.bookings.renew(id, user.sub);
+  renew(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: RenewBookingDto) {
+    return this.bookings.renew(id, user.sub, { amount: dto.expectedAmount, leaseMonths: dto.expectedLeaseMonths });
   }
 }

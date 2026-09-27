@@ -17,6 +17,37 @@ class PaymentInitiation {
   );
 }
 
+/// GET /bookings/:id/renewal-quote. Amounts are whole naira.
+class RenewalQuote {
+  const RenewalQuote({
+    required this.amount,
+    required this.priceUnit,
+    required this.leaseMonths,
+    this.previousAmount,
+    this.previousPriceUnit,
+    this.newLeaseEnd,
+  });
+
+  final int amount;
+  final String priceUnit;
+  final int leaseMonths;
+  final int? previousAmount;
+  final String? previousPriceUnit;
+  final DateTime? newLeaseEnd;
+
+  /// True when renewing costs more than the tenant paid last time.
+  bool get isIncrease => previousAmount != null && previousPriceUnit == priceUnit && amount > previousAmount!;
+
+  factory RenewalQuote.fromApi(Map<String, dynamic> json) => RenewalQuote(
+    amount: json['amount'] as int,
+    priceUnit: json['priceUnit'] as String,
+    leaseMonths: json['leaseMonths'] as int,
+    previousAmount: json['previousAmount'] as int?,
+    previousPriceUnit: json['previousPriceUnit'] as String?,
+    newLeaseEnd: json['newLeaseEnd'] == null ? null : DateTime.parse(json['newLeaseEnd'] as String).toLocal(),
+  );
+}
+
 /// `POST /bookings`'s response — for a non-Shortlet property this now
 /// charges immediately, so the booking row and the charge result come back
 /// merged in the same response (`{...booking, reference, authorizationUrl}`).
@@ -152,10 +183,25 @@ class BookingsRepository {
   }
 
   /// Renews an active lease before it expires.
-  Future<Booking> renew(String id) {
+  /// Exactly what renewing would charge right now, and what was paid last
+  /// time — shown to the tenant before they confirm.
+  Future<RenewalQuote> renewalQuote(String id) {
     return _client.call(() async {
-      final response = await _client.dio.post('/bookings/$id/renew');
-      return Booking.fromApi(response.data as Map<String, dynamic>);
+      final response = await _client.dio.get('/bookings/$id/renewal-quote');
+      return RenewalQuote.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
+  /// Starts the renewal charge — open [PaymentInitiation.authorizationUrl].
+  /// [quote] is what the tenant agreed to; if the landlord changed the rent
+  /// or lease length since, the server refuses (409) and nothing is charged.
+  Future<PaymentInitiation> renew(String id, RenewalQuote quote) {
+    return _client.call(() async {
+      final response = await _client.dio.post(
+        '/bookings/$id/renew',
+        data: {'expectedAmount': quote.amount, 'expectedLeaseMonths': quote.leaseMonths},
+      );
+      return PaymentInitiation.fromApi(response.data as Map<String, dynamic>);
     });
   }
 

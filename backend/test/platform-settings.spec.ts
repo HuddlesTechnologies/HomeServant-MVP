@@ -31,7 +31,7 @@ describeDb('platform controls: only verified landlords (real Postgres)', () => {
     settings = new PlatformSettingsService(prisma as never, notifier as never, mail as never);
     favorites = new FavoritesService(prisma as never, settings);
     const reviews = { summaryForProperties: async () => new Map() };
-    properties = new PropertiesService(prisma as never, reviews as never, {} as never, settings);
+    properties = new PropertiesService(prisma as never, reviews as never, {} as never, settings, { create: async () => undefined } as never);
     const notifications = { create: async () => undefined };
     const payments = { chargeBooking: async () => ({ reference: 'r', authorizationUrl: 'https://pay' }) };
     bookings = new BookingsService(prisma as never, notifications as never, payments as never, settings);

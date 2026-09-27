@@ -6,6 +6,7 @@ import '../../api/models/eviction.dart';
 import '../../core/date_format.dart';
 import '../../core/open_payment_page.dart';
 import '../../core/responsive.dart';
+import '../../core/thousands_separator.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
@@ -215,13 +216,35 @@ class _HistoryTileState extends State<_HistoryTile> {
     }
   }
 
+  /// Shows exactly what renewing costs (flagging a rent increase) before
+  /// anything is charged, then opens Paystack for that amount. The server
+  /// refuses if the landlord changed the terms in between, so the tenant
+  /// is never charged an amount they didn't see.
   Future<void> _renew() async {
     final messenger = ScaffoldMessenger.of(context);
     final appState = context.read<AppState>();
     setState(() => _busy = true);
     try {
-      await appState.renewBooking(booking.id);
-      messenger.showSnackBar(const SnackBar(content: Text('Lease renewed')));
+      final quote = await appState.renewalQuote(booking.id);
+      if (!mounted) return;
+      String rent(int amount, String unit) => '₦${formatWithThousandsSeparator(amount)}/${unit == 'NIGHT' ? 'night' : 'year'}';
+      final until = quote.newLeaseEnd == null ? '' : ', until ${formatShortDate(quote.newLeaseEnd!)}';
+      final confirmed = await showConfirmSheet(
+        context,
+        title: 'Renew your lease?',
+        body: 'You will pay ${rent(quote.amount, quote.priceUnit)} for another ${quote.leaseMonths} months$until. '
+            'Your tenancy agreement is updated once the payment goes through.',
+        notice: quote.isIncrease
+            ? 'The rent has gone up since your last payment: it was ${rent(quote.previousAmount!, quote.previousPriceUnit!)}.'
+            : null,
+        actionLabel: 'Pay ₦${formatWithThousandsSeparator(quote.amount)}',
+      );
+      if (!confirmed || !mounted) return;
+      final payment = await appState.renewBooking(booking.id, quote);
+      final launched = await openPaymentPage(payment.authorizationUrl);
+      if (!launched && mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text("Couldn't open the payment page — try again.")));
+      }
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } finally {

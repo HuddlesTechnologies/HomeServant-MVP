@@ -1,5 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, PaymentStatus, Prisma, PropertyCategory, VerificationStatus } from '@prisma/client';
+import { BookingStatus, NotificationType, PaymentStatus, PriceUnit, Prisma, PropertyCategory, VerificationStatus } from '@prisma/client';
+import { formatRent } from '../common/format-rent';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReviewsService } from '../reviews/reviews.service';
@@ -41,6 +43,7 @@ export class PropertiesService {
     private readonly reviews: ReviewsService,
     private readonly storage: StorageService,
     private readonly platform: PlatformSettingsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private async verifyImages(dto: { imageUrl?: string; galleryUrls?: string[] }): Promise<void> {
@@ -174,7 +177,71 @@ export class PropertiesService {
   async update(id: string, landlordId: string, dto: UpdatePropertyDto) {
     await this.assertOwnership(id, landlordId);
     await this.verifyImages(dto);
-    return this.prisma.property.update({ where: { id }, data: dto });
+    const before = await this.prisma.property.findUniqueOrThrow({
+      where: { id },
+      select: { price: true, priceUnit: true, rentDurationMonths: true },
+    });
+    const updated = await this.prisma.property.update({ where: { id }, data: dto });
+    await this.notifyTenantsOfNewTerms(updated, before);
+    return updated;
+  }
+
+  /// When the rent (or its unit, or the lease length) changes, every tenant
+  /// with a live booking on this listing is told what changed and what it
+  /// means for them. Nothing they've already paid changes: payouts and
+  /// refunds use the amount charged, and the agreement keeps the rent paid.
+  /// The new terms apply to an unpaid booking if they go ahead and pay,
+  /// and to a current tenant when they renew.
+  private async notifyTenantsOfNewTerms(
+    after: { id: string; title: string; price: number; priceUnit: PriceUnit; rentDurationMonths: number | null },
+    before: { price: number; priceUnit: PriceUnit; rentDurationMonths: number | null },
+  ): Promise<void> {
+    const priceChanged = after.price !== before.price || after.priceUnit !== before.priceUnit;
+    const leaseChanged = after.rentDurationMonths !== before.rentDurationMonths;
+    if (!priceChanged && !leaseChanged) return;
+
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        propertyId: after.id,
+        OR: [
+          { status: { in: [BookingStatus.PENDING, BookingStatus.ACCEPTED] } },
+          { status: { in: [BookingStatus.PAID_AWAITING_INSPECTION, BookingStatus.INSPECTION_PROPOSED, BookingStatus.INSPECTION_CONFIRMED] } },
+          { status: BookingStatus.MOVED_IN, OR: [{ leaseEndDate: null }, { leaseEndDate: { gte: new Date() } }] },
+        ],
+      },
+      select: { tenantId: true, status: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const changes = [
+      priceChanged ? `the rent from ${formatRent(before.price, before.priceUnit)} to ${formatRent(after.price, after.priceUnit)}` : null,
+      leaseChanged && before.rentDurationMonths && after.rentDurationMonths
+        ? `the lease length from ${before.rentDurationMonths} to ${after.rentDurationMonths} months`
+        : null,
+    ].filter(Boolean);
+    if (changes.length === 0) return;
+    const what = `The landlord changed ${changes.join(' and ')} for ${after.title}.`;
+
+    // One message per tenant, for their most advanced booking here.
+    const rank = (status: BookingStatus) =>
+      status === BookingStatus.MOVED_IN ? 2 : status === BookingStatus.PENDING || status === BookingStatus.ACCEPTED ? 0 : 1;
+    const byTenant = new Map<string, BookingStatus>();
+    for (const b of bookings) {
+      const current = byTenant.get(b.tenantId);
+      if (current === undefined || rank(b.status) > rank(current)) byTenant.set(b.tenantId, b.status);
+    }
+
+    for (const [tenantId, status] of byTenant) {
+      const impact =
+        rank(status) === 2
+          ? "Your current lease and what you've already paid aren't affected. The new terms apply if you renew."
+          : rank(status) === 1
+            ? "What you've already paid isn't affected." +
+              (leaseChanged && after.rentDurationMonths ? ` Your lease will run ${after.rentDurationMonths} months from move-in.` : '') +
+              ' The new rent would apply if you later renew.'
+            : "You haven't paid yet, so if you go ahead, you'll pay the new price.";
+      await this.notifications.create(tenantId, NotificationType.BOOKING_STATUS, 'Rent changed', `${what} ${impact}`);
+    }
   }
 
   /// Refuses to delete a listing that still has something depending on it
