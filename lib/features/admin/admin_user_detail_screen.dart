@@ -24,9 +24,14 @@ import 'widgets/admin_verification_card.dart';
 /// AdminService.findUserDetail) rather than the trimmed-down list-row
 /// shape, and is where "Message" (start a console-to-user chat) lives.
 class AdminUserDetailScreen extends StatefulWidget {
-  const AdminUserDetailScreen({super.key, required this.userId});
+  const AdminUserDetailScreen({super.key, required this.userId, this.asPopup = false, this.title = 'User Details'});
 
   final String userId;
+
+  /// Shown inside [showAdminUserProfilePopup] rather than as a full page:
+  /// the back arrow becomes a close button.
+  final bool asPopup;
+  final String title;
 
   @override
   State<AdminUserDetailScreen> createState() => _AdminUserDetailScreenState();
@@ -347,7 +352,15 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
         backgroundColor: AppColors.navy,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: Text('User Details', style: AppTextStyles.heading(color: Colors.white, size: 18)),
+        automaticallyImplyLeading: !widget.asPopup,
+        leading: widget.asPopup
+            ? IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
+                tooltip: 'Close',
+              )
+            : null,
+        title: Text(widget.title, style: AppTextStyles.heading(color: Colors.white, size: 18)),
         actions: [
           if (user != null) ...[
             IconButton(
@@ -734,3 +747,29 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   }
 }
 
+
+/// The full user profile (every detail and every action the admin's level
+/// allows, exactly as on the Users screen) in a pop-up over the current
+/// page. Used by the property detail page's "View profile" button.
+Future<void> showAdminUserProfilePopup(BuildContext context, {required String userId, String title = 'User Details'}) {
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      final size = MediaQuery.of(dialogContext).size;
+      return Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        backgroundColor: AppColors.offWhite,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 640, maxHeight: size.height * 0.9),
+          child: SizedBox(
+            width: size.width,
+            height: size.height * 0.9,
+            child: AdminUserDetailScreen(userId: userId, asPopup: true, title: title),
+          ),
+        ),
+      );
+    },
+  );
+}

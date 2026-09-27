@@ -11,6 +11,7 @@ import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_permissions.dart';
 import '../../widgets/labeled_value_row.dart';
 import 'widgets/admin_badge.dart';
+import 'admin_user_detail_screen.dart';
 
 /// Every detail an admin can see about a listing — reached by tapping a
 /// row in AdminPropertiesTab, which previously had no detail view at all.
@@ -47,6 +48,26 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _error = "Couldn't load this property.");
+    }
+  }
+
+  /// The landlord's full profile in a pop-up, with every action the
+  /// admin's level allows. Afterwards the listing is re-read, since those
+  /// actions can change it: deactivating hides it, and deleting the
+  /// landlord (or this listing, from their list) deletes it, which closes
+  /// this page.
+  Future<void> _viewLandlord(String landlordId) async {
+    await showAdminUserProfilePopup(context, userId: landlordId, title: 'Landlord Profile');
+    if (!mounted) return;
+    try {
+      final property = await context.read<AppState>().admin.propertyDetail(widget.propertyId);
+      if (mounted) setState(() => _property = property);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.statusCode == 404) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This listing no longer exists.')));
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -155,7 +176,7 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
                         if (property.roomNumber != null && property.roomNumber!.isNotEmpty)
                           LabeledValueRow('Room Number', property.roomNumber!),
                         LabeledValueRow('Messaging Enabled', property.messagingEnabled ? 'Yes' : 'No'),
-                        LabeledValueRow('Landlord', property.landlordName),
+                        _landlordRow(property),
                       ],
                     ),
                   ),
@@ -185,7 +206,7 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
                           minimumSize: const Size.fromHeight(48),
                           side: const BorderSide(color: Colors.orange),
                         ),
-                        label: const Text('Re-list (override occupied lock)', style: TextStyle(color: Colors.orange)),
+                        label: Text('Re-list (override occupied lock)', style: AppTextStyles.body(color: Colors.orange.shade800, size: 14, weight: FontWeight.w600)),
                       ),
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
@@ -195,7 +216,7 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
                         minimumSize: const Size.fromHeight(48),
                         side: const BorderSide(color: Colors.redAccent),
                       ),
-                      label: const Text('Remove Listing', style: TextStyle(color: Colors.redAccent)),
+                      label: Text('Remove Listing', style: AppTextStyles.body(color: const Color(0xFFB42318), size: 14, weight: FontWeight.w600)),
                     ),
                   ],
                 ],
@@ -203,5 +224,32 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
             ),
     );
   }
-}
 
+  /// Same layout as [LabeledValueRow], plus a "View profile" button.
+  Widget _landlordRow(Property property) {
+    final landlordId = property.landlordId;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(width: 140, child: Text('Landlord', style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5))),
+          Expanded(
+            child: Text(property.landlordName, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600)),
+          ),
+          if (landlordId != null)
+            TextButton.icon(
+              onPressed: () => _viewLandlord(landlordId),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.navy,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                visualDensity: VisualDensity.compact,
+              ),
+              icon: const Icon(Icons.person_outline_rounded, size: 18, color: AppColors.navy),
+              label: Text('View profile', style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w700)),
+            ),
+        ],
+      ),
+    );
+  }
+}
