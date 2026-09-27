@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaClient, UserRole } from '@prisma/client';
 import { AdminService } from '../src/admin/admin.service';
 import { ChatService } from '../src/chat/chat.service';
+import { SupportAlertsService } from '../src/chat/support-alerts.service';
+import { SupportMetricsService } from '../src/chat/support-metrics.service';
 import { SupportToolsService } from '../src/chat/support-tools.service';
 import { UnreadMessageEmailService } from '../src/chat/unread-message-email.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
@@ -225,6 +227,106 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
       const targets = await tools.transferTargets();
       expect(targets).toHaveLength(2);
       expect(targets.find((t) => t.id === ada.id)).toMatchObject({ openChats: 1, isOnline: true, adminLevel: 'SUPPORT' });
+    });
+  });
+
+  // --- Nobody available: the safety net --------------------------------------------
+
+  describe('when no admin is available', () => {
+    it('tells the customer once, then assigns the chat as soon as an admin comes online', async () => {
+      const admin = await makeUser(prisma, UserRole.ADMIN, { adminLevel: 'SUPPORT' });
+      const customer = await makeUser(prisma, UserRole.TENANT);
+      const thread = await chat.openSupportThread(customer.id, 'BOOKING');
+      await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Hello?' });
+      await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Anyone there?' });
+      const notices = await prisma.message.findMany({ where: { threadId: thread.id, type: 'SYSTEM' } });
+      expect(notices).toHaveLength(1);
+      expect(notices[0].body).toMatch(/No one from our support team is available right now/);
+
+      online.add(admin.id);
+      expect(await chat.assignWaitingQueue()).toBe(1);
+      expect((await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } })).assignedAdminId).toBe(admin.id);
+      expect(await prisma.notification.count({ where: { userId: admin.id, title: 'A waiting conversation was assigned to you' } })).toBe(1);
+    });
+
+    it('emails every super admin once when a chat has been unclaimed for 15 minutes', async () => {
+      const boss = await makeUser(prisma, UserRole.ADMIN, { adminLevel: 'SUPER_ADMIN' });
+      const customer = await makeUser(prisma, UserRole.TENANT);
+      const thread = await chat.openSupportThread(customer.id);
+      await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Urgent' });
+      await prisma.message.updateMany({ where: { threadId: thread.id }, data: { createdAt: new Date(Date.now() - 20 * 60_000) } });
+      const config = { get: () => undefined };
+      const alerts = new SupportAlertsService(prisma as never, notifications, config as never, chat, mail as never);
+
+      await alerts.run();
+      await alerts.run();
+      const escalations = mail.sent.filter((m) => m.to === boss.email && m.subject.includes('nobody assigned'));
+      expect(escalations).toHaveLength(1);
+    });
+  });
+
+  // --- Support dashboard stats ---------------------------------------------------------
+
+  describe('support stats and ratings', () => {
+    it('records first response, transfers and resolution, and lets the customer rate once', async () => {
+      const ada = await makeUser(prisma, UserRole.ADMIN, { adminLevel: 'SUPPORT' });
+      const ben = await makeUser(prisma, UserRole.ADMIN, { adminLevel: 'SUPPORT' });
+      const customer = await makeUser(prisma, UserRole.LANDLORD);
+      const thread = await chat.openSupportThread(customer.id, 'LISTING');
+      await chat.sendMessage(thread.id, customer.id, UserRole.LANDLORD, { body: 'My listing is hidden' });
+      await chat.claimThread(thread.id, ada.id);
+      await chat.sendMessage(thread.id, ada.id, UserRole.ADMIN, { body: 'Looking into it' });
+      await chat.transferThread(thread.id, ada.id, ben.id);
+      await expect(chat.rateSupportThread(thread.id, customer.id, 5)).rejects.toThrow(BadRequestException);
+      await chat.resolveSupportThread(thread.id, ben.id);
+
+      const summary = await chat.getThreadSummary(thread.id, customer.id, UserRole.LANDLORD);
+      expect(summary.canRate).toBe(true);
+      await chat.rateSupportThread(thread.id, customer.id, 4, 'Quick, thanks');
+      await expect(chat.rateSupportThread(thread.id, customer.id, 1)).rejects.toThrow(BadRequestException);
+
+      const stat = await prisma.supportChatStat.findUniqueOrThrow({ where: { threadId: thread.id } });
+      expect(stat).toMatchObject({
+        customerId: customer.id,
+        customerRole: 'LANDLORD',
+        topic: 'LISTING',
+        firstResponderId: ada.id,
+        currentAdminId: ben.id,
+        transferCount: 1,
+        resolvedById: ben.id,
+        rating: 4,
+        ratingComment: 'Quick, thanks',
+      });
+      expect(stat.firstCustomerMessageAt).not.toBeNull();
+      expect(stat.firstResponseAt).not.toBeNull();
+    });
+
+    it('summarises the numbers for the dashboard', async () => {
+      const ada = await makeUser(prisma, UserRole.ADMIN, { adminLevel: 'SUPPORT', fullName: 'Ada Obi' });
+      online.add(ada.id);
+      const customers = [await makeUser(prisma, UserRole.TENANT), await makeUser(prisma, UserRole.TENANT)];
+      for (const [i, customer] of customers.entries()) {
+        const thread = await chat.openSupportThread(customer.id, i === 0 ? 'PAYMENTS' : 'BOOKING');
+        await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Help' });
+        await chat.sendMessage(thread.id, ada.id, UserRole.ADMIN, { body: 'On it' });
+        await chat.resolveSupportThread(thread.id, ada.id);
+        await chat.rateSupportThread(thread.id, customer.id, i === 0 ? 5 : 3);
+      }
+      // One more waiting in the queue with nobody online.
+      online.delete(ada.id);
+      const waiting = await makeUser(prisma, UserRole.TENANT);
+      const queued = await chat.openSupportThread(waiting.id);
+      await chat.sendMessage(queued.id, waiting.id, UserRole.TENANT, { body: 'Hello?' });
+
+      const m = await new SupportMetricsService(prisma as never, fakePresence(online) as never).metrics(30);
+      expect(m.totals).toMatchObject({ conversations: 3, resolved: 2, averageRating: 4, ratings: 2, neverAnswered: 1 });
+      expect(m.totals.medianFirstResponseMinutes).not.toBeNull();
+      expect(m.live).toMatchObject({ waiting: 1, adminsAvailable: 0 });
+      expect(m.byAdmin.find((a) => a.id === ada.id)).toMatchObject({ firstReplies: 2, resolved: 2, averageRating: 4 });
+      expect(m.byTopic.map((t) => t.topic).sort()).toEqual(['BOOKING', 'PAYMENTS', 'UNSPECIFIED']);
+      expect(m.byHour.reduce((a, b) => a + b, 0)).toBe(3);
+      expect(m.byDay).toHaveLength(30);
+      expect(m.recentRatings).toHaveLength(2);
     });
   });
 

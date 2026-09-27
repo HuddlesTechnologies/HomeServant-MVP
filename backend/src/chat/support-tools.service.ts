@@ -46,6 +46,10 @@ export class SupportToolsService {
       data: { ...(topic ? { supportTopic: topic } : {}), ...(priority ? { priority } : {}) },
       select: { id: true, supportTopic: true, priority: true },
     });
+    await this.prisma.supportChatStat.updateMany({
+      where: { threadId },
+      data: { ...(topic ? { topic } : {}), ...(priority ? { priority } : {}) },
+    });
     // Queues/inboxes re-sort by priority — let every open console refetch.
     this.gateway.broadcastToAdmins('admin:badges-changed', {});
     return updated;

@@ -1,5 +1,5 @@
 import { SupportPriority, SupportTopic } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 
 export class OpenSupportThreadDto {
   @IsOptional()
@@ -34,4 +34,16 @@ export class SavedReplyDto {
   @MinLength(1)
   @MaxLength(2000)
   body!: string;
+}
+
+export class RateSupportThreadDto {
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  rating!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  comment?: string;
 }

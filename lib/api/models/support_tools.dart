@@ -233,3 +233,76 @@ class CustomerContext {
     );
   }
 }
+
+double? _num(Object? v) => v is num ? v.toDouble() : null;
+
+class SupportTotals {
+  const SupportTotals(this.json);
+  final Map<String, dynamic> json;
+
+  int get conversations => json['conversations'] as int? ?? 0;
+  int get resolved => json['resolved'] as int? ?? 0;
+  double? get medianFirstResponseMinutes => _num(json['medianFirstResponseMinutes']);
+  double? get p90FirstResponseMinutes => _num(json['p90FirstResponseMinutes']);
+  double? get medianResolutionMinutes => _num(json['medianResolutionMinutes']);
+  double? get averageRating => _num(json['averageRating']);
+  int get ratings => json['ratings'] as int? ?? 0;
+  int get transferred => json['transferred'] as int? ?? 0;
+  int get neverAnswered => json['neverAnswered'] as int? ?? 0;
+}
+
+class SupportAdminStat {
+  const SupportAdminStat(this.json);
+  final Map<String, dynamic> json;
+
+  String get name => json['name'] as String? ?? 'Admin';
+  AdminLevel get level => AdminLevel.fromApi(json['level'] as String? ?? 'SUPPORT');
+  bool get onDuty => json['onDuty'] as bool? ?? false;
+  bool get online => json['online'] as bool? ?? false;
+  int get openNow => json['openNow'] as int? ?? 0;
+  int get firstReplies => json['firstReplies'] as int? ?? 0;
+  int get resolved => json['resolved'] as int? ?? 0;
+  double? get medianFirstResponseMinutes => _num(json['medianFirstResponseMinutes']);
+  double? get averageRating => _num(json['averageRating']);
+  int get ratings => json['ratings'] as int? ?? 0;
+}
+
+class SupportRatingEntry {
+  const SupportRatingEntry(this.json);
+  final Map<String, dynamic> json;
+
+  int get rating => json['rating'] as int? ?? 0;
+  String? get comment => json['comment'] as String?;
+  SupportTopic? get topic => SupportTopic.fromApi(json['topic']);
+  String? get adminName => json['adminName'] as String?;
+  DateTime? get ratedAt => json['ratedAt'] != null ? DateTime.parse(json['ratedAt'] as String) : null;
+}
+
+/// `GET /support/metrics?days=` — the super-admin support dashboard.
+class SupportMetrics {
+  const SupportMetrics(this.json);
+  final Map<String, dynamic> json;
+
+  int get days => json['days'] as int? ?? 30;
+  Map<String, dynamic> get _live => json['live'] as Map<String, dynamic>? ?? const {};
+  int get waiting => _live['waiting'] as int? ?? 0;
+  double? get oldestWaitMinutes => _num(_live['oldestWaitMinutes']);
+  int get adminsAvailable => _live['adminsAvailable'] as int? ?? 0;
+  int get openAssigned => _live['openAssigned'] as int? ?? 0;
+  SupportTotals get totals => SupportTotals(json['totals'] as Map<String, dynamic>? ?? const {});
+
+  List<({String label, SupportTotals totals})> get byTopic => [
+    for (final t in (json['byTopic'] as List? ?? const []).cast<Map<String, dynamic>>())
+      (label: SupportTopic.fromApi(t['topic'])?.label ?? 'Not specified', totals: SupportTotals(t)),
+  ];
+  List<SupportAdminStat> get byAdmin =>
+      (json['byAdmin'] as List? ?? const []).cast<Map<String, dynamic>>().map(SupportAdminStat.new).toList();
+  List<int> get byHour => (json['byHour'] as List? ?? const []).cast<int>();
+  List<int> get byWeekday => (json['byWeekday'] as List? ?? const []).cast<int>();
+  List<({DateTime date, int conversations, int resolved})> get byDay => [
+    for (final d in (json['byDay'] as List? ?? const []).cast<Map<String, dynamic>>())
+      (date: DateTime.parse(d['date'] as String), conversations: d['conversations'] as int? ?? 0, resolved: d['resolved'] as int? ?? 0),
+  ];
+  List<SupportRatingEntry> get recentRatings =>
+      (json['recentRatings'] as List? ?? const []).cast<Map<String, dynamic>>().map(SupportRatingEntry.new).toList();
+}

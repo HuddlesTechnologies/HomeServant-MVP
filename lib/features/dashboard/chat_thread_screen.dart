@@ -14,6 +14,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
+import '../../widgets/support_rating_card.dart';
 import '../../widgets/contact_avatar.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/upload_picker.dart';
@@ -185,6 +186,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   /// applicable (or not allowed) — the history UI is simply not shown.
   ThreadHandlingHistory? _history;
 
+  /// Customer side: this resolved support chat can still be rated.
+  bool _canRate = false;
+
   Future<void> _openTriage() async {
     final threadId = widget.threadId;
     if (threadId == null) return;
@@ -331,6 +335,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     String? notice;
     try {
       final summary = await appState.chat.summary(threadId);
+      if (mounted && summary.canRate != _canRate) setState(() => _canRate = summary.canRate);
       if (summary.lockedReason != null) {
         notice = summary.lockedReason;
       } else if (isAdmin && !summary.canReply) {
@@ -1002,6 +1007,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                       ),
                     ),
                   ),
+                ),
+              if (_canRate && widget.threadId != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: SupportRatingCard(theme: theme, threadId: widget.threadId!),
                 ),
               if (_accessNotice != null)
                 // theme.surface/onSurface: a fixed light-surface/navy-text

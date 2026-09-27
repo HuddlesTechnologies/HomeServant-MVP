@@ -154,7 +154,7 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
               row('Email', admin.email),
               row('Level', admin.level.label),
               row('Account created', '${formatShortDate(created)}, $time'),
-              row('Created by', createdBy),
+              row('Invited by', createdBy),
               row('Two-factor', admin.twoFactorEnabled ? 'On' : 'Off'),
               row('Password', admin.mustChangePassword ? 'Still using the temporary password' : 'Set by them'),
             ],
@@ -621,17 +621,17 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
               onRefresh: _load,
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
-                // Super admins get a headcount by level above the list.
-                itemCount: admins.length + (isSuperAdmin ? 1 : 0),
+                // A headcount by level above the list.
+                itemCount: admins.length + 1,
                 separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (context, rawIndex) {
-                  if (isSuperAdmin && rawIndex == 0) return _AdminCounts(admins: admins);
-                  final admin = admins[rawIndex - (isSuperAdmin ? 1 : 0)];
+                  if (rawIndex == 0) return _AdminCounts(admins: admins);
+                  final admin = admins[rawIndex - 1];
                   final isSelf = admin.id == myId;
                   return InkWell(
                     borderRadius: BorderRadius.circular(14),
-                    // Super admins: tap for when the account was created and by whom.
-                    onTap: isSuperAdmin ? () => _showAdminDetails(admin, admins) : null,
+                    // Tap for who invited this admin (and when the account was created).
+                    onTap: () => _showAdminDetails(admin, admins),
                     child: Container(
                     padding: const EdgeInsets.all(14),
                     decoration: adminCardDecoration,
@@ -658,6 +658,11 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                               ),
                               const SizedBox(height: 2),
                               Text(admin.email, style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5)),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Created ${formatShortDate(admin.createdAt.toLocal())}',
+                                style: AppTextStyles.body(color: AppColors.navy, size: 11.5, weight: FontWeight.w600),
+                              ),
                               if (admin.mustChangePassword) ...[
                                 const SizedBox(height: 4),
                                 Text(

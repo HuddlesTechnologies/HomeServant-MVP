@@ -25,6 +25,8 @@ const PAID_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.MOVED_IN,
 ];
 
+const NOBODY_AVAILABLE_PREFIX = 'Thanks for your message.';
+
 const PAYMENT_REQUIRED_MESSAGE = 'You can message the landlord once you have paid for this property';
 const REFUNDED_MESSAGE =
   'This conversation was closed because the booking was refunded. It reopens if the tenant pays again.';
@@ -154,6 +156,7 @@ export class ChatService {
   /// closed conversation doesn't reopen just because the user tapped "Live
   /// Chat" again.
   async openSupportThread(userId: string, topic?: SupportTopic) {
+    const caller = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
     // Serializable, not the default isolation level, so a double-tap (two
     // calls landing at nearly the same moment) can't both see "no existing
     // thread" and both create one — Postgres aborts the loser with a
@@ -169,14 +172,20 @@ export class ChatService {
           if (existing) {
             // A topic picked now fills in one the open conversation lacks.
             if (topic && !existing.supportTopic) {
+              await tx.supportChatStat.updateMany({ where: { threadId: existing.id }, data: { topic } });
               return tx.thread.update({ where: { id: existing.id }, data: { supportTopic: topic }, include: { participants: true } });
             }
             return existing;
           }
-          return tx.thread.create({
+          const created = await tx.thread.create({
             data: { isSupport: true, supportTopic: topic, participants: { create: [{ userId }] } },
             include: { participants: true },
           });
+          // The dashboard's record of this conversation (see SupportChatStat).
+          await tx.supportChatStat.create({
+            data: { threadId: created.id, customerId: userId, customerRole: caller?.role, topic },
+          });
+          return created;
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
@@ -312,6 +321,7 @@ export class ChatService {
       this.prisma.threadTransferLog.create({
         data: { threadId, toAdminId: adminId, actorId: kind === 'CLAIM' ? adminId : null, kind },
       }),
+      this.prisma.supportChatStat.updateMany({ where: { threadId }, data: { currentAdminId: adminId } }),
     ]);
     return true;
   }
@@ -329,7 +339,11 @@ export class ChatService {
       throw new ForbiddenException('Another admin is handling this conversation');
     }
     if (thread.status === 'RESOLVED') return;
-    await this.prisma.thread.update({ where: { id: threadId }, data: { status: 'RESOLVED', resolvedAt: new Date() } });
+    const resolvedAt = new Date();
+    await this.prisma.$transaction([
+      this.prisma.thread.update({ where: { id: threadId }, data: { status: 'RESOLVED', resolvedAt } }),
+      this.prisma.supportChatStat.updateMany({ where: { threadId }, data: { resolvedAt, resolvedById: adminId } }),
+    ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_RESOLVED, { actorId: adminId });
 
     const requester = thread.participants.find((p) => p.userId !== thread.assignedAdminId);
@@ -338,7 +352,7 @@ export class ChatService {
         requester.userId,
         NotificationType.SUPPORT_THREAD_RESOLVED,
         'Your support conversation was resolved',
-        "An admin marked your support conversation as resolved. Reach out again any time if you still need help.",
+        'An admin marked your support conversation as resolved. Tap to rate how we did — and reach out again any time.',
         threadId,
       );
     }
@@ -407,6 +421,13 @@ export class ChatService {
       // unclaimed support thread — replying claims it), plus: nobody
       // replies into a resolved thread, and an admin doesn't reply into a
       // support thread another admin is now handling.
+      // The customer can rate a resolved support conversation once.
+      canRate:
+        thread.isSupport &&
+        resolved &&
+        !isAdmin &&
+        isParticipant &&
+        !!(await this.prisma.supportChatStat.findFirst({ where: { threadId, customerId: userId, rating: null } })),
       // Why a tenant/landlord can't message here right now (payment rules,
       // see landlordTenantBlockReason) — shown in place of the composer.
       lockedReason,
@@ -470,6 +491,18 @@ export class ChatService {
     return { firstHandler, entries, currentAdmin: thread.assignedAdmin };
   }
 
+  /// The customer's 1–5 rating of a resolved support conversation (once).
+  async rateSupportThread(threadId: string, userId: string, rating: number, comment?: string): Promise<void> {
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { isSupport: true, status: true } });
+    if (!thread?.isSupport) throw new NotFoundException('Support conversation not found');
+    if (thread.status !== 'RESOLVED') throw new BadRequestException('You can rate a conversation once it has been resolved');
+    const { count } = await this.prisma.supportChatStat.updateMany({
+      where: { threadId, customerId: userId, rating: null },
+      data: { rating, ratingComment: comment?.trim() || null, ratedAt: new Date() },
+    });
+    if (count === 0) throw new BadRequestException("You've already rated this conversation");
+  }
+
   async findMessages(threadId: string, userId: string, senderRole?: UserRole, before?: string) {
     await this.assertCanRead(threadId, userId, senderRole);
     const messages = await this.prisma.message.findMany({
@@ -528,12 +561,27 @@ export class ChatService {
       }
     }
 
+    if (thread?.isSupport) {
+      // Dashboard timings: the customer's first message, and the first
+      // admin reply to it.
+      await this.prisma.supportChatStat.updateMany({
+        where: senderRole === 'ADMIN' ? { threadId, firstResponseAt: null } : { threadId, firstCustomerMessageAt: null },
+        data:
+          senderRole === 'ADMIN'
+            ? { firstResponseAt: message.createdAt, firstResponderId: userId }
+            : { firstCustomerMessageAt: message.createdAt },
+      });
+    }
+
     // A customer writing into an unclaimed support conversation: hand it to
     // an available admin straight away (they then get the normal
     // new-message notification below) instead of leaving it in the shared
-    // queue. If nobody suitable is online and on duty it stays in the queue.
+    // queue. If nobody suitable is online and on duty it stays in the queue
+    // (SupportAlertsService assigns it as soon as someone is), and the
+    // customer is told once that it may take a while.
     if (senderRole !== 'ADMIN' && thread?.isSupport && thread.status === 'OPEN' && !thread.assignedAdminId) {
-      await this.autoAssign(threadId);
+      const assigned = await this.autoAssign(threadId);
+      if (!assigned && !(await this.anyAdminAvailable())) await this.postNobodyAvailableNotice(threadId);
     }
 
     const otherParticipants = await this.prisma.threadParticipant.findMany({
@@ -647,6 +695,62 @@ export class ChatService {
     const last = new Map(lastAssigned.map((l) => [l.toAdminId, l._max.createdAt?.getTime() ?? 0]));
     candidates.sort((a, b) => (load.get(a) ?? 0) - (load.get(b) ?? 0) || (last.get(a) ?? 0) - (last.get(b) ?? 0));
     return candidates[0];
+  }
+
+  /// Whether any admin is on duty and online right now.
+  async anyAdminAvailable(): Promise<boolean> {
+    const admins = await this.prisma.user.findMany({
+      where: { role: UserRole.ADMIN, adminOnDuty: true, deactivatedAt: null },
+      select: { id: true },
+    });
+    return admins.some((a) => this.presence.isOnline(a.id));
+  }
+
+  /// Once per conversation: tells a customer who wrote in while nobody was
+  /// around that they're in the queue and how they'll hear back (the
+  /// in-app/push notification on reply, and the unread-message email).
+  private async postNobodyAvailableNotice(threadId: string): Promise<void> {
+    const already = await this.prisma.message.findFirst({
+      where: { threadId, type: MessageType.SYSTEM, body: { startsWith: NOBODY_AVAILABLE_PREFIX } },
+      select: { id: true },
+    });
+    if (already) return;
+    await this.postThreadSystemMessage(
+      threadId,
+      `${NOBODY_AVAILABLE_PREFIX} No one from our support team is available right now, but your conversation is in the queue ` +
+        "and we'll reply as soon as someone is back. You'll get a notification, and an email if you're away, when we do.",
+    );
+  }
+
+  /// Hands waiting (unclaimed) support conversations to available admins,
+  /// most urgent and oldest first, until nobody suitable is left. Run every
+  /// minute by SupportAlertsService and straight away when an admin goes
+  /// on duty — so a chat that arrived while everyone was away is picked up
+  /// the moment someone is back, not only when the customer writes again.
+  async assignWaitingQueue(): Promise<number> {
+    const waiting = await this.prisma.thread.findMany({
+      where: { isSupport: true, status: 'OPEN', assignedAdminId: null, messages: { some: {} } },
+      orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
+      select: { id: true },
+      take: 25,
+    });
+    let assigned = 0;
+    for (const thread of waiting) {
+      const adminId = await this.autoAssign(thread.id);
+      if (adminId) {
+        assigned++;
+        await this.notifications.create(
+          adminId,
+          NotificationType.NEW_MESSAGE,
+          'A waiting conversation was assigned to you',
+          'A customer has been waiting in the support queue — it is now yours.',
+          thread.id,
+        );
+      } else if (!(await this.pickAssignee())) {
+        break;
+      }
+    }
+    return assigned;
   }
 
   private async autoAssign(threadId: string): Promise<string | null> {
@@ -877,6 +981,10 @@ export class ChatService {
       this.prisma.threadTransferLog.create({
         data: { threadId, fromAdminId: previousAdminId, toAdminId, actorId: superAdminId, kind: 'REASSIGN' },
       }),
+      this.prisma.supportChatStat.updateMany({
+        where: { threadId },
+        data: { currentAdminId: toAdminId, transferCount: { increment: 1 } },
+      }),
     ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: superAdminId, targetId: toAdminId });
     await this.notifications.clearThreadAlertsForOtherAdmins(threadId, toAdminId);
@@ -943,6 +1051,10 @@ export class ChatService {
       this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: toAdminId } }),
       this.prisma.threadTransferLog.create({
         data: { threadId, fromAdminId, toAdminId, actorId: fromAdminId, kind: 'TRANSFER' },
+      }),
+      this.prisma.supportChatStat.updateMany({
+        where: { threadId },
+        data: { currentAdminId: toAdminId, transferCount: { increment: 1 } },
       }),
     ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: fromAdminId, targetId: toAdminId });

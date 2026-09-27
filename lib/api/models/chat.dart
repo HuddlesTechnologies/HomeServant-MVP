@@ -279,6 +279,7 @@ class ThreadSummary {
     required this.otherParticipants,
     this.canReassign = false,
     this.lockedReason,
+    this.canRate = false,
     this.supportTopic,
     this.priority = SupportPriority.normal,
     this.resolvedAt,
@@ -307,6 +308,9 @@ class ThreadSummary {
   /// ChatService.landlordTenantBlockReason. Null when messaging is open.
   final String? lockedReason;
 
+  /// The customer can still rate this resolved support conversation.
+  final bool canRate;
+
   final SupportTopic? supportTopic;
   final SupportPriority priority;
 
@@ -328,6 +332,7 @@ class ThreadSummary {
       canReply: json['canReply'] as bool? ?? false,
       canReassign: json['canReassign'] as bool? ?? false,
       lockedReason: json['lockedReason'] as String?,
+      canRate: json['canRate'] as bool? ?? false,
       supportTopic: SupportTopic.fromApi(json['supportTopic']),
       priority: SupportPriority.fromApi(json['priority']),
     );

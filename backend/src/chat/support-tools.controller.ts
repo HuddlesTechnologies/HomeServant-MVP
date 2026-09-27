@@ -1,11 +1,14 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { UserRole } from '@prisma/client';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { AdminLevel, UserRole } from '@prisma/client';
+import { MinAdminLevel } from '../common/decorators/min-admin-level.decorator';
+import { AdminLevelGuard } from '../common/guards/admin-level.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { CreateSupportNoteDto, SavedReplyDto, TriageThreadDto } from './dto/support-tools.dto';
+import { SupportMetricsService } from './support-metrics.service';
 import { SupportToolsService } from './support-tools.service';
 
 /// Admin-only support tools — see SupportToolsService.
@@ -13,7 +16,20 @@ import { SupportToolsService } from './support-tools.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
 export class SupportToolsController {
-  constructor(private readonly tools: SupportToolsService) {}
+  constructor(
+    private readonly tools: SupportToolsService,
+    private readonly metrics: SupportMetricsService,
+  ) {}
+
+  /// The support dashboard — SUPER_ADMIN only (per-admin figures are for
+  /// planning, not for every admin to compare each other). [days]: 7–90.
+  @Get('support/metrics')
+  @UseGuards(AdminLevelGuard)
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  supportMetrics(@Query('days') days?: string) {
+    const window = Math.min(90, Math.max(7, Number(days) || 30));
+    return this.metrics.metrics(window);
+  }
 
   @Get('threads/:id/notes')
   notes(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {

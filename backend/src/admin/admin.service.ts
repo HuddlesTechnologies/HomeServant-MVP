@@ -1109,6 +1109,8 @@ export class AdminService {
       data: { adminOnDuty: onDuty },
       select: { adminOnDuty: true },
     });
+    // Someone just became available: pick up anyone waiting in the queue.
+    if (onDuty) await this.chat.assignWaitingQueue();
     return { onDuty: admin.adminOnDuty };
   }
 

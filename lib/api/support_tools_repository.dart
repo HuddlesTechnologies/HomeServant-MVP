@@ -53,4 +53,10 @@ class SupportToolsRepository {
     final response = await _client.dio.get('/support/admins');
     return (response.data as List).cast<Map<String, dynamic>>().map(TransferTarget.fromApi).toList();
   });
+
+  /// Super admins only — the support dashboard for the last [days] days.
+  Future<SupportMetrics> metrics(int days) => _client.call(() async {
+    final response = await _client.dio.get('/support/metrics', queryParameters: {'days': days});
+    return SupportMetrics(response.data as Map<String, dynamic>);
+  });
 }

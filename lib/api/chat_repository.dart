@@ -86,6 +86,16 @@ class ChatRepository {
     });
   }
 
+  /// The customer's 1–5 rating of a resolved support conversation.
+  Future<void> rateSupportThread(String threadId, int rating, {String? comment}) {
+    return _client.call(() async {
+      await _client.dio.post(
+        '/threads/$threadId/rating',
+        data: {'rating': rating, if (comment != null && comment.trim().isNotEmpty) 'comment': comment.trim()},
+      );
+    });
+  }
+
   /// The thread's current status for this user — see [ThreadSummary].
   Future<ThreadSummary> summary(String threadId) {
     return _client.call(() async {

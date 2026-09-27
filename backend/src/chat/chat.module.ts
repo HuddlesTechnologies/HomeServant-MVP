@@ -9,6 +9,7 @@ import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
 import { SupportAlertsService } from './support-alerts.service';
 import { SupportChatCleanupService } from './support-chat-cleanup.service';
+import { SupportMetricsService } from './support-metrics.service';
 import { SupportToolsController } from './support-tools.controller';
 import { SupportToolsService } from './support-tools.service';
 import { UnreadMessageEmailService } from './unread-message-email.service';
@@ -21,7 +22,7 @@ import { UnreadMessageEmailService } from './unread-message-email.service';
 @Module({
   imports: [AuthModule, forwardRef(() => NotificationsModule), MailModule, ActivityLogModule, StorageModule],
   controllers: [ChatController, SupportToolsController],
-  providers: [ChatService, ChatGateway, SupportChatCleanupService, SupportAlertsService, SupportToolsService, UnreadMessageEmailService],
+  providers: [ChatService, ChatGateway, SupportChatCleanupService, SupportAlertsService, SupportToolsService, UnreadMessageEmailService, SupportMetricsService],
   // ChatService is exported for AdminModule, whose super-admin-only Chat
   // Log endpoint (AdminService.findChatLog) delegates straight into
   // ChatService.findChatLog rather than duplicating its Prisma query.
