@@ -25,10 +25,24 @@ IconData _iconForType(NotificationType type) => switch (type) {
   NotificationType.supportThreadResolved => Icons.check_circle_outline_rounded,
 };
 
+/// The types a vendor cares about — see [NotificationsScreen.vendorOnly].
+const _vendorNotificationTypes = {
+  NotificationType.vendorApproved,
+  NotificationType.vendorRejected,
+  NotificationType.vendorSuspended,
+  NotificationType.vendorUnsuspended,
+  NotificationType.marketplaceOrderStatus,
+};
+
+/// This account's notifications. With [vendorOnly] (the vendor
+/// dashboard's bell) it shows just the shop-related ones — the same
+/// underlying rows, filtered client-side. The vendor list used to be a
+/// separate near-copy of this screen.
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key, required this.theme});
+  const NotificationsScreen({super.key, required this.theme, this.vendorOnly = false});
 
   final DashboardTheme theme;
+  final bool vendorOnly;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -44,11 +58,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final notifications = context.watch<AppState>().notifications;
+    final all = context.watch<AppState>().notifications;
+    final notifications = widget.vendorOnly ? all.where((n) => _vendorNotificationTypes.contains(n.type)).toList() : all;
     return DashboardPageScaffold(
       background: theme.background,
       foreground: theme.foreground,
       title: 'Notifications',
+      actions: [
+        if (notifications.any((n) => !n.isRead))
+          TextButton(
+            onPressed: () => context.read<AppState>().markAllNotificationsRead(),
+            child: Text(
+              'Mark all read',
+              style: AppTextStyles.body(color: theme.accent, weight: FontWeight.w600, size: 13),
+            ),
+          ),
+      ],
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 640,
@@ -57,7 +82,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   theme: theme,
                   icon: Icons.notifications_none_rounded,
                   title: 'No notifications yet',
-                  message: "You'll see updates here as they happen.",
+                  message: widget.vendorOnly
+                      ? 'Updates about your shop — approvals, orders and more — will show up here.'
+                      : "You'll see updates here as they happen.",
                 )
               : RefreshIndicator(
                   onRefresh: () => context.read<AppState>().loadNotifications(),
