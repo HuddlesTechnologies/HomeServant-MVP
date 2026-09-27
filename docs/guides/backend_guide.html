@@ -227,7 +227,7 @@
   <tr><td><code>DELIVERY_PROVIDER</code>, <code>GIG_API_KEY</code>, <code>GIG_API_BASE_URL</code></td><td>Courier integration.</td></tr>
   <tr><td><code>PORT</code></td><td>HTTP port (Render uses 3000).</td></tr>
   <tr><td><code>VAPID_PUBLIC_KEY</code>, <code>VAPID_PRIVATE_KEY</code>, <code>VAPID_SUBJECT</code></td><td>Web Push keys (generate once with <code>npx web-push generate-vapid-keys</code>). Without them push is off; everything else works.</td></tr>
-  <tr><td><code>APP_URL</code></td><td>The web app's address for links in emails (falls back to the first <code>CORS_ORIGINS</code> entry).</td></tr>
+  <tr><td><code>APP_URL</code></td><td>The web app's address for links in emails and where Paystack returns the payer after checkout (<code>callback_url</code>). Falls back to the first <code>CORS_ORIGINS</code> entry.</td></tr>
   <tr><td><code>SUPPORT_AUTO_ASSIGN</code></td><td>Set to <code>false</code> to stop auto-assigning new support chats; they then wait in the queue.</td></tr>
 </table>
 
@@ -268,6 +268,8 @@ TEST_DATABASE_URL=postgresql://localhost/hs_test npm test</code></pre>
   <tr><td><code>GET /properties</code>, <code>GET /properties/:id</code></td><td>Public</td></tr>
   <tr><td><code>POST /properties</code>, <code>PATCH|DELETE /properties/:id</code></td><td>Landlord (owner of the listing)</td></tr>
   <tr><td><code>POST /bookings</code>, <code>GET /bookings/mine|landlord</code>, <code>PATCH /bookings/:id/respond</code>, <code>POST /bookings/:id/pay|inspection|reject|moved-in|refund|renew</code>, <code>PATCH /bookings/:id/inspection/respond</code></td><td>Auth (tenant or landlord, checked per booking)</td></tr>
+  <tr><td><code>POST /evictions</code>, <code>GET /evictions/mine</code>, <code>POST /evictions/:id/cancel|respond</code></td><td>Landlord files/withdraws; tenant responds (EvictionsService)</td></tr>
+  <tr><td><code>GET /admin/evictions</code>, <code>GET /admin/evictions/pending-count</code>, <code>POST /admin/evictions/:id/review</code></td><td>SUPER_ADMIN only. Approval ends the lease today and sets the property unoccupied; approved evictions block renewal</td></tr>
   <tr><td><code>GET /favorites</code>, <code>POST /favorites/:propertyId/toggle</code></td><td>Auth</td></tr>
   <tr><td><code>GET /reviews</code>, <code>GET /reviews/mine</code>, <code>POST /reviews</code>, <code>DELETE /reviews/:id</code></td><td>Public read; tenants who rented the property write</td></tr>
   <tr><td><code>POST /reports</code>, <code>GET /reports/mine</code></td><td>Auth (must have rented or bought the item)</td></tr>

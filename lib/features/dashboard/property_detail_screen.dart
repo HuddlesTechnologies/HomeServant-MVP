@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
+import '../../core/open_payment_page.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/booking.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/eviction_widgets.dart';
 import '../landlord/landlord_add_property_screen.dart';
 import 'chat_thread_screen.dart';
 import 'models/property.dart';
@@ -406,6 +407,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 12.5),
                               ),
                             ],
+                            LandlordEvictionPanel(property: property, theme: theme),
                           ] else ...[
                           if (unavailable)
                             Container(
@@ -455,8 +457,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                             // right away instead of waiting on a
                                             // landlord pre-approval that no longer
                                             // happens.
-                                            final uri = Uri.parse(payment.authorizationUrl);
-                                            final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                            final launched = await openPaymentPage(payment.authorizationUrl);
                                             if (!launched && mounted) {
                                               messenger.showSnackBar(
                                                 const SnackBar(content: Text("Couldn't open the payment page — try again from History.")),

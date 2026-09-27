@@ -215,7 +215,8 @@
 <table>
   <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
   <tr><td>LandlordDashboardScreen</td><td>Tabs: Home, Messages, Bookings, Profile.</td><td>(tabs below)</td></tr>
-  <tr><td>LandlordHomeTab</td><td>Stats (including the real booking-request count), incoming bookings, uploads.</td><td><code>/bookings/landlord</code></td></tr>
+  <tr><td>LandlordHomeTab</td><td>Stats (including the real booking-request count), an Upload a Property button, incoming bookings, uploads.</td><td><code>/bookings/landlord</code></td></tr>
+  <tr><td>LandlordEvictionPanel (<code>widgets/eviction_widgets.dart</code>)</td><td>On the owner's property page: current tenant, Request eviction, the pending request and Withdraw. <code>TenantEvictionNotice</code> shows it on the tenant's History card with Respond.</td><td><code>/evictions/*</code></td></tr>
   <tr><td>LandlordPropertiesScreen, LandlordAddPropertyScreen</td><td>Own listings; add or edit with photos and video.</td><td><code>/properties</code>, uploads</td></tr>
   <tr><td>LandlordBookingsScreen</td><td>Requests, inspections, move-ins, rejections.</td><td><code>/bookings/*</code></td></tr>
   <tr><td>LandlordMessagesScreen</td><td>Inbox with All and Unread filters, plus search.</td><td><code>/threads</code></td></tr>
@@ -241,7 +242,7 @@
 
 <h1>9. Look and feel</h1>
 <ul>
-  <li><strong>Fonts:</strong> Quity for headings, Givonic for body text. Both are bundled with the app, never downloaded (<code>AppTextStyles</code>).</li>
+  <li><strong>Fonts:</strong> Quity for headings, Givonic for body text. Both are bundled with the app, never downloaded (<code>AppTextStyles</code>). Neither has ₦, dashes, bullets, ellipsis or arrows, so a bundled subset of DejaVu Sans (<code>HSFallback</code>, <code>assets/fonts/</code>) is set as <code>fontFamilyFallback</code> on every style and on the theme. Without it the browser fetches a fallback font from Google at runtime and those characters render blank if that fails. When you add a new symbol to the UI, check it's covered, or re-run <code>pyftsubset</code> with the extra range.</li>
   <li><strong>Fixed brand colors:</strong> <code>AppColors</code> (navy, gold, sand and so on). The auth screens and admin console use these directly.</li>
   <li><strong>Role colors:</strong> <code>UserRole</code> gives the auth screens navy for tenants and gold/sand for landlords.</li>
   <li><strong>Dashboard themes:</strong> <code>DashboardTheme</code> offers user-selectable palettes (Classic, Midnight, Sand) for the dashboards, marketplace and vendor screens. Each theme defines matching pairs: <code>background/foreground</code>, <code>surface/onSurface</code>, <code>accent/onAccent</code>.</li>

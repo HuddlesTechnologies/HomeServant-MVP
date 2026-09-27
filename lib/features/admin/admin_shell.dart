@@ -16,6 +16,7 @@ import '../../services/browser_notifications.dart';
 import '../dashboard/notifications_screen.dart';
 import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
+import 'admin_evictions_tab.dart';
 import 'admin_support_insights_tab.dart';
 import 'admin_chat_log_screen.dart';
 import 'admin_dashboard_tab.dart';
@@ -64,6 +65,7 @@ class _AdminShellState extends State<AdminShell> {
   int _openMarketplaceReportsCount = 0;
   int _messagesAttentionCount = 0;
   int _pendingAdminInvitesCount = 0;
+  int _pendingEvictionsCount = 0;
 
   @override
   void initState() {
@@ -119,6 +121,11 @@ class _AdminShellState extends State<AdminShell> {
     admin.pendingAdminInvitesCount().then((c) {
       if (mounted) setState(() => _pendingAdminInvitesCount = c);
     }).catchError((_) {});
+    if (context.read<AppState>().adminLevel?.isSuperAdmin ?? false) {
+      context.read<AppState>().evictionsRepo.adminPendingCount().then((c) {
+        if (mounted) setState(() => _pendingEvictionsCount = c);
+      }).catchError((_) {});
+    }
   }
 
   @override
@@ -446,6 +453,8 @@ class _AdminShellState extends State<AdminShell> {
     if (isSuperAdmin) const _MoreItem(icon: Icons.history_edu_rounded, label: 'Chat Log', builder: AdminChatLogScreen.new),
     if (isSuperAdmin)
       const _MoreItem(icon: Icons.insights_rounded, label: 'Support Insights', builder: AdminSupportInsightsTab.new),
+    if (isSuperAdmin)
+      _MoreItem(icon: Icons.gavel_rounded, label: 'Eviction Requests', count: _pendingEvictionsCount, builder: AdminEvictionsTab.new),
   ];
 
   int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>

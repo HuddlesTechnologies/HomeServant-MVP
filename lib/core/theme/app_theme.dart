@@ -8,6 +8,8 @@ class AppTheme {
   static ThemeData get light {
     return ThemeData(
       useMaterial3: true,
+      // Bundled glyphs for ₦ — · … etc. on any text without its own style.
+      fontFamilyFallback: AppTextStyles.fallbackFonts,
       scaffoldBackgroundColor: AppColors.white,
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.navy,
@@ -75,6 +77,7 @@ class AppTheme {
       data: base.copyWith(
         textTheme: base.textTheme.apply(
           fontFamily: AppTextStyles.bodyFont,
+          fontFamilyFallback: AppTextStyles.fallbackFonts,
           bodyColor: AppColors.navy,
           displayColor: AppColors.navy,
         ),
