@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/booking.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
@@ -136,6 +137,51 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
       );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  bool _deleting = false;
+
+  /// Owner-only. Asks for confirmation, then deletes; the server decides
+  /// whether that's allowed (not while occupied or with a tenant's payment
+  /// held) and its reason is shown if not.
+  Future<void> _deleteProperty() async {
+    final property = _property;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text('Delete this listing?', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+        content: Text(
+          '"${property.title}" will be removed for good, including its photos and booking history. '
+          'This can\'t be undone.',
+          style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.75), size: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(backgroundColor: const Color(0xFFB42318)),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Delete', style: AppTextStyles.body(color: Colors.white, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _deleting = true);
+    try {
+      await context.read<AppState>().deleteLandlordProperty(property.id);
+      messenger.showSnackBar(SnackBar(content: Text('"${property.title}" was deleted')));
+      navigator.pop();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _deleting = false);
     }
   }
 
@@ -325,8 +371,42 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 icon: Icon(Icons.edit_rounded, color: theme.onAccent, size: 18),
                                 label: Text('Edit Property', style: AppTextStyles.button(color: theme.onAccent)),
                               ),
-                            )
-                          else ...[
+                            ),
+                          if (isOwner) ...[
+                            const SizedBox(height: 12),
+                            // Text is theme.foreground (drawn on theme.background);
+                            // the red is only the border/icon, a warning cue.
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(vertical: 18),
+                                  side: const BorderSide(color: Color(0xFFD64545), width: 1.4),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                ),
+                                onPressed: _deleting ? null : _deleteProperty,
+                                icon: _deleting
+                                    ? SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: theme.foreground),
+                                      )
+                                    : const Icon(Icons.delete_outline_rounded, color: Color(0xFFD64545), size: 18),
+                                label: Text(
+                                  'Delete Listing',
+                                  style: AppTextStyles.button(color: theme.foreground, size: 15),
+                                ),
+                              ),
+                            ),
+                            if (property.isOccupied) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'This property is occupied, so it can\'t be deleted until the tenancy ends.',
+                                textAlign: TextAlign.center,
+                                style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 12.5),
+                              ),
+                            ],
+                          ] else ...[
                           if (unavailable)
                             Container(
                               width: double.infinity,

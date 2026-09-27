@@ -63,6 +63,20 @@ class AppNotification {
 
   bool get isRead => readAt != null;
 
+  /// This notification, marked read now — keeps every other field
+  /// (rebuilding it by hand used to drop [threadId], so a read chat
+  /// notification could no longer open its conversation).
+  AppNotification markedRead() => AppNotification(
+    id: id,
+    type: type,
+    title: title,
+    body: body,
+    createdAt: createdAt,
+    readAt: readAt ?? DateTime.now(),
+    threadId: threadId,
+    silent: silent,
+  );
+
   factory AppNotification.fromApi(Map<String, dynamic> json) => AppNotification(
     id: json['id'] as String,
     type: NotificationType.fromApi(json['type'] as String),

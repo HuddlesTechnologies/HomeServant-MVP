@@ -291,7 +291,13 @@ export class ChatService {
       data: { assignedAdminId: adminId },
     });
     if (claim.count === 0) return false;
-    await this.prisma.threadParticipant.create({ data: { threadId, userId: adminId } });
+    await this.prisma.$transaction([
+      this.prisma.threadParticipant.create({ data: { threadId, userId: adminId } }),
+      // Recorded so the handling history can say who first took it up.
+      this.prisma.threadTransferLog.create({
+        data: { threadId, toAdminId: adminId, actorId: adminId, kind: 'CLAIM' },
+      }),
+    ]);
     return true;
   }
 
@@ -338,6 +344,7 @@ export class ChatService {
         participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
         assignedAdmin: { select: { id: true, fullName: true } },
         transferLogs: {
+          where: { kind: { not: 'CLAIM' } },
           orderBy: { createdAt: 'desc' },
           take: 1,
           include: { fromAdmin: { select: { id: true, fullName: true } }, toAdmin: { select: { id: true, fullName: true } } },
@@ -393,6 +400,53 @@ export class ChatService {
           ? unclaimedSupport || thread.assignedAdminId === userId
           : isParticipant),
     };
+  }
+
+  /// Who has handled a support conversation, oldest first: who first took
+  /// it up, every transfer/reassignment (and who made it), and who has it
+  /// now. Visible to the admin currently handling it and to SUPER_ADMINs —
+  /// the same people who can see into it (a previous handler has lost
+  /// access). For conversations claimed before claims were recorded, the
+  /// first handler is inferred from the first transfer's "from".
+  async getHandlingHistory(threadId: string, userId: string) {
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: {
+        isSupport: true,
+        assignedAdminId: true,
+        assignedAdmin: { select: { id: true, fullName: true } },
+        transferLogs: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            fromAdmin: { select: { id: true, fullName: true } },
+            toAdmin: { select: { id: true, fullName: true } },
+          },
+        },
+      },
+    });
+    if (!thread || !thread.isSupport) throw new NotFoundException('This conversation has no handling history');
+    const caller = await this.prisma.user.findUnique({ where: { id: userId }, select: { adminLevel: true } });
+    if (thread.assignedAdminId !== userId && caller?.adminLevel !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Only the admin handling this conversation or a super admin can see its history');
+    }
+
+    const actorIds = [...new Set(thread.transferLogs.map((l) => l.actorId).filter((id): id is string => !!id))];
+    const actors = await this.prisma.user.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, fullName: true },
+    });
+    const actorById = new Map(actors.map((a) => [a.id, a]));
+
+    const entries = thread.transferLogs.map((log) => ({
+      kind: log.kind,
+      from: log.fromAdmin,
+      to: log.toAdmin,
+      by: log.actorId ? (actorById.get(log.actorId) ?? null) : null,
+      at: log.createdAt,
+    }));
+    const firstLog = thread.transferLogs[0];
+    const firstHandler = firstLog ? (firstLog.kind === 'CLAIM' ? firstLog.toAdmin : firstLog.fromAdmin) : thread.assignedAdmin;
+    return { firstHandler, entries, currentAdmin: thread.assignedAdmin };
   }
 
   async findMessages(threadId: string, userId: string, senderRole?: UserRole, before?: string) {
@@ -552,6 +606,13 @@ export class ChatService {
 
   async markRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
     await this.assertCanRead(threadId, userId, senderRole);
+    // Opening a conversation also clears the caller's own notifications
+    // about it — they used to stay unread (and keep the bell count up)
+    // after the chat itself had been read.
+    await this.prisma.notification.updateMany({
+      where: { userId, threadId, readAt: null },
+      data: { readAt: new Date() },
+    });
     // A read-only viewer (a SUPER_ADMIN looking into another admin's
     // conversation) must not mark messages read on that admin's behalf —
     // it would silently clear their unread badge.
@@ -709,7 +770,9 @@ export class ChatService {
         ? [this.prisma.threadParticipant.create({ data: { threadId, userId: toAdminId } })]
         : []),
       this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: toAdminId } }),
-      this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId: previousAdminId, toAdminId } }),
+      this.prisma.threadTransferLog.create({
+        data: { threadId, fromAdminId: previousAdminId, toAdminId, actorId: superAdminId, kind: 'REASSIGN' },
+      }),
     ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: superAdminId, targetId: toAdminId });
     await this.notifications.clearThreadAlertsForOtherAdmins(threadId, toAdminId);
@@ -773,7 +836,9 @@ export class ChatService {
     await this.prisma.$transaction([
       this.prisma.threadParticipant.update({ where: { id: membership.id }, data: { userId: toAdminId } }),
       this.prisma.thread.update({ where: { id: threadId }, data: { assignedAdminId: toAdminId } }),
-      this.prisma.threadTransferLog.create({ data: { threadId, fromAdminId, toAdminId } }),
+      this.prisma.threadTransferLog.create({
+        data: { threadId, fromAdminId, toAdminId, actorId: fromAdminId, kind: 'TRANSFER' },
+      }),
     ]);
     await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_TRANSFERRED, { actorId: fromAdminId, targetId: toAdminId });
     // Same "this thread changed hands" signal a claim sends — lets any

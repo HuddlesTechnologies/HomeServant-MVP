@@ -8,7 +8,6 @@ import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
-import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../dashboard/chat_thread_screen.dart';
@@ -41,7 +40,7 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
   List<ChatThread>? _threads;
   List<SupportQueueThread>? _queue;
   String? _error;
-  StreamSubscription<ChatSocketMessage>? _socketSubscription;
+  StreamSubscription<void>? _socketSubscription;
   StreamSubscription<String>? _claimedSubscription;
 
   @override
@@ -51,7 +50,7 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
     // Without this, the inbox only ever refreshed on manual pull-to-
     // refresh or reopening the tab — a message arriving while an admin sat
     // here just never showed up until then.
-    _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen((_) => _load());
+    _socketSubscription = context.read<AppState>().chatSocket.onThreadsChanged.listen((_) => _load());
     // A ticket another admin just claimed (opened, or replied to) needs to
     // vanish from *my* Support Queue view live too — a claim carries no
     // message of its own, so onNewMessage alone wouldn't catch it.

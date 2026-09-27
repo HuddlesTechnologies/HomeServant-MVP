@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'api_config.dart';
 import 'api_exception.dart';
@@ -57,6 +59,33 @@ class ApiClient {
   /// — spuriously triggering [onSessionExpired] even though the session
   /// was actually fine and new tokens were already saved by the first.
   Future<String?>? _refreshInFlight;
+
+  /// An access token that's good for at least another minute, refreshing
+  /// first if the stored one has expired (or is about to). The chat socket
+  /// calls this on every (re)connect: it used to authenticate once with the
+  /// token it had at login, so after the 15-minute access-token lifetime
+  /// any reconnect (network blip, laptop sleep, server restart) was
+  /// rejected and live messages/notifications silently stopped until a
+  /// page reload.
+  Future<String?> freshAccessToken() async {
+    final token = await _tokens.readAccessToken();
+    if (token == null) return null;
+    final expiry = _expiryOf(token);
+    if (expiry != null && expiry.isAfter(DateTime.now().add(const Duration(minutes: 1)))) return token;
+    return _tryRefresh();
+  }
+
+  static DateTime? _expiryOf(String jwt) {
+    try {
+      final parts = jwt.split('.');
+      if (parts.length != 3) return null;
+      final payload = jsonDecode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+      final exp = (payload as Map<String, dynamic>)['exp'];
+      return exp is int ? DateTime.fromMillisecondsSinceEpoch(exp * 1000) : null;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<String?> _tryRefresh() {
     return _refreshInFlight ??= _doRefresh().whenComplete(() => _refreshInFlight = null);

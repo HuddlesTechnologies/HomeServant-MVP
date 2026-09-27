@@ -16,6 +16,22 @@ class AppTheme {
       ),
       textTheme: TextTheme(
         bodyMedium: AppTextStyles.body(color: AppColors.navy),
+        // Button labels (TextButton, SnackBarAction, dialog actions) draw
+        // from labelLarge. Left unset it had no font family and fell back
+        // to Roboto fetched at runtime, which on web can render as nothing
+        // (the same failure as the calendar's invisible OK button) — so
+        // it's pinned to the bundled font. Buttons still take their colour
+        // from their own foregroundColor.
+        labelLarge: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600),
+      ),
+      // Every SnackBar: navy background, white text, gold action button —
+      // explicit pairs rather than the seed-derived inverse colours, which
+      // made action buttons (e.g. the admin console's "Turn on" for browser
+      // pop-ups) close to invisible.
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.navy,
+        contentTextStyle: AppTextStyles.body(color: AppColors.white, size: 14),
+        actionTextColor: AppColors.gold,
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.white,

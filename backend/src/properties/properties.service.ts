@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, Prisma, PropertyCategory } from '@prisma/client';
+import { BookingStatus, PaymentStatus, Prisma, PropertyCategory } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ReviewsService } from '../reviews/reviews.service';
 import { StorageService } from '../storage/storage.service';
@@ -168,17 +168,66 @@ export class PropertiesService {
       );
     }
 
-    const blockingBooking = await this.prisma.booking.findFirst({
-      where: { propertyId: id, status: { in: ['ACCEPTED', 'PAID', 'MOVED_IN'] } },
-      select: { id: true },
-    });
-    if (blockingBooking) {
-      throw new BadRequestException(
-        'This listing has an active tenancy and can’t be deleted. It can be delisted once the lease ends, or by an admin if needed sooner.',
-      );
-    }
+    const reason = await this.deletionBlockReason(id);
+    if (reason) throw new BadRequestException(reason);
 
     await this.prisma.property.delete({ where: { id } });
+  }
+
+  /// Why this listing can't be deleted right now, or null if it can. A
+  /// delete cascades to its bookings and their payment records, so it's
+  /// refused while a tenant lives there or while money is in play:
+  ///
+  /// - occupied: a MOVED_IN lease that hasn't ended (or has no end date),
+  ///   a Shortlet stay (PAID) that is current or upcoming, or the listing
+  ///   is marked occupied;
+  /// - a tenant has paid and is waiting to inspect/move in (the money is
+  ///   held in escrow — the landlord can reject the booking, which refunds
+  ///   the tenant, and then delete);
+  /// - a tenant started paying in the last two hours (the payment could
+  ///   still complete after the listing is gone).
+  private async deletionBlockReason(id: string): Promise<string | null> {
+    const now = new Date();
+    const property = await this.prisma.property.findUnique({ where: { id }, select: { isOccupied: true } });
+    const occupied =
+      property?.isOccupied ||
+      (await this.prisma.booking.findFirst({
+        where: {
+          propertyId: id,
+          status: { in: [BookingStatus.MOVED_IN, BookingStatus.PAID] },
+          OR: [{ leaseEndDate: null }, { leaseEndDate: { gte: now } }],
+        },
+        select: { id: true },
+      }));
+    if (occupied) {
+      return 'This property is occupied by a tenant and can’t be deleted. You can delete it once the lease or stay has ended.';
+    }
+
+    const escrow = await this.prisma.booking.findFirst({
+      where: {
+        propertyId: id,
+        status: {
+          in: [BookingStatus.PAID_AWAITING_INSPECTION, BookingStatus.INSPECTION_PROPOSED, BookingStatus.INSPECTION_CONFIRMED],
+        },
+      },
+      select: { id: true },
+    });
+    if (escrow) {
+      return 'A tenant has paid for this property and is waiting to inspect or move in. Reject their booking first (they’ll be refunded), then delete the listing.';
+    }
+
+    const paying = await this.prisma.payment.findFirst({
+      where: {
+        booking: { propertyId: id },
+        status: PaymentStatus.INITIATED,
+        createdAt: { gte: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (paying) {
+      return 'A tenant is in the middle of paying for this property. Try again in a couple of hours.';
+    }
+    return null;
   }
 
   private async assertOwnership(id: string, landlordId: string): Promise<void> {

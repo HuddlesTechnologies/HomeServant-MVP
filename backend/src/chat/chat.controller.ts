@@ -82,6 +82,15 @@ export class ChatController {
     return this.chat.getThreadSummary(id, user.sub, user.role);
   }
 
+  /// Support threads only: who took it up and every hand-off since — for
+  /// the handling admin and super admins (ChatService.getHandlingHistory).
+  @Get(':id/handling-history')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  handlingHistory(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.chat.getHandlingHistory(id, user.sub);
+  }
+
   @Get(':id/messages')
   messages(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Query('before') before?: string) {
     return this.chat.findMessages(id, user.sub, user.role, before);
@@ -110,6 +119,8 @@ export class ChatController {
       if (participantId === user.sub) continue;
       this.gateway.emitToUser(participantId, 'message:read', { threadId: id });
     }
+    // Refreshes the admin's own Messages nav badge right away.
+    if (user.role === UserRole.ADMIN) this.gateway.emitToUser(user.sub, 'admin:badges-changed', {});
   }
 
   /// Admin-only — the admin handling the thread (or any admin while it's

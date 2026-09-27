@@ -6,7 +6,6 @@ import '../../api/models/chat.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
-import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../../widgets/contact_avatar.dart';
@@ -33,13 +32,13 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
   String _searchQuery = '';
 
   static const _filters = ['All', 'Unread'];
-  StreamSubscription<ChatSocketMessage>? _socketSubscription;
+  StreamSubscription<void>? _socketSubscription;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen((_) => _load());
+    _socketSubscription = context.read<AppState>().chatSocket.onThreadsChanged.listen((_) => _load());
   }
 
   @override

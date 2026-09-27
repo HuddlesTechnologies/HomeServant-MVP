@@ -7,7 +7,6 @@ import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
-import '../../services/chat_socket_service.dart';
 import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../../widgets/contact_avatar.dart';
@@ -34,7 +33,7 @@ class MessagesScreen extends StatefulWidget {
 
 class _MessagesScreenState extends State<MessagesScreen> {
   List<ChatThread>? _threads;
-  StreamSubscription<ChatSocketMessage>? _socketSubscription;
+  StreamSubscription<void>? _socketSubscription;
 
   @override
   void initState() {
@@ -44,7 +43,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     // thread itself, just the list) never updated the preview/ordering/
     // unread badge until a manual pull-to-refresh or leaving and coming
     // back — this is what "messaging isn't working" often actually was.
-    _socketSubscription = context.read<AppState>().chatSocket.onNewMessage.listen((_) => _load());
+    _socketSubscription = context.read<AppState>().chatSocket.onThreadsChanged.listen((_) => _load());
   }
 
   @override

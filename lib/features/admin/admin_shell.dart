@@ -189,9 +189,16 @@ class _AdminShellState extends State<AdminShell> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 12),
-        content: const Text('Get a pop-up for new chats and alerts even when this tab is in the background?'),
+        // Explicit navy/white/gold (see AppTheme's snackBarTheme) — the
+        // "Turn on" button used to be nearly invisible.
+        backgroundColor: AppColors.navy,
+        content: Text(
+          'Get a pop-up for new chats and alerts even when this tab is in the background?',
+          style: AppTextStyles.body(color: AppColors.white, size: 14),
+        ),
         action: SnackBarAction(
           label: 'Turn on',
+          textColor: AppColors.gold,
           onPressed: () async {
             final permission = await requestBrowserNotificationPermission();
             appState.setAdminBrowserNotifications(permission == 'granted');

@@ -72,6 +72,12 @@ class AppState extends ChangeNotifier {
     // reconnects under the hood across login/logout, so this stays valid
     // the same way NotificationBannerOverlay's own subscription does.
     _chatSocket.onNotification.listen(_handleRealtimeNotification);
+    _chatRepo.onLocalChange = _chatSocket.notifyThreadsChanged;
+    _chatRepo.onThreadRead = _markThreadNotificationsReadLocally;
+    // Notifications created while the socket was down never arrived live.
+    _chatSocket.onReconnected.listen((_) {
+      if (userId != null) unawaited(loadNotifications());
+    });
   }
 
   static const _prefsKey = 'app_state_v2';
@@ -553,7 +559,7 @@ class AppState extends ChangeNotifier {
 
   Future<void> _connectChatSocket() async {
     final token = await _tokens.readAccessToken();
-    if (token != null) _chatSocket.connect(token);
+    if (token != null) _chatSocket.connect(_apiClient.freshAccessToken);
   }
 
   // --- Notifications -----------------------------------------------------
@@ -578,15 +584,19 @@ class AppState extends ChangeNotifier {
     final index = notifications.indexWhere((n) => n.id == id);
     if (index == -1 || notifications[index].isRead) return;
     await _notificationsRepo.markRead(id);
-    notifications[index] = AppNotification(
-      id: notifications[index].id,
-      type: notifications[index].type,
-      title: notifications[index].title,
-      body: notifications[index].body,
-      createdAt: notifications[index].createdAt,
-      readAt: DateTime.now(),
-    );
+    notifications[index] = notifications[index].markedRead();
     unreadNotificationCount = (unreadNotificationCount - 1).clamp(0, 1 << 30);
+    notifyListeners();
+  }
+
+  /// The server clears a conversation's notifications when it's read
+  /// (ChatService.markRead); this mirrors that locally so the bell count
+  /// drops straight away.
+  void _markThreadNotificationsReadLocally(String threadId) {
+    final cleared = notifications.where((n) => n.threadId == threadId && !n.isRead).length;
+    if (cleared == 0) return;
+    notifications = [for (final n in notifications) n.threadId == threadId ? n.markedRead() : n];
+    unreadNotificationCount = (unreadNotificationCount - cleared).clamp(0, 1 << 30);
     notifyListeners();
   }
 
@@ -595,7 +605,7 @@ class AppState extends ChangeNotifier {
     await _notificationsRepo.markAllRead();
     notifications = [
       for (final n in notifications)
-        AppNotification(id: n.id, type: n.type, title: n.title, body: n.body, createdAt: n.createdAt, readAt: n.readAt ?? DateTime.now()),
+        n.markedRead(),
     ];
     unreadNotificationCount = 0;
     notifyListeners();
@@ -684,6 +694,17 @@ class AppState extends ChangeNotifier {
     _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
     notifyListeners();
     return updated;
+  }
+
+  /// `DELETE /properties/:id`. The server refuses while the property is
+  /// occupied or a tenant's payment is in play (PropertiesService
+  /// .deletionBlockReason) — that ApiException's message says why.
+  Future<void> deleteLandlordProperty(String id) async {
+    await _propertiesRepo.remove(id);
+    _landlordProperties = [for (final p in _landlordProperties) if (p.id != id) p];
+    properties = [for (final p in properties) if (p.id != id) p];
+    _favorites = [for (final p in _favorites) if (p.id != id) p];
+    notifyListeners();
   }
 
   // --- Wishlist ----------------------------------------------------------
