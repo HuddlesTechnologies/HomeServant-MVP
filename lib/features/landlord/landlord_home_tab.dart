@@ -111,7 +111,9 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
     final available = allProperties.length - occupied;
     // Every request still waiting for an answer (the stat card counts
     // these); the feed below leaves out the ones the landlord cleared.
-    final pendingBookings = appState.landlordBookings.where((b) => b.status == BookingStatus.pending).toList();
+    // Only a Shortlet waits on the landlord; a pending rental is an
+    // unfinished Rent Now checkout, not a request.
+    final pendingBookings = appState.landlordBookings.where((b) => b.status == BookingStatus.pending && b.isShortlet).toList();
     final feedBookings = pendingBookings.where((b) => b.landlordFeedClearedAt == null).toList();
 
     return Center(

@@ -81,16 +81,18 @@ export class BookingsService {
     // one gap in that chain. NotificationsService.create is also what
     // pushes the `notification:new` socket event the Flutter client
     // reuses to refetch the bookings list live.
-    await this.notifications.create(
-      property.landlordId,
-      NotificationType.BOOKING_STATUS,
-      isShortlet ? 'New booking request' : 'New booking',
-      isShortlet
-        ? `A tenant requested to book ${property.title}.`
-        : `A tenant booked ${property.title}.`,
-    );
-
+    //
+    // Only a Shortlet request is announced here. A normal rental is still
+    // unpaid at this point (the tenant may never finish checkout), so the
+    // landlord hears about it from PaymentsService ("Tenant paid") once
+    // the charge actually clears.
     if (isShortlet) {
+      await this.notifications.create(
+        property.landlordId,
+        NotificationType.BOOKING_STATUS,
+        'New booking request',
+        `A tenant requested to book ${property.title}.`,
+      );
       return booking;
     }
 
@@ -134,9 +136,16 @@ export class BookingsService {
   /// successfully-charged Payment, since a landlord previously had no way
   /// to see when a tenant actually paid at all — unlike [findForTenant],
   /// this used to leave the `payments` relation out entirely.
+  ///
+  /// A non-Shortlet booking that is still PENDING is an unfinished
+  /// checkout (Rent Now pressed, not paid), not a request the landlord can
+  /// act on, so it is left out; it shows up once the tenant pays.
   async findForLandlord(landlordId: string) {
     const bookings = await this.prisma.booking.findMany({
-      where: { property: { landlordId } },
+      where: {
+        property: { landlordId },
+        NOT: { status: BookingStatus.PENDING, property: { category: { not: PropertyCategory.SHORTLET } } },
+      },
       include: {
         property: true,
         tenant: {
@@ -186,7 +195,9 @@ export class BookingsService {
     const { count } = await this.prisma.booking.updateMany({
       where: {
         property: { landlordId },
-        ...(bookingIds?.length ? { id: { in: bookingIds } } : { status: BookingStatus.PENDING }),
+        ...(bookingIds?.length
+          ? { id: { in: bookingIds } }
+          : { status: BookingStatus.PENDING, property: { landlordId, category: PropertyCategory.SHORTLET } }),
       },
       data: { landlordFeedClearedAt: cleared ? new Date() : null },
     });

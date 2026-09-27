@@ -109,6 +109,29 @@ describeDb('eviction requests (real Postgres)', () => {
     expect(rows.find((b) => b.tenantId === requester.id)!.tenant.phoneNumber).toBeNull();
   });
 
+  it('an unfinished Rent Now checkout is not a request: landlords neither see it nor hear about it until it is paid', async () => {
+    const landlord = await makeUser(prisma, UserRole.LANDLORD);
+    const tenant = await makeUser(prisma, UserRole.TENANT);
+    const rental = await makeProperty(prisma, landlord.id, { category: 'HOUSE' });
+    const shortlet = await makeProperty(prisma, landlord.id, { category: 'SHORTLET' });
+    const payments = { initiateBookingCharge: async () => ({ reference: 'r', authorizationUrl: 'https://pay' }) };
+    const bookings = new BookingsService(prisma as never, { create: async (userId: string, _t: unknown, title: string) => void notes.push({ userId, title }) } as never, payments as never, { requireVerifiedLandlords: async () => false } as never);
+
+    const unpaid = await bookings.create(tenant.id, { propertyId: rental.id } as never);
+    expect(notes.some((n) => n.userId === landlord.id)).toBe(false);
+    const request = await bookings.create(tenant.id, { propertyId: shortlet.id, requestedDate: new Date().toISOString(), nights: 2 } as never);
+    expect(notes.filter((n) => n.userId === landlord.id).map((n) => n.title)).toEqual(['New booking request']);
+
+    let ids = (await bookings.findForLandlord(landlord.id)).map((b) => b.id);
+    expect(ids).toEqual([request.id]);
+    // "Clear all" only touches real requests.
+    expect(await bookings.setFeedCleared(landlord.id, true)).toEqual({ count: 1 });
+
+    await prisma.booking.update({ where: { id: unpaid.id }, data: { status: 'PAID_AWAITING_INSPECTION' } });
+    ids = (await bookings.findForLandlord(landlord.id)).map((b) => b.id);
+    expect(ids.sort()).toEqual([request.id, unpaid.id].sort());
+  });
+
   it('landlords can clear requests from their feed (and undo) without declining them', async () => {
     const landlord = await makeUser(prisma, UserRole.LANDLORD);
     const other = await makeUser(prisma, UserRole.LANDLORD);
