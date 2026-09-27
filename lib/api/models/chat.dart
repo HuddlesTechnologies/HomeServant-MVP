@@ -59,7 +59,11 @@ class ChatMessage {
 
   final String id;
   final String threadId;
-  final String senderId;
+  /// Null once the sender's account has been deleted — Message.sender is
+  /// `onDelete: SetNull`, so their messages stay in the thread without one.
+  /// Parsing this as non-null used to throw on any thread holding such a
+  /// message, failing the whole inbox load ("Couldn't load messages").
+  final String? senderId;
   final String senderName;
   final String body;
   final DateTime createdAt;
@@ -81,8 +85,10 @@ class ChatMessage {
   factory ChatMessage.fromApi(Map<String, dynamic> json) => ChatMessage(
     id: json['id'] as String,
     threadId: json['threadId'] as String,
-    senderId: json['senderId'] as String,
-    senderName: (json['sender'] as Map<String, dynamic>?)?['fullName'] as String? ?? 'User',
+    senderId: json['senderId'] as String?,
+    senderName:
+        (json['sender'] as Map<String, dynamic>?)?['fullName'] as String? ??
+        (json['senderId'] == null ? 'Deleted user' : 'User'),
     body: json['body'] as String,
     createdAt: DateTime.parse(json['createdAt'] as String),
     readAt: (json['readAt'] as String?) != null ? DateTime.parse(json['readAt'] as String) : null,

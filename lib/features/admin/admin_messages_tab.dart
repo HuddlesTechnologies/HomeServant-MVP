@@ -83,7 +83,10 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
           _error = null;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      // Keep the real cause visible in the browser console — this message
+      // alone can't tell a network failure from a parsing bug.
+      debugPrint('Admin messages failed to load: $e');
       if (!mounted) return;
       setState(() => _error = "Couldn't load messages.");
     }
