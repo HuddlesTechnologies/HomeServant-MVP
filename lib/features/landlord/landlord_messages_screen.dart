@@ -32,7 +32,7 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
-  static const _filters = ['Unread', 'Deleted', 'Archived'];
+  static const _filters = ['All', 'Unread'];
   StreamSubscription<ChatSocketMessage>? _socketSubscription;
 
   @override
@@ -72,12 +72,12 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
           )
           .toList();
     }
-    switch (_filterIndex) {
-      case 0:
-        return threads.where((t) => t.unreadCount > 0).toList();
-      default:
-        return const [];
-    }
+    // "All" is the default. The list used to open on "Unread" with no way
+    // back to read conversations (the other two pills, Deleted/Archived,
+    // had nothing behind them and were always empty), so a chat vanished
+    // from the inbox the moment it was opened — looking like its history
+    // had been wiped, though every message was still on the server.
+    return _filterIndex == 1 ? threads.where((t) => t.unreadCount > 0).toList() : threads;
   }
 
   Future<void> _openThread(ChatThread thread) async {
@@ -188,21 +188,15 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                 child: Row(
                   children: [
                     _FilterPill(
-                      label: 'Unread $unreadCount',
+                      label: 'All',
                       selected: _filterIndex == 0,
                       onTap: () => setState(() => _filterIndex = 0),
                     ),
                     const SizedBox(width: 10),
                     _FilterPill(
-                      label: 'Deleted',
+                      label: 'Unread $unreadCount',
                       selected: _filterIndex == 1,
                       onTap: () => setState(() => _filterIndex = 1),
-                    ),
-                    const SizedBox(width: 10),
-                    _FilterPill(
-                      label: 'Archived',
-                      selected: _filterIndex == 2,
-                      onTap: () => setState(() => _filterIndex = 2),
                     ),
                   ],
                 ),
@@ -216,7 +210,9 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                           child: Text(
                             _searching && _searchQuery.trim().isNotEmpty
                                 ? 'No conversations match "${_searchQuery.trim()}".'
-                                : 'No ${_filters[_filterIndex].toLowerCase()} conversations.',
+                                : _filterIndex == 0
+                                    ? 'No conversations yet.'
+                                    : 'No ${_filters[_filterIndex].toLowerCase()} conversations.',
                             textAlign: TextAlign.center,
                             style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6)),
                           ),

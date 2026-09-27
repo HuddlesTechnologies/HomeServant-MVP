@@ -23,19 +23,49 @@ class UploadsRepository {
 
   Future<String> upload({required PickedUpload file, required String folder}) {
     return _client.call(() async {
-      final signed = await _client.dio.post('/uploads/sign', data: {'fileName': file.fileName, 'folder': folder});
+      final bytes = await _readBytes(file);
+      // Sniff the real type from the file's first bytes when the name alone
+      // doesn't say (e.g. a web blob name with no extension) — the sign
+      // endpoint rejects a fileName without an image extension, and the
+      // backend later rejects anything Supabase doesn't serve as image/*.
+      final contentType = lookupMimeType(file.fileName, headerBytes: bytes) ?? 'application/octet-stream';
+      final fileName = _withExtension(file.fileName, contentType);
+
+      final signed = await _client.dio.post('/uploads/sign', data: {'fileName': fileName, 'folder': folder});
       final signedUrl = signed.data['signedUrl'] as String;
       final publicUrl = signed.data['publicUrl'] as String;
 
-      final bytes = await _readBytes(file);
-      final contentType = lookupMimeType(file.fileName) ?? 'application/octet-stream';
       await Dio().put(
         signedUrl,
-        data: Stream.fromIterable([bytes]),
-        options: Options(headers: {Headers.contentTypeHeader: contentType, Headers.contentLengthHeader: bytes.length}),
+        // Browsers refuse a script-set Content-Length (they compute it
+        // themselves), so it's only sent off-web.
+        data: kIsWeb ? bytes : Stream.fromIterable([bytes]),
+        options: Options(
+          headers: {
+            Headers.contentTypeHeader: contentType,
+            if (!kIsWeb) Headers.contentLengthHeader: bytes.length,
+          },
+        ),
       );
       return publicUrl;
     });
+  }
+
+  static const _extensionByMime = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'image/heic': '.heic',
+    'image/heif': '.heif',
+  };
+
+  static final _hasImageExtension = RegExp(r'\.(jpe?g|png|webp|heic|heif|gif)$', caseSensitive: false);
+
+  String _withExtension(String fileName, String contentType) {
+    if (_hasImageExtension.hasMatch(fileName)) return fileName;
+    final extension = _extensionByMime[contentType];
+    return extension == null ? fileName : '$fileName$extension';
   }
 
   Future<Uint8List> _readBytes(PickedUpload file) async {
