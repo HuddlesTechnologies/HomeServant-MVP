@@ -1,3 +1,4 @@
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import { IsEmail, IsOptional, IsString, Length } from 'class-validator';
 
 /// No `purpose` field on purpose (so to speak) — which OTP purpose gets
@@ -5,6 +6,7 @@ import { IsEmail, IsOptional, IsString, Length } from 'class-validator';
 /// /verify-2fa), not by a client-supplied value, so a signup code can't
 /// be replayed against the login-2FA check just by changing a field.
 export class VerifyOtpDto {
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

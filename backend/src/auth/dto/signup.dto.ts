@@ -1,7 +1,9 @@
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import { IsEmail, IsEnum, IsOptional, IsPhoneNumber, IsString, MinLength } from 'class-validator';
 import { UserRole } from '@prisma/client';
 
 export class SignupDto {
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

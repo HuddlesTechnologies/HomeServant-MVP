@@ -1,7 +1,9 @@
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import { IsEmail, IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import { AdminLevel } from '@prisma/client';
 
 export class CreateAdminDto {
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

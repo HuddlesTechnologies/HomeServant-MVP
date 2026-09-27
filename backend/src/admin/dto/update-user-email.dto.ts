@@ -1,6 +1,8 @@
+import { NormalizeEmail } from '../../common/decorators/normalize-email.decorator';
 import { IsEmail, IsString, MinLength } from 'class-validator';
 
 export class UpdateUserEmailDto {
+  @NormalizeEmail()
   @IsEmail()
   email!: string;
 

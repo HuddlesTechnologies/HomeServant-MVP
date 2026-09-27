@@ -1028,6 +1028,10 @@ class AppState extends ChangeNotifier {
   }
 
   Map<String, dynamic> _toJson() => {
+    // Kept so the code-entry screens survive a page reload: on a phone,
+    // switching to the email app to fetch a sign-up code often reloads the
+    // tab, and "Resend"/"Verify" then went out with no email at all.
+    'email': email,
     'dashboardTheme': dashboardTheme.name,
     'pushNotificationsEnabled': pushNotificationsEnabled,
     'newMessageNotifications': newMessageNotifications,
@@ -1044,6 +1048,7 @@ class AppState extends ChangeNotifier {
   };
 
   void _fromJson(Map<String, dynamic> json) {
+    if (email.isEmpty) email = json['email'] as String? ?? '';
     dashboardTheme = DashboardTheme.values.firstWhere(
       (t) => t.name == json['dashboardTheme'],
       orElse: () => DashboardTheme.classic,
