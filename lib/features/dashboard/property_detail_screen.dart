@@ -14,6 +14,7 @@ import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
 import 'widgets/property_video_player.dart';
+import '../../widgets/verified_badge.dart';
 import 'widgets/shortlet_unavailable_countdown.dart';
 
 /// Every [BookingStatus] from the moment a tenant's payment clears onward —
@@ -271,6 +272,14 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                       property.location,
                                       style: AppTextStyles.body(color: theme.accent, size: 14, weight: FontWeight.w700),
                                     ),
+                                    if (property.landlordVerified) ...[
+                                      const SizedBox(height: 6),
+                                      // On theme.background, so the label uses theme.foreground.
+                                      VerifiedBadge(
+                                        textColor: theme.foreground,
+                                        label: property.category == 'Shortlet' ? 'Verified owner' : 'Verified landlord',
+                                      ),
+                                    ],
                                     if (hasPaidForProperty && property.listingNumber != null) ...[
                                       const SizedBox(height: 4),
                                       Text(

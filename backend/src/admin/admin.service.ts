@@ -513,6 +513,8 @@ export class AdminService {
           // above for why VendorProfile, not User.role, is the source of
           // truth for "is this person a vendor".
           vendorProfile: { select: { id: true } },
+          // Status only (for the Verified badge) — never the ID details.
+          identityVerification: { select: { status: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
@@ -535,6 +537,7 @@ export class AdminService {
       where: { id },
       include: {
         vendorProfile: { select: { id: true, businessName: true, status: true, isActive: true } },
+        identityVerification: { select: { status: true } },
         _count: { select: { properties: true, bookings: true, marketplaceOrders: true, favorites: true, reviews: true } },
         properties: {
           select: { id: true, listingNumber: true, title: true, price: true, priceUnit: true, isOccupied: true, imageUrl: true, createdAt: true },

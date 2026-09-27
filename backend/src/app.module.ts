@@ -7,6 +7,8 @@ import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { EvictionsModule } from './evictions/evictions.module';
+import { VerificationModule } from './verification/verification.module';
+import { PlatformSettingsModule } from './platform-settings/platform-settings.module';
 import { ChatModule } from './chat/chat.module';
 import { PresenceModule } from './chat/presence.module';
 import { FavoritesModule } from './favorites/favorites.module';
@@ -46,6 +48,8 @@ import { VendorsModule } from './vendors/vendors.module';
     PropertiesModule,
     BookingsModule,
     EvictionsModule,
+    VerificationModule,
+    PlatformSettingsModule,
     FavoritesModule,
     StorageModule,
     ReviewsModule,

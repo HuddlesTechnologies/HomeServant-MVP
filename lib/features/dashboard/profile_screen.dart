@@ -7,6 +7,7 @@ import '../../widgets/theme_picker_sheet.dart';
 import 'edit_profile_screen.dart';
 import 'history_screen.dart';
 import 'settings_screen.dart';
+import '../../widgets/verified_badge.dart';
 import 'wishlist_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -23,6 +24,11 @@ class ProfileScreen extends StatelessWidget {
     final dividerColor = theme.foreground.withValues(alpha: 0.15);
 
     return ProfileMenuScaffold(
+      // White card with navy text, readable on every theme's background.
+      status: VerificationStatusCard(
+        status: context.watch<AppState>().verificationStatus,
+        note: context.watch<AppState>().verificationNote,
+      ),
       backgroundColor: theme.background,
       iconColor: theme.accent,
       labelColor: theme.foreground,

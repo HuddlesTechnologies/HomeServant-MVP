@@ -17,7 +17,7 @@ describeDb('signup profile completion (real Postgres)', () => {
   beforeEach(async () => {
     await resetDb(prisma);
     const storage = { assertIsOwnImage: async () => undefined };
-    users = new UsersService(prisma as never, {} as never, { create: async () => undefined } as never, storage as never);
+    users = new UsersService(prisma as never, {} as never, { create: async () => undefined } as never, storage as never, { requireVerifiedLandlords: async () => false } as never);
   });
 
   it('is only marked complete once every required signup field is filled in', async () => {

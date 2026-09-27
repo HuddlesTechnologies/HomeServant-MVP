@@ -17,7 +17,9 @@ import '../dashboard/notifications_screen.dart';
 import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
 import 'admin_evictions_tab.dart';
+import 'admin_platform_controls_screen.dart';
 import 'admin_support_insights_tab.dart';
+import 'admin_verifications_tab.dart';
 import 'admin_chat_log_screen.dart';
 import 'admin_dashboard_tab.dart';
 import 'admin_marketplace_tab.dart';
@@ -66,6 +68,7 @@ class _AdminShellState extends State<AdminShell> {
   int _messagesAttentionCount = 0;
   int _pendingAdminInvitesCount = 0;
   int _pendingEvictionsCount = 0;
+  int _pendingVerificationsCount = 0;
 
   @override
   void initState() {
@@ -121,6 +124,11 @@ class _AdminShellState extends State<AdminShell> {
     admin.pendingAdminInvitesCount().then((c) {
       if (mounted) setState(() => _pendingAdminInvitesCount = c);
     }).catchError((_) {});
+    if (context.read<AppState>().adminLevel?.atLeastModerator ?? false) {
+      context.read<AppState>().verification.pendingCount().then((c) {
+        if (mounted) setState(() => _pendingVerificationsCount = c);
+      }).catchError((_) {});
+    }
     if (context.read<AppState>().adminLevel?.isSuperAdmin ?? false) {
       context.read<AppState>().evictionsRepo.adminPendingCount().then((c) {
         if (mounted) setState(() => _pendingEvictionsCount = c);
@@ -445,6 +453,7 @@ class _AdminShellState extends State<AdminShell> {
     if (canSeeAdmins) ...[
       _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', count: _pendingAdminInvitesCount, builder: AdminAdminsTab.new),
       const _MoreItem(icon: Icons.history_rounded, label: 'Activity Log', builder: AdminActivityLogScreen.new),
+      _MoreItem(icon: Icons.verified_user_outlined, label: 'ID Verifications', count: _pendingVerificationsCount, builder: AdminVerificationsTab.new),
     ],
     // Every other admin's chat history across the last 30 days — kept
     // SUPER_ADMIN-only (the server independently re-checks this too, see
@@ -455,6 +464,8 @@ class _AdminShellState extends State<AdminShell> {
       const _MoreItem(icon: Icons.insights_rounded, label: 'Support Insights', builder: AdminSupportInsightsTab.new),
     if (isSuperAdmin)
       _MoreItem(icon: Icons.gavel_rounded, label: 'Eviction Requests', count: _pendingEvictionsCount, builder: AdminEvictionsTab.new),
+    if (isSuperAdmin)
+      const _MoreItem(icon: Icons.tune_rounded, label: 'Platform Controls', builder: AdminPlatformControlsScreen.new),
   ];
 
   int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>

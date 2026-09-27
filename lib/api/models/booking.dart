@@ -91,6 +91,7 @@ class Booking {
     this.tenantName,
     this.tenantEmail,
     this.tenantPhone,
+    this.tenantVerified = false,
     this.tenantProfilePhotoUrl,
     this.tenantGender,
     this.tenantOccupation,
@@ -120,6 +121,9 @@ class Booking {
 
   /// Only sent once this tenant has paid for the landlord's property.
   final String? tenantPhone;
+
+  /// HomeServant has verified this tenant's identity.
+  final bool tenantVerified;
   final String? tenantProfilePhotoUrl;
   final TenantGender? tenantGender;
   final String? tenantOccupation;
@@ -186,6 +190,7 @@ class Booking {
       tenantName: tenant?['fullName'] as String?,
       tenantEmail: tenant?['email'] as String?,
       tenantPhone: tenant?['phoneNumber'] as String?,
+      tenantVerified: (tenant?['identityVerification'] as Map<String, dynamic>?)?['status'] == 'APPROVED',
       tenantProfilePhotoUrl: tenant?['profilePhotoUrl'] as String?,
       tenantGender: _genderFromApi(tenant?['gender'] as String?),
       tenantOccupation: tenant?['occupation'] as String?,

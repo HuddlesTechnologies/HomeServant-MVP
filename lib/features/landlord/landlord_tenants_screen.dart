@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../../widgets/verified_badge.dart';
 import 'tenant_profile_view_screen.dart';
 
 enum _TenantFilter { current, former, all }
@@ -260,13 +261,18 @@ class _TenantTile extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Expanded(
+                          Flexible(
                             child: Text(
                               entry.name,
                               overflow: TextOverflow.ellipsis,
                               style: AppTextStyles.body(color: AppColors.navy, size: 15, weight: FontWeight.w700),
                             ),
                           ),
+                          if (entry.tenancies.any((t) => t.tenantVerified)) ...[
+                            const SizedBox(width: 4),
+                            const VerifiedBadge(textColor: AppColors.navy, label: null, size: 12),
+                          ],
+                          const Spacer(),
                           _Tag(
                             label: evictionPending ? 'Eviction under review' : (current ? 'Current' : 'Former'),
                             color: evictionPending

@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { StorageService } from '../storage/storage.service';
+import { VERIFICATION_FOLDER } from '../verification/verification.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -16,7 +18,10 @@ const DEACTIVATED_ACCOUNT_TTL_DAYS = 30;
 export class AccountCleanupService {
   private readonly logger = new Logger('AccountCleanup');
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_3AM)
   async purgeExpiredDeactivatedAccounts(): Promise<void> {
@@ -55,6 +60,7 @@ export class AccountCleanupService {
 
     if (ids.length > 0) {
       const { count } = await this.prisma.user.deleteMany({ where: { id: { in: ids } } });
+      for (const id of ids) await this.storage.removePrivateFilesFor(id, VERIFICATION_FOLDER);
       this.logger.log(`Deleted ${count} account(s) deactivated for over ${DEACTIVATED_ACCOUNT_TTL_DAYS} days`);
     }
     if (skipped > 0) {

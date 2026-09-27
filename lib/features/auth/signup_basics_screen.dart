@@ -13,6 +13,7 @@ import '../../widgets/labeled_pill_field.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/themed_scaffold.dart';
 import '../../widgets/upload_picker.dart';
+import '../../widgets/upload_picker_rules.dart';
 
 /// Signup step 1 ("Welcome Onboard": name, phone, date of birth) for both
 /// tenants and landlords — previously two near-identical screens. Role
@@ -69,7 +70,12 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
       final eighteenth = DateTime(dob.year + _minimumAge, dob.month, dob.day);
       if (eighteenth.isAfter(now)) dobError = 'You must be at least $_minimumAge to sign up';
     }
-    final certificateError = _role.isLandlord && _certificate == null ? 'Upload your certificate of ownership' : null;
+    final certificate = _certificate;
+    final certificateError = !_role.isLandlord
+        ? null
+        : certificate == null
+        ? 'Upload your certificate of ownership'
+        : (!isPhotoOrPdf(certificate) ? 'Upload a photo or a PDF of your certificate' : null);
     setState(() {
       _dobError = dobError;
       _certificateError = certificateError;
@@ -115,9 +121,8 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
     }
   }
 
-  /// A landlord's certificate of ownership isn't persisted anywhere yet —
-  /// the backend has no document-verification model, so it's collected
-  /// here for UI completeness but only the profile fields actually save.
+  /// A landlord's certificate of ownership goes to the private bucket and
+  /// is saved for admin review before the profile fields.
   Future<void> _continue() async {
     if (!_validateAll()) return;
     setState(() {
@@ -126,7 +131,13 @@ class _SignupBasicsScreenState extends State<SignupBasicsScreen> {
     });
     try {
       final referral = _referral.text.trim();
-      await context.read<AppState>().completeProfile(
+      final appState = context.read<AppState>();
+      final certificate = _certificate;
+      if (_role.isLandlord && certificate != null) {
+        final path = await appState.uploads.uploadPrivateDocument(certificate);
+        await appState.verification.update(certificatePath: path);
+      }
+      await appState.completeProfile(
         fullName: _name.text.trim(),
         phoneNumber: _phone.text.trim(),
         houseAddress: _role.isLandlord ? _houseAddress.text.trim() : null,

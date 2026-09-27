@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, NotificationType, PropertyCategory } from '@prisma/client';
+import { BookingStatus, NotificationType, PropertyCategory, VerificationStatus } from '@prisma/client';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,6 +26,7 @@ export class BookingsService {
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
     private readonly payments: PaymentsService,
+    private readonly platform: PlatformSettingsService,
   ) {}
 
   /// A Shortlet booking is unaffected by the pay/inspect reversal below —
@@ -41,8 +43,19 @@ export class BookingsService {
   /// the tenant can retry via `POST /bookings/:id/pay` later from their
   /// history instead of losing the attempt.
   async create(tenantId: string, dto: CreateBookingDto) {
-    const property = await this.prisma.property.findUnique({ where: { id: dto.propertyId } });
+    const property = await this.prisma.property.findUnique({
+      where: { id: dto.propertyId },
+      include: { landlord: { select: { identityVerification: { select: { status: true } } } } },
+    });
     if (!property) throw new NotFoundException('Property not found');
+    // Platform Controls: unverified landlords' listings are hidden from
+    // browsing, and a direct link can't be used to book one either.
+    if (
+      property.landlord.identityVerification?.status !== VerificationStatus.APPROVED &&
+      (await this.platform.requireVerifiedLandlords())
+    ) {
+      throw new ForbiddenException("This landlord hasn't been verified yet, so this property can't be booked right now");
+    }
 
     const isShortlet = property.category === PropertyCategory.SHORTLET;
     if (isShortlet && (!dto.nights || !dto.requestedDate)) {
@@ -122,6 +135,7 @@ export class BookingsService {
             occupation: true,
             maritalStatus: true,
             dateOfBirth: true,
+            identityVerification: { select: { status: true } },
           },
         },
         payments: {

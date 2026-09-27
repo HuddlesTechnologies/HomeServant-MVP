@@ -1,4 +1,5 @@
 import '../../models/user_role.dart';
+import 'verification.dart';
 
 /// Mirrors the backend's `PublicUser` shape (see
 /// backend/src/auth/auth.service.ts) — what comes back from
@@ -17,6 +18,9 @@ class AuthUser {
     this.accountNumber,
     this.accountName,
     this.referralCode,
+    this.verificationStatus,
+    this.verificationNote,
+    this.listingsHiddenUntilVerified = false,
     this.houseAddress,
     this.dateOfBirth,
     this.mustChangePassword = false,
@@ -91,6 +95,15 @@ class AuthUser {
   /// narrower `PublicUser` shape).
   final String? referralCode;
 
+  /// This user's identity verification (null when not submitted, or on the
+  /// narrower login response) and, when rejected, what to fix.
+  final VerificationStatus? verificationStatus;
+  final String? verificationNote;
+
+  /// Landlord only: Platform Controls is hiding this landlord's listings
+  /// from tenants until their identity is verified.
+  final bool listingsHiddenUntilVerified;
+
   factory AuthUser.fromApi(Map<String, dynamic> json) => AuthUser(
     id: json['id'] as String,
     email: json['email'] as String,
@@ -104,6 +117,9 @@ class AuthUser {
     accountNumber: json['accountNumber'] as String?,
     accountName: json['accountName'] as String?,
     referralCode: json['referralCode'] as String?,
+    verificationStatus: VerificationStatus.fromApi((json['identityVerification'] as Map<String, dynamic>?)?['status'] as String?),
+    verificationNote: (json['identityVerification'] as Map<String, dynamic>?)?['reviewNote'] as String?,
+    listingsHiddenUntilVerified: json['listingsHiddenUntilVerified'] as bool? ?? false,
     houseAddress: json['houseAddress'] as String?,
     dateOfBirth: json['dateOfBirth'] != null ? DateTime.parse(json['dateOfBirth'] as String) : null,
     mustChangePassword: json['mustChangePassword'] as bool? ?? false,
