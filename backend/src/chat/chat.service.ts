@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ActivityLogType, BookingStatus, MessageType, NotificationType, Prisma, UserRole } from '@prisma/client';
+import { ActivityLogType, BookingStatus, MessageType, NotificationType, PaymentStatus, Prisma, UserRole } from '@prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -15,7 +15,7 @@ const MESSAGE_PAGE_SIZE = 50;
 const CHAT_LOG_WINDOW_DAYS = 30;
 
 /// Booking statuses that mean the tenant has actually paid — the gate for
-/// a tenant messaging a landlord (see [ChatService.assertTenantMayMessageLandlord]).
+/// tenant/landlord messaging (see [ChatService.landlordTenantBlockReason]).
 /// Mirrors `_paidBookingStatuses` in the Flutter property detail screen.
 const PAID_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.PAID,
@@ -26,6 +26,12 @@ const PAID_BOOKING_STATUSES: BookingStatus[] = [
 ];
 
 const PAYMENT_REQUIRED_MESSAGE = 'You can message the landlord once you have paid for this property';
+const REFUNDED_MESSAGE =
+  'This conversation was closed because the booking was refunded. It reopens if the tenant pays again.';
+
+/// The tenant and landlord in a two-person, non-support, non-order thread
+/// — the only kind of thread the payment rules apply to.
+type LandlordTenantPair = { tenantId: string; landlordId: string };
 
 @Injectable()
 export class ChatService {
@@ -54,7 +60,10 @@ export class ChatService {
       this.prisma.user.findUnique({ where: { id: dto.recipientId }, select: { id: true, role: true } }),
     ]);
     if (!recipient) throw new NotFoundException('Recipient not found');
-    const tenantToLandlord = caller?.role === UserRole.TENANT && recipient.role === UserRole.LANDLORD && !dto.orderId;
+    const pair = dto.orderId ? null : this.asLandlordTenantPair([
+      { id: userId, role: caller?.role },
+      { id: recipient.id, role: recipient.role },
+    ]);
 
     const existing = await this.prisma.thread.findFirst({
       where: {
@@ -67,10 +76,14 @@ export class ChatService {
       },
       include: { participants: true },
     });
-    if (tenantToLandlord) {
-      await this.assertTenantMayMessageLandlord(userId, dto.recipientId, dto.propertyId ?? null, existing?.id);
-    }
+    // An existing thread still opens when messaging is closed, so its
+    // history stays readable (sendMessage and the summary's canReply are
+    // what stop new messages); only starting a new one is refused here.
     if (existing) return existing;
+    if (pair) {
+      const reason = await this.landlordTenantBlockReason(pair, userId, dto.propertyId ?? null);
+      if (reason) throw new ForbiddenException(reason);
+    }
 
     return this.prisma.thread.create({
       data: {
@@ -343,6 +356,7 @@ export class ChatService {
 
     const resolved = thread.status === 'RESOLVED';
     const unclaimedSupport = thread.isSupport && !thread.assignedAdminId;
+    const lockedReason = isParticipant && !isAdmin ? await this.threadBlockReason(threadId, userId) : null;
     const lastTransfer = thread.transferLogs[0];
     return {
       id: thread.id,
@@ -369,8 +383,12 @@ export class ChatService {
       // unclaimed support thread — replying claims it), plus: nobody
       // replies into a resolved thread, and an admin doesn't reply into a
       // support thread another admin is now handling.
+      // Why a tenant/landlord can't message here right now (payment rules,
+      // see landlordTenantBlockReason) — shown in place of the composer.
+      lockedReason,
       canReply:
         !resolved &&
+        !lockedReason &&
         (isAdmin && thread.isSupport
           ? unclaimedSupport || thread.assignedAdminId === userId
           : isParticipant),
@@ -390,7 +408,10 @@ export class ChatService {
 
   async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
     await this.assertCanWrite(threadId, userId, senderRole);
-    if (senderRole === UserRole.TENANT) await this.assertTenantMayWriteInThread(threadId, userId);
+    if (senderRole === UserRole.TENANT || senderRole === UserRole.LANDLORD) {
+      const reason = await this.threadBlockReason(threadId, userId);
+      if (reason) throw new ForbiddenException(reason);
+    }
     const body = dto.body?.trim() ?? '';
     if (!body && !dto.attachmentUrl) {
       throw new BadRequestException('A message needs either text or an image');
@@ -486,6 +507,49 @@ export class ChatService {
     return message;
   }
 
+  /// Posts an automatic SYSTEM message (no sender) into the chat between a
+  /// tenant and landlord about [propertyId] — e.g. when a booking is
+  /// refunded or rejected and messaging closes (see
+  /// landlordTenantBlockReason). Both sides see it live. With
+  /// [createIfMissing], a thread is started for it when none exists yet
+  /// (so a rejected tenant finds the notice in Messages); otherwise it's
+  /// only added to an existing conversation. Returns the thread id, if any.
+  async postBookingSystemMessage(opts: {
+    tenantId: string;
+    landlordId: string;
+    propertyId: string;
+    body: string;
+    createIfMissing: boolean;
+  }): Promise<string | null> {
+    const { tenantId, landlordId, propertyId, body, createIfMissing } = opts;
+    let thread = await this.prisma.thread.findFirst({
+      where: {
+        propertyId,
+        orderId: null,
+        isSupport: false,
+        AND: [{ participants: { some: { userId: tenantId } } }, { participants: { some: { userId: landlordId } } }],
+      },
+      select: { id: true },
+    });
+    if (!thread) {
+      if (!createIfMissing) return null;
+      thread = await this.prisma.thread.create({
+        data: { propertyId, participants: { create: [{ userId: tenantId }, { userId: landlordId }] } },
+        select: { id: true },
+      });
+    }
+    const [message] = await this.prisma.$transaction([
+      this.prisma.message.create({
+        data: { threadId: thread.id, senderId: null, body, type: MessageType.SYSTEM },
+        include: { sender: { select: { id: true, fullName: true } } },
+      }),
+      this.prisma.thread.update({ where: { id: thread.id }, data: { updatedAt: new Date() } }),
+    ]);
+    // No sender to exclude — both participants get it.
+    this.gateway.broadcastMessage([tenantId, landlordId], '', thread.id, message);
+    return thread.id;
+  }
+
   async markRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
     await this.assertCanRead(threadId, userId, senderRole);
     // A read-only viewer (a SUPER_ADMIN looking into another admin's
@@ -522,41 +586,49 @@ export class ChatService {
     return !!thread && thread.isSupport && !thread.assignedAdminId;
   }
 
-  /// Tenants may only message a landlord after paying: they need a paid
-  /// booking on [propertyId] (or, for a thread not tied to a listing, on
-  /// any of this landlord's properties). The one exception is a thread the
-  /// landlord has already written in — a landlord reaching out about a
-  /// booking request must be answerable, or the conversation dead-ends.
-  private async assertTenantMayMessageLandlord(
-    tenantId: string,
-    landlordId: string,
+  /// Tenant/landlord messaging is tied to payment, so the two do business
+  /// through the platform. Returns why [senderId] can't message the other
+  /// side right now, or null if they can:
+  ///
+  /// - a paid booking (PAID through MOVED_IN) opens it both ways;
+  /// - otherwise, a refunded booking (the tenant's own refund, or the
+  ///   landlord rejecting a paid booking) closes it both ways until the
+  ///   tenant pays again;
+  /// - otherwise (nothing paid yet) a landlord may reach out, and the
+  ///   tenant may only answer a thread the landlord has already written in.
+  ///
+  /// Bookings are those on [propertyId], or on any of the landlord's
+  /// properties for a thread not tied to a listing.
+  private async landlordTenantBlockReason(
+    { tenantId, landlordId }: LandlordTenantPair,
+    senderId: string,
     propertyId: string | null,
     threadId?: string,
-  ): Promise<void> {
-    const paid = await this.prisma.booking.findFirst({
-      where: {
-        tenantId,
-        status: { in: PAID_BOOKING_STATUSES },
-        property: propertyId ? { id: propertyId, landlordId } : { landlordId },
-      },
-      select: { id: true },
+  ): Promise<string | null> {
+    const bookings = await this.prisma.booking.findMany({
+      where: { tenantId, property: propertyId ? { id: propertyId, landlordId } : { landlordId } },
+      select: { status: true, payments: { where: { status: PaymentStatus.REFUNDED }, select: { id: true }, take: 1 } },
     });
-    if (paid) return;
+    if (bookings.some((b) => PAID_BOOKING_STATUSES.includes(b.status))) return null;
+    const refunded = bookings.some(
+      (b) => b.status === BookingStatus.REFUNDED || (b.status === BookingStatus.DECLINED && b.payments.length > 0),
+    );
+    if (refunded) return REFUNDED_MESSAGE;
+    if (senderId === landlordId) return null;
     if (threadId) {
       const landlordWrote = await this.prisma.message.findFirst({
         where: { threadId, senderId: landlordId },
         select: { id: true },
       });
-      if (landlordWrote) return;
+      if (landlordWrote) return null;
     }
-    throw new ForbiddenException(PAYMENT_REQUIRED_MESSAGE);
+    return PAYMENT_REQUIRED_MESSAGE;
   }
 
-  /// [sendMessage]'s half of the rule above: blocks a tenant writing in an
-  /// existing property/landlord thread (e.g. one opened before this rule
-  /// existed) until they've paid. Support and marketplace order threads
-  /// are unaffected.
-  private async assertTenantMayWriteInThread(threadId: string, tenantId: string): Promise<void> {
+  /// [landlordTenantBlockReason] for an existing thread — null for support
+  /// and marketplace order threads, and anything that isn't exactly one
+  /// tenant and one landlord.
+  private async threadBlockReason(threadId: string, senderId: string): Promise<string | null> {
     const thread = await this.prisma.thread.findUnique({
       where: { id: threadId },
       select: {
@@ -566,10 +638,17 @@ export class ChatService {
         participants: { select: { user: { select: { id: true, role: true } } } },
       },
     });
-    if (!thread || thread.isSupport || thread.orderId) return;
-    const landlord = thread.participants.find((p) => p.user.id !== tenantId && p.user.role === UserRole.LANDLORD);
-    if (!landlord) return;
-    await this.assertTenantMayMessageLandlord(tenantId, landlord.user.id, thread.propertyId, threadId);
+    if (!thread || thread.isSupport || thread.orderId) return null;
+    const pair = this.asLandlordTenantPair(thread.participants.map((p) => p.user));
+    if (!pair) return null;
+    return this.landlordTenantBlockReason(pair, senderId, thread.propertyId, threadId);
+  }
+
+  private asLandlordTenantPair(people: { id: string; role?: UserRole | null }[]): LandlordTenantPair | null {
+    if (people.length !== 2) return null;
+    const tenant = people.find((p) => p.role === UserRole.TENANT);
+    const landlord = people.find((p) => p.role === UserRole.LANDLORD);
+    return tenant && landlord ? { tenantId: tenant.id, landlordId: landlord.id } : null;
   }
 
   private async assertCanWrite(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {

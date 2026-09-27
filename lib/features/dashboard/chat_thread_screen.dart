@@ -180,6 +180,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       final chatSocket = context.read<AppState>().chatSocket;
       _socketSubscription = chatSocket.onNewMessage.listen(_onSocketMessage);
       _readSubscription = chatSocket.onRead.listen(_onSocketRead);
+      // Tenant/landlord threads can be closed by the payment rules (not
+      // paid yet, or refunded) — check up front so the composer is
+      // replaced by the reason instead of failing on send.
+      unawaited(_refreshAccess());
       if (context.read<AppState>().role.isAdmin) {
         // A claim or transfer of *this* thread may have just taken it away
         // from this admin — re-check rather than guess from the event.
@@ -193,16 +197,21 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     }
   }
 
-  /// Admin-only: asks the server whether this admin can still reply here
-  /// (see backend ChatService.getThreadSummary) and updates [_accessNotice].
+  /// Asks the server whether the caller can still reply here (see backend
+  /// ChatService.getThreadSummary) and updates [_accessNotice]: for a
+  /// tenant/landlord, whether the payment rules have closed the thread;
+  /// for an admin, also whether the support conversation moved on.
   Future<void> _refreshAccess() async {
     final threadId = widget.threadId;
     if (threadId == null || widget.readOnly) return;
     final appState = context.read<AppState>();
+    final isAdmin = appState.role.isAdmin;
     String? notice;
     try {
       final summary = await appState.chat.summary(threadId);
-      if (!summary.canReply) {
+      if (summary.lockedReason != null) {
+        notice = summary.lockedReason;
+      } else if (isAdmin && !summary.canReply) {
         final assigned = summary.assignedAdmin;
         notice = summary.resolved
             ? 'This conversation has been resolved.'
@@ -211,6 +220,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
             : "You can't reply to this conversation anymore.";
       }
     } on ApiException {
+      // A non-admin's summary failing is just a network hiccup — sends
+      // are still checked server-side, so don't lock the screen for it.
+      if (!isAdmin) return;
       notice = "You don't have access to this conversation anymore.";
     }
     if (!mounted) return;
@@ -238,7 +250,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final appState = context.read<AppState>();
     final senderId = event.message['senderId'] as String?;
     final body = event.message['body'] as String?;
-    if (senderId == null || body == null || senderId == appState.userId) return;
+    if (body == null) return;
+    final isSystem = event.message['type'] == 'SYSTEM';
+    // A SYSTEM notice has no sender and goes to both sides; anything else
+    // from us was already echoed locally by [_send].
+    if (!isSystem && (senderId == null || senderId == appState.userId)) return;
     // The raw type string here is Prisma's enum member as-is (TEXT /
     // PROPERTY_PREVIEW / IMAGE) — this previously compared against
     // 'propertyPreview', which the backend never actually sends, so a
@@ -248,6 +264,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final type = switch (event.message['type']) {
       'PROPERTY_PREVIEW' => MessageType.propertyPreview,
       'IMAGE' => MessageType.image,
+      'SYSTEM' => MessageType.system,
       _ => MessageType.text,
     };
     setState(
@@ -266,6 +283,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     );
     _scrollToBottom();
     unawaited(appState.chat.markRead(widget.threadId!));
+    // A system notice usually means messaging just closed (a refund or
+    // rejection) — swap the composer for the reason right away.
+    if (isSystem) unawaited(_refreshAccess());
   }
 
   Future<void> _loadRemoteMessages(String threadId) async {
@@ -419,6 +439,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     if (threadId == null) return;
     try {
       await context.read<AppState>().chat.send(threadId, message);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      // e.g. the booking was refunded while this chat was open — show the
+      // server's reason and swap the composer for it.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      unawaited(_refreshAccess());
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't send — try again.")));
@@ -631,7 +657,39 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     // whole list instead of O(n²) as history grows.
                     final showSeen = message.fromMe && message.read && index == lastFromMeIndex;
                     final Widget bubble;
-                    if (message.type == MessageType.propertyPreview) {
+                    if (message.type == MessageType.system) {
+                      // Centred notice, not a bubble — theme.surface/onSurface
+                      // is a fixed contrast pair in every DashboardTheme.
+                      bubble = Center(
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 480),
+                          margin: const EdgeInsets.symmetric(vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: theme.surface,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.info_outline_rounded, color: theme.onSurface, size: 16),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  message.text,
+                                  textAlign: TextAlign.center,
+                                  style: AppTextStyles.body(
+                                    color: theme.onSurface,
+                                    size: 12.5,
+                                    weight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    } else if (message.type == MessageType.propertyPreview) {
                       bubble = Align(
                         alignment: message.fromMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: _PropertyPreviewBubble(theme: theme, message: message),

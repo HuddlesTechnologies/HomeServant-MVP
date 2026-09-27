@@ -705,6 +705,10 @@ enum MessageType {
   /// A message that's a photo (with an optional caption in `body`) rather
   /// than plain text — see Message.attachmentUrl.
   IMAGE
+  /// An automatic notice with no sender (senderId null), e.g. "the
+  /// booking was refunded, messaging is closed" — shown to both sides as a
+  /// centred notice, not a chat bubble. See ChatService.postBookingSystemMessage.
+  SYSTEM
 }
 
 /// Persisted through this API (so history survives even if a client never

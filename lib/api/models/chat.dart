@@ -26,7 +26,10 @@ class ThreadParticipant {
   );
 }
 
-enum MessageType { text, propertyPreview, image }
+/// [system]: an automatic notice with no sender (e.g. "refund initiated,
+/// further messaging is no longer available") — see backend
+/// ChatService.postBookingSystemMessage.
+enum MessageType { text, propertyPreview, image, system }
 
 // The backend returns Prisma's raw MessageType enum member (TEXT /
 // PROPERTY_PREVIEW / IMAGE) verbatim in JSON — nothing camelCases it — so
@@ -37,6 +40,7 @@ enum MessageType { text, propertyPreview, image }
 MessageType _messageTypeFromApi(String? value) => switch (value) {
   'PROPERTY_PREVIEW' => MessageType.propertyPreview,
   'IMAGE' => MessageType.image,
+  'SYSTEM' => MessageType.system,
   _ => MessageType.text,
 };
 
@@ -257,6 +261,7 @@ class ThreadSummary {
     required this.canReply,
     required this.otherParticipants,
     this.canReassign = false,
+    this.lockedReason,
     this.resolvedAt,
     this.assignedAdmin,
     this.lastTransferFrom,
@@ -278,6 +283,11 @@ class ThreadSummary {
   /// admin even though they aren't handling it themselves.
   final bool canReassign;
 
+  /// Tenant/landlord threads only: why neither side can message right now
+  /// (not paid yet, or the booking was refunded) — see backend
+  /// ChatService.landlordTenantBlockReason. Null when messaging is open.
+  final String? lockedReason;
+
   factory ThreadSummary.fromApi(Map<String, dynamic> json) {
     final transfer = json['lastTransfer'] as Map<String, dynamic>?;
     return ThreadSummary(
@@ -295,6 +305,7 @@ class ThreadSummary {
       canView: json['canView'] as bool? ?? false,
       canReply: json['canReply'] as bool? ?? false,
       canReassign: json['canReassign'] as bool? ?? false,
+      lockedReason: json['lockedReason'] as String?,
     );
   }
 }
