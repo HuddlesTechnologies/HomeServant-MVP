@@ -17,6 +17,7 @@ import '../dashboard/notifications_screen.dart';
 import 'admin_activity_log_screen.dart';
 import 'admin_admins_tab.dart';
 import 'admin_evictions_tab.dart';
+import 'admin_payouts_screen.dart';
 import 'admin_platform_controls_screen.dart';
 import 'admin_support_insights_tab.dart';
 import 'admin_verifications_tab.dart';
@@ -69,6 +70,7 @@ class _AdminShellState extends State<AdminShell> {
   int _pendingAdminInvitesCount = 0;
   int _pendingEvictionsCount = 0;
   int _pendingVerificationsCount = 0;
+  int _stuckPaymentsCount = 0;
 
   @override
   void initState() {
@@ -130,6 +132,9 @@ class _AdminShellState extends State<AdminShell> {
       }).catchError((_) {});
     }
     if (context.read<AppState>().adminLevel?.isSuperAdmin ?? false) {
+      context.read<AppState>().verification.stuckPaymentCount().then((c) {
+        if (mounted) setState(() => _stuckPaymentsCount = c);
+      }).catchError((_) {});
       context.read<AppState>().evictionsRepo.adminPendingCount().then((c) {
         if (mounted) setState(() => _pendingEvictionsCount = c);
       }).catchError((_) {});
@@ -466,6 +471,8 @@ class _AdminShellState extends State<AdminShell> {
       _MoreItem(icon: Icons.gavel_rounded, label: 'Eviction Requests', count: _pendingEvictionsCount, builder: AdminEvictionsTab.new),
     if (isSuperAdmin)
       const _MoreItem(icon: Icons.tune_rounded, label: 'Platform Controls', builder: AdminPlatformControlsScreen.new),
+    if (isSuperAdmin)
+      _MoreItem(icon: Icons.payments_outlined, label: 'Payouts & Refunds', count: _stuckPaymentsCount, builder: AdminPayoutsScreen.new),
   ];
 
   int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>

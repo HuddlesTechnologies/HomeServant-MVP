@@ -62,13 +62,16 @@ class VerifiedPill extends StatelessWidget {
 /// A user's own verification state on their profile: Verified, awaiting
 /// review, or rejected with what to fix. White card, navy text.
 class VerificationStatusCard extends StatelessWidget {
-  const VerificationStatusCard({super.key, required this.status, this.note, this.listingsHidden = false});
+  const VerificationStatusCard({super.key, required this.status, this.note, this.listingsHidden = false, this.onGetVerified});
 
   final VerificationStatus? status;
   final String? note;
 
   /// Landlord whose listings Platform Controls is hiding until verified.
   final bool listingsHidden;
+
+  /// Shows a "Get verified" / "Resubmit" button when set.
+  final VoidCallback? onGetVerified;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +119,24 @@ class VerificationStatusCard extends StatelessWidget {
                   Text(
                     'Your listings are hidden from tenants until your identity is verified.',
                     style: AppTextStyles.body(color: const Color(0xFFA61B1B), size: 12.5, weight: FontWeight.w600),
+                  ),
+                ],
+                if (onGetVerified != null) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 36,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.navy,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      ),
+                      onPressed: onGetVerified,
+                      child: Text(
+                        status == VerificationStatus.rejected ? 'Resubmit documents' : 'Get verified',
+                        style: AppTextStyles.body(color: Colors.white, size: 13, weight: FontWeight.w700),
+                      ),
+                    ),
                   ),
                 ],
               ],

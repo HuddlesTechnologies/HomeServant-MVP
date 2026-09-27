@@ -15,6 +15,7 @@ import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/empty_state.dart';
 import 'legal/tenancy_agreement_view_screen.dart';
 import 'property_detail_screen.dart';
+import '../../widgets/hidden_listing_notice.dart';
 import 'widgets/property_image.dart';
 
 /// The tenant's own bookings, newest first — every status (pending through
@@ -276,6 +277,12 @@ class _HistoryTileState extends State<_HistoryTile> {
               ],
             ),
           ),
+          if (property.hiddenUntilLandlordVerified &&
+              booking.status != BookingStatus.declined &&
+              booking.status != BookingStatus.refunded) ...[
+            const SizedBox(height: 10),
+            HiddenListingNotice(hasBooking: true, isShortlet: booking.isShortlet),
+          ],
           TenantEvictionNotice(bookingId: booking.id, theme: theme),
           if (booking.status == BookingStatus.movedIn) ...[
             const SizedBox(height: 12),
@@ -329,7 +336,7 @@ class _HistoryTileState extends State<_HistoryTile> {
       return 'Rejected by the landlord — refunded in full, no fee withheld';
     }
     if (booking.status == BookingStatus.refunded) {
-      return 'Refunded (0.2% platform fee withheld)';
+      return booking.refundedByHomeServant ? 'Refunded in full by HomeServant' : 'Refunded (0.2% platform fee withheld)';
     }
     if (booking.status == BookingStatus.inspectionProposed && booking.requestedDate != null) {
       return 'Inspection proposed for ${formatShortDate(booking.requestedDate!)} — awaiting landlord';

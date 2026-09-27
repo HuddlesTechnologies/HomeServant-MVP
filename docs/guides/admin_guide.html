@@ -152,7 +152,18 @@
 <p><em>More &rarr; Platform Controls</em> holds platform-wide switches. Only super admins can open it.</p>
 <ul>
   <li><strong>Only verified landlords:</strong> when on, tenants only see, search and book listings from landlords whose identity is verified. The screen shows how many listings would be hidden before you switch it on, and who last changed it.</li>
-  <li>Landlords always see their own listings; an unverified landlord sees a notice on their dashboard and profile that their listings are hidden until they're verified. Existing tenancies, bookings and payments are not affected.</li>
+  <li>Landlords always see their own listings; an unverified landlord sees a notice on their dashboard and profile that their listings are hidden until they're verified, with a <em>Get verified</em> button (accounts from before ID documents were required can submit them there, and rejected ones can resubmit).</li>
+  <li>Switching it on notifies and emails every unverified landlord who has listings, telling them what to do next. Tenants are <strong>not</strong> notified (to avoid alarm); they only see the note on the listing.</li>
+  <li><strong>Pay unverified landlords</strong> (a separate switch, ON by default): <em>ON</em> &mdash; landlords are paid as normal on move-in, shortlet payment and renewal, verified or not. <em>OFF</em> &mdash; landlords must be verified before they are paid: payouts to unverified landlords are held by HomeServant and each landlord is told to get verified. The tenant's side (moving in, the stay, the renewal) is never held up. Held money is sent automatically when the landlord is verified, or to everyone when you switch it back ON. The card shows how much is held right now. Verified landlords are always paid.</li>
+  <li>Existing tenancies, bookings and payments are not affected. Tenants who already booked or saved a hidden listing still see it, with a note: <em>"This listing has been hidden because the landlord is unverified"</em> (on the History card, the property page and saved listings), and that their booking carries on.</li>
+</ul>
+<h2>Payouts &amp; Refunds (Super Admin)</h2>
+<p><em>More &rarr; Payouts &amp; Refunds</em> lists rent money that didn't go through (the badge counts them): payouts to landlords (held for verification, no bank account, or a transfer that failed or was reversed by the bank) and refunds to tenants that failed. Each row shows the amount, property, landlord (bank ending), tenant, how long it's been waiting and the last error.</p>
+<ul>
+  <li><strong>Retry payout</strong> / <strong>Retry refund</strong> try again. <strong>Refund tenant</strong> refunds the tenant in full (with a reason both sides see) when the money is still held and they haven't moved in, or their shortlet stay hasn't started; the booking ends as Refunded.</li>
+  <li><strong>Safe to press twice:</strong> Paystack is asked first whether the payout or refund already happened (if so it's just recorded), and only one money action can run for a payment at a time. Nobody can be paid or refunded twice, a payment can never be both paid out and refunded, and once refunded the tenant can't request a refund again.</li>
+  <li>Payouts waiting for verification can't be retried here; they're paid automatically when the landlord is verified (or if <em>Pay unverified landlords</em> is turned on). After a tenant has moved in, no one can refund them from here.</li>
+  <li>If a payout fails, the tenant's side still goes ahead (move-in, stay, renewal) and the landlord is told their payout is delayed.</li>
 </ul>
 <h2>Eviction requests (Super Admin)</h2>
 <p>A landlord can ask to end a tenancy early, with a written reason. Every super admin is notified, and the case waits in <em>More &rarr; Eviction Requests</em> (the badge shows how many are waiting). Each case shows the property, both parties' contact details, the lease dates, the landlord's reason and the tenant's response, if they have given one.</p>

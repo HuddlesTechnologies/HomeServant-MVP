@@ -1,11 +1,19 @@
-import { Injectable } from '@nestjs/common';
-import { Prisma, VerificationStatus } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { NotificationType, Prisma, UserRole, VerificationStatus } from '@prisma/client';
+import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /// The single PlatformSettings row (id 1), created with defaults on first read.
 @Injectable()
 export class PlatformSettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger('PlatformSettings');
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly mail: MailService,
+  ) {}
 
   async get() {
     const settings = await this.prisma.platformSettings.upsert({
@@ -27,13 +35,60 @@ export class PlatformSettingsService {
     return { ...settings, stats: { totalListings, unverifiedListings, verifiedLandlords, landlordsWithListings } };
   }
 
-  async update(adminId: string, data: { requireVerifiedLandlords?: boolean }) {
+  async update(adminId: string, data: { requireVerifiedLandlords?: boolean; payUnverifiedLandlords?: boolean }) {
+    const before = await this.requireVerifiedLandlords();
     await this.prisma.platformSettings.upsert({
       where: { id: 1 },
       create: { id: 1, ...data, updatedById: adminId },
       update: { ...data, updatedById: adminId },
     });
+    if (!before && data.requireVerifiedLandlords === true) {
+      // Background: a large landlord list must not hold up the toggle.
+      void this.notifyUnverifiedLandlords().catch((error) =>
+        this.logger.error(`Could not notify unverified landlords: ${(error as Error).message}`),
+      );
+    }
     return this.get();
+  }
+
+  /// When "Only verified landlords" is switched on: every active landlord
+  /// with listings who isn't verified yet is told their listings are now
+  /// hidden and how to fix it. Returns how many were told.
+  async notifyUnverifiedLandlords(): Promise<number> {
+    const landlords = await this.prisma.user.findMany({
+      where: {
+        role: UserRole.LANDLORD,
+        deactivatedAt: null,
+        properties: { some: {} },
+        NOT: PlatformSettingsService.verifiedLandlordFilter(),
+      },
+      select: { id: true, email: true, fullName: true, identityVerification: { select: { status: true } } },
+    });
+    for (const landlord of landlords) {
+      const status = landlord.identityVerification?.status;
+      const next =
+        status === VerificationStatus.PENDING
+          ? 'Your documents are already with us for review; your listings will reappear as soon as you are verified.'
+          : status === VerificationStatus.REJECTED
+            ? 'Your last submission was not accepted. Open your Profile in the app to see what to fix and resubmit.'
+            : 'Open your Profile in the app and tap "Get verified" to submit your ID and ownership documents.';
+      const body = `HomeServant now only shows listings from verified landlords, so your listings are hidden from tenants. ${next} Your current tenants and bookings are not affected.`;
+      await this.notifications.create(landlord.id, NotificationType.BOOKING_STATUS, 'Get verified to show your listings', body);
+      await this.mail.send(
+        landlord.email,
+        'Get verified to keep your listings visible on HomeServant',
+        `<p>Hi${landlord.fullName ? ` ${escapeHtml(landlord.fullName)}` : ''},</p><p>${escapeHtml(body)}</p>`,
+        body,
+      );
+    }
+    this.logger.log(`Told ${landlords.length} unverified landlord(s) their listings are hidden`);
+    return landlords.length;
+  }
+
+  /// Default true (pay everyone) when the row doesn't exist yet.
+  async payUnverifiedLandlords(): Promise<boolean> {
+    const row = await this.prisma.platformSettings.findUnique({ where: { id: 1 }, select: { payUnverifiedLandlords: true } });
+    return row?.payUnverifiedLandlords ?? true;
   }
 
   async requireVerifiedLandlords(): Promise<boolean> {
@@ -41,8 +96,26 @@ export class PlatformSettingsService {
     return row?.requireVerifiedLandlords ?? false;
   }
 
+  /// The two listing flags every property response carries: whether its
+  /// landlord is verified (badge), and whether Platform Controls is hiding
+  /// it from browsing because they aren't (so a tenant who already booked
+  /// it, or saved it, can be told why it no longer shows up).
+  static listingFlags(landlordStatus: VerificationStatus | null | undefined, requireVerified: boolean) {
+    const landlordVerified = landlordStatus === VerificationStatus.APPROVED;
+    return { landlordVerified, hiddenUntilLandlordVerified: requireVerified && !landlordVerified };
+  }
+
+  /// Property include that fetches just the landlord's verification status.
+  static readonly landlordStatusInclude = {
+    landlord: { select: { identityVerification: { select: { status: true } } } },
+  } as const;
+
   /// Property filter for "only verified landlords' listings".
   static verifiedLandlordFilter(): Prisma.UserWhereInput {
     return { identityVerification: { status: VerificationStatus.APPROVED } };
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

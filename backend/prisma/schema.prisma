@@ -174,6 +174,32 @@ model Payment {
   platformFeeAmount     Int
   paystackReference     String                @unique
   transferRecipientCode String?
+  /// Set while this payment's release to a landlord is held because they
+  /// aren't verified and PlatformSettings.payUnverifiedLandlords is off.
+  /// Cleared when it's released.
+  heldForVerificationAt DateTime?
+  /// Payout bookkeeping — see PaymentsService.releasePaymentToRecipient.
+  /// [payoutReference] is the Paystack transfer reference of the latest
+  /// attempt, saved *before* the transfer is sent, so any retry first asks
+  /// Paystack whether that transfer already went out (never paying twice).
+  payoutReference       String?               @unique
+  payoutAttempts        Int                   @default(0)
+  payoutLastError       String?
+  payoutLastAttemptAt   DateTime?
+  /// Set while money is moving for this payment (a payout OR a refund).
+  /// Only one such action may run at a time, so a payment can never be both
+  /// paid out and refunded, or refunded twice — see PaymentsService.withMoneyLock.
+  moneyLockedAt         DateTime?
+  /// Refund bookkeeping. A failed refund keeps what was asked for, so an
+  /// admin can retry exactly that; Paystack is always asked first whether a
+  /// refund already exists for the charge (never refunding twice).
+  refundRequestedBy     String?
+  refundRequestedAmount Int?
+  refundLastError       String?
+  refundLastAttemptAt   DateTime?
+  /// Set when an admin refunded the tenant from the console, with why.
+  refundedById          String?
+  refundReason          String?
   status                PaymentStatus         @default(INITIATED)
   paidAt                DateTime?
   releasedAt            DateTime?
@@ -1199,6 +1225,12 @@ model PlatformSettings {
   /// bookings on an unverified landlord's property are refused. Landlords
   /// still see their own listings; existing tenancies are untouched.
   requireVerifiedLandlords Boolean  @default(false)
+  /// On (default): landlords are paid out as usual whether or not they're
+  /// verified. Off: a payout to an unverified landlord (move-in, shortlet,
+  /// renewal) is held by HomeServant — the tenant's side still goes ahead —
+  /// and released automatically once the landlord is verified, or when this
+  /// is switched back on. See PaymentsService.releaseOrHoldForVerification.
+  payUnverifiedLandlords   Boolean  @default(true)
   updatedById              String?
   updatedBy                User?    @relation("PlatformSettingsEditor", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt                DateTime @updatedAt

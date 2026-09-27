@@ -28,6 +28,7 @@ class Property {
     this.shortletUnavailable = false,
     this.shortletUnavailableUntil,
     this.landlordVerified = false,
+    this.hiddenUntilLandlordVerified = false,
   });
 
   /// Builds a [Property] from a `GET /properties` / `GET /properties/:id`
@@ -71,6 +72,7 @@ class Property {
           (json['isShortletUnavailable'] as bool?) ??
           false,
       landlordVerified: json['landlordVerified'] as bool? ?? false,
+      hiddenUntilLandlordVerified: json['hiddenUntilLandlordVerified'] as bool? ?? false,
       shortletUnavailableUntil: _parseDate(json['availableAgainAt']) ??
           _parseDate(json['shortletUnavailableUntil']) ??
           _parseDate(json['unavailableUntil']),
@@ -152,6 +154,7 @@ class Property {
     shortletUnavailable: shortletUnavailable,
     shortletUnavailableUntil: shortletUnavailableUntil,
     landlordVerified: landlordVerified,
+    hiddenUntilLandlordVerified: hiddenUntilLandlordVerified,
   );
 
   static String _categoryFromApi(String value) => switch (value) {
@@ -175,6 +178,11 @@ class Property {
   /// The landlord's identity has been verified by HomeServant (shows the
   /// "Verified landlord" badge).
   final bool landlordVerified;
+
+  /// Platform Controls ("Only verified landlords") is hiding this listing
+  /// from browsing because its landlord isn't verified. A tenant who already
+  /// booked or saved it still sees it, with this explained.
+  final bool hiddenUntilLandlordVerified;
 
   final String id;
 
