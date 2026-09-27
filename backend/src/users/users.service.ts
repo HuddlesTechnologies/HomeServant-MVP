@@ -41,6 +41,9 @@ const _referralCodeChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function hasCompleteProfile(user: {
   fullName: string | null;
   phoneNumber: string | null;
+  houseAddress: string | null;
+  dateOfBirth: Date | null;
+  profilePhotoUrl: string | null;
   gender: unknown;
   occupation: string | null;
   maritalStatus: unknown;
@@ -48,6 +51,9 @@ function hasCompleteProfile(user: {
   return (
     !!user.fullName?.trim() &&
     !!user.phoneNumber?.trim() &&
+    !!user.houseAddress?.trim() &&
+    user.dateOfBirth != null &&
+    !!user.profilePhotoUrl &&
     user.gender != null &&
     !!user.occupation?.trim() &&
     user.maritalStatus != null

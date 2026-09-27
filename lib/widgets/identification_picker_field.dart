@@ -2,29 +2,55 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
+import 'field_error_text.dart';
 import 'pill_text_field.dart';
 
 /// The "Means of Identification" bottom-sheet picker plus its conditional,
 /// per-ID-type-formatted number field — shared by the landlord and tenant
-/// second signup steps. Neither screen's submit call reads the picked
-/// identification or its number back out (see each screen's own comment:
-/// this step has no backend KYC/verification model yet, so it's collected
-/// only for UI completeness), so this widget owns that bit of state
-/// entirely on its own rather than reporting it back up.
+/// second signup steps. Both are required: the screen calls [validate] via
+/// a GlobalKey before submitting. (There's no backend KYC/verification
+/// model yet, so the picked ID isn't sent anywhere.)
 class IdentificationPickerField extends StatefulWidget {
-  const IdentificationPickerField({super.key, required this.labelColor});
+  const IdentificationPickerField({super.key, required this.labelColor, required this.errorColor});
 
   final Color labelColor;
+  final Color errorColor;
 
   @override
-  State<IdentificationPickerField> createState() => _IdentificationPickerFieldState();
+  State<IdentificationPickerField> createState() => IdentificationPickerFieldState();
 }
 
-class _IdentificationPickerFieldState extends State<IdentificationPickerField> {
+class IdentificationPickerFieldState extends State<IdentificationPickerField> {
   static const _idOptions = ['NIN', "Driver's License", "Voter's Card", 'International Passport'];
 
   final _idNumberController = TextEditingController();
   String? _identification;
+  String? _typeError;
+  String? _numberError;
+
+  /// Both an ID type and a correctly formatted number. Shows the errors.
+  bool validate() {
+    final format = _idNumberFormat;
+    final number = _idNumberController.text.trim();
+    String? typeError;
+    String? numberError;
+    if (_identification == null || format == null) {
+      typeError = 'Select your means of identification';
+    } else if (number.isEmpty) {
+      numberError = 'Enter your $_identification number';
+    } else if (_identification == 'NIN' && number.length != 11) {
+      numberError = 'Your NIN must be 11 digits';
+    } else if (_identification == "Voter's Card" && number.length != 19) {
+      numberError = "Your Voter's Card number must be 19 characters";
+    } else if (number.length < 6) {
+      numberError = 'Enter your full $_identification number';
+    }
+    setState(() {
+      _typeError = typeError;
+      _numberError = numberError;
+    });
+    return typeError == null && numberError == null;
+  }
 
   @override
   void dispose() {
@@ -53,6 +79,8 @@ class _IdentificationPickerFieldState extends State<IdentificationPickerField> {
     if (result != null && result != _identification) {
       setState(() {
         _identification = result;
+        _typeError = null;
+        _numberError = null;
         _idNumberController.clear();
       });
     }
@@ -87,6 +115,7 @@ class _IdentificationPickerFieldState extends State<IdentificationPickerField> {
           labelColor: widget.labelColor,
           onTap: _pickIdentification,
         ),
+        FieldErrorText(_typeError, color: widget.errorColor),
         if (_idNumberFormat case final format?) ...[
           const SizedBox(height: 14),
           PillTextField(
@@ -105,6 +134,7 @@ class _IdentificationPickerFieldState extends State<IdentificationPickerField> {
               LengthLimitingTextInputFormatter(format.maxLength),
             ],
           ),
+          FieldErrorText(_numberError, color: widget.errorColor),
         ],
       ],
     );

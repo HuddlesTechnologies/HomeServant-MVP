@@ -21,6 +21,7 @@ class PillTextField extends StatefulWidget {
     this.onTap,
     this.readOnly = false,
     this.validator,
+    this.errorColor = Colors.redAccent,
     this.inputFormatters,
     this.minLines,
     this.maxLines = 1,
@@ -39,6 +40,11 @@ class PillTextField extends StatefulWidget {
   final VoidCallback? onTap;
   final bool readOnly;
   final String? Function(String?)? validator;
+
+  /// Colour of the validation message drawn under the pill, on whatever
+  /// background the field sits on (pass the screen's own, e.g.
+  /// UserRole.errorColor on the signup screens).
+  final Color errorColor;
   final List<TextInputFormatter>? inputFormatters;
   final int? minLines;
   final int? maxLines;
@@ -117,8 +123,14 @@ class _PillTextFieldState extends State<PillTextField> {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(widget.borderRadius),
-          borderSide: const BorderSide(color: Colors.redAccent, width: 1.2),
+          borderSide: BorderSide(color: widget.errorColor, width: 1.2),
         ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(widget.borderRadius),
+          borderSide: BorderSide(color: widget.errorColor, width: 1.5),
+        ),
+        errorStyle: AppTextStyles.body(color: widget.errorColor, size: 12.5),
+        errorMaxLines: 2,
       ),
     );
   }

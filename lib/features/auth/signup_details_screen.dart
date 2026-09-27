@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/user_role.dart';
 import '../../state/app_state.dart';
+import '../../widgets/field_error_text.dart';
 import '../../widgets/home_servant_logo.dart';
 import '../../widgets/identification_picker_field.dart';
 import '../../widgets/labeled_pill_field.dart';
@@ -42,6 +43,9 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
   MaritalStatus? _maritalStatus;
   bool _showGenderError = false;
   bool _showMaritalStatusError = false;
+  String? _photoError;
+  String? _documentError;
+  final _idKey = GlobalKey<IdentificationPickerFieldState>();
   bool _submitting = false;
   String? _error;
 
@@ -50,13 +54,21 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
   /// they're collected here for UI completeness but only the photo, a
   /// tenant's address and the fields below actually save.
   Future<void> _finish() async {
+    // Every field on this step is required.
     final formValid = _formKey.currentState?.validate() ?? false;
+    final idValid = _idKey.currentState?.validate() ?? false;
     final missingGender = _gender == null;
     final missingMaritalStatus = _maritalStatus == null;
-    if (!formValid || missingGender || missingMaritalStatus) {
+    final photoError = _photo == null
+        ? 'Add a profile photo'
+        : (!_photo!.isImage ? 'Your profile photo must be an image' : null);
+    final documentError = _role.isLandlord && _document == null ? 'Upload your document' : null;
+    if (!formValid || !idValid || missingGender || missingMaritalStatus || photoError != null || documentError != null) {
       setState(() {
         _showGenderError = missingGender;
         _showMaritalStatusError = missingMaritalStatus;
+        _photoError = photoError;
+        _documentError = documentError;
       });
       return;
     }
@@ -98,14 +110,20 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
   Future<void> _pickPhoto() async {
     final picked = await pickUpload(context);
     if (picked != null) {
-      setState(() => _photo = picked);
+      setState(() {
+        _photo = picked;
+        _photoError = null;
+      });
     }
   }
 
   Future<void> _pickDocument() async {
     final picked = await pickUpload(context);
     if (picked != null) {
-      setState(() => _document = picked);
+      setState(() {
+        _document = picked;
+        _documentError = null;
+      });
     }
   }
 
@@ -184,15 +202,17 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
                 ),
               ),
             ),
+            FieldErrorText(_photoError, color: _role.errorColor, textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            if (_role.isLandlord)
+            if (_role.isLandlord) ...[
               PillOutlineButton(
                 label: _document?.fileName ?? 'Upload your document',
                 textColor: AppColors.navy,
                 icon: Icons.upload_file_rounded,
                 onPressed: _pickDocument,
-              )
-            else ...[
+              ),
+              FieldErrorText(_documentError, color: _role.errorColor),
+            ] else ...[
               Text("What's your address?", style: AppTextStyles.body(color: _role.foreground, weight: FontWeight.w600)),
               const SizedBox(height: 8),
               PillTextField(
@@ -201,10 +221,12 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
                 minLines: 3,
                 maxLines: 5,
                 borderRadius: 20,
+                errorColor: _role.errorColor,
+                validator: (value) => value == null || value.trim().isEmpty ? 'Enter your address' : null,
               ),
             ],
             const SizedBox(height: 22),
-            IdentificationPickerField(labelColor: _role.foreground),
+            IdentificationPickerField(key: _idKey, labelColor: _role.foreground, errorColor: _role.errorColor),
             const SizedBox(height: 22),
             Text('Gender', style: AppTextStyles.body(color: _role.foreground, weight: FontWeight.w600)),
             const SizedBox(height: 8),
@@ -239,16 +261,14 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
                 ],
               ],
             ),
-            if (_showGenderError) ...[
-              const SizedBox(height: 6),
-              Text('Please select your gender', style: AppTextStyles.body(color: Colors.redAccent, size: 12)),
-            ],
+            FieldErrorText(_showGenderError ? 'Please select your gender' : null, color: _role.errorColor),
             const SizedBox(height: 22),
             LabeledPillField(
               label: 'Occupation',
               labelColor: _role.foreground,
               controller: _occupationController,
               hint: 'Enter your occupation',
+              errorColor: _role.errorColor,
               validator: (value) {
                 if (value == null || value.trim().isEmpty) return 'Enter your occupation';
                 return null;
@@ -261,14 +281,8 @@ class _SignupDetailsScreenState extends State<SignupDetailsScreen> {
               labelColor: _role.foreground,
               onTap: _pickMaritalStatus,
             ),
-            if (_showMaritalStatusError) ...[
-              const SizedBox(height: 6),
-              Text('Please select your marital status', style: AppTextStyles.body(color: Colors.redAccent, size: 12)),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
-            ],
+            FieldErrorText(_showMaritalStatusError ? 'Please select your marital status' : null, color: _role.errorColor),
+            FieldErrorText(_error, color: _role.errorColor, textAlign: TextAlign.center),
             const SizedBox(height: 32),
             PillButton(
               label: _submitting ? 'Saving…' : 'Continue',

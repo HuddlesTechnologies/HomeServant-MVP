@@ -33,6 +33,11 @@ enum UserRole {
   /// light sand, so it uses a near-black brown to stay legible.
   Color get foreground => isLandlord ? AppColors.landlordText : AppColors.white;
 
+  /// Validation text on this role's signup background: a dark red on the
+  /// landlord sand (about 5:1) and a light red on the tenant navy
+  /// (about 6:1). Colors.redAccent was only about 2:1 on sand.
+  Color get errorColor => isLandlord ? const Color(0xFFA61B1B) : const Color(0xFFFF7A7A);
+
   /// Colour for emphasised text/links drawn directly on [background] (e.g.
   /// "Sign Up", "Resend OTP") — distinct from [foreground] so it still reads
   /// as a highlight, and distinct from [accent] because that one has to stay

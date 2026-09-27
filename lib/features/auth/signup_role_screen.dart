@@ -118,6 +118,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.username, AutofillHints.email],
+                    errorColor: _role.errorColor,
                     validator: (value) {
                       if (value == null || !value.contains('@')) {
                         return 'Enter a valid email';
@@ -138,6 +139,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                     // autofill service instead, which doesn't have this
                     // problem, so the hint is kept there.
                     autofillHints: kIsWeb ? null : const [AutofillHints.newPassword],
+                    errorColor: _role.errorColor,
                     validator: (value) {
                       if (value == null || value.length < 8) {
                         return 'At least 8 characters';
@@ -151,6 +153,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                     controller: _confirmPassword,
                     obscureText: true,
                     autofillHints: kIsWeb ? null : const [AutofillHints.newPassword],
+                    errorColor: _role.errorColor,
                     validator: (value) {
                       if (value != _password.text) return "Passwords don't match";
                       return null;
@@ -163,7 +166,7 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: AppTextStyles.body(color: Colors.redAccent, size: 13),
+                style: AppTextStyles.body(color: _role.errorColor, size: 13),
                 textAlign: TextAlign.center,
               ),
             ],

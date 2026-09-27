@@ -161,7 +161,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),
-              Text(_error!, style: AppTextStyles.body(color: Colors.redAccent, size: 13), textAlign: TextAlign.center),
+              Text(_error!, style: AppTextStyles.body(color: role.errorColor, size: 13), textAlign: TextAlign.center),
             ],
             const SizedBox(height: 24),
             PillButton(

@@ -162,7 +162,12 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 String? _profileSetupRoute(AppState appState) {
   if (appState.role != UserRole.tenant && appState.role != UserRole.landlord) return null;
   if (appState.profileCompleted) return null;
-  final needsBasics = appState.fullName.trim().isEmpty || appState.phoneNumber.trim().isEmpty;
+  // Everything signup step 1 asks for; missing any of it resumes there
+  // (a tenant's address is asked on step 2, a landlord's on step 1).
+  final needsBasics = appState.fullName.trim().isEmpty ||
+      appState.phoneNumber.trim().isEmpty ||
+      appState.dateOfBirth == null ||
+      (appState.role == UserRole.landlord && appState.houseAddress.trim().isEmpty);
   if (appState.role == UserRole.landlord) {
     return needsBasics ? '/signup-landlord-1' : '/signup-landlord-2';
   }
