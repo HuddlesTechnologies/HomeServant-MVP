@@ -125,7 +125,10 @@
   <tr><td><code>RefreshToken</code>, <code>OtpCode</code>, <code>PendingAdmin</code></td><td>Sessions; one-time codes (10-minute lifetime); admin invites not yet confirmed.</td></tr>
   <tr><td><code>Property</code>, <code>Favorite</code>, <code>Review</code></td><td>Listings (category, price unit, photos, video, occupancy, messaging toggle), wishlists, reviews.</td></tr>
   <tr><td><code>Booking</code>, <code>TenancyAgreement</code></td><td>Rentals and shortlets with their status and lease dates; the agreement record.</td></tr>
-  <tr><td><code>Payment</code></td><td>The escrow ledger: one row per charge, for either a booking or an order item.</td></tr>
+  <tr><td><code>Payment</code></td><td>The escrow ledger: one row per charge, for either a booking or an order item. Payout/refund bookkeeping: <code>payoutReference</code>, attempts and last error, <code>heldForVerificationAt</code>, <code>moneyLockedAt</code>, refund request and error, admin refund reason.</td></tr>
+  <tr><td><code>IdentityVerification</code></td><td>One per user: ID type and number, landlord certificate/document paths in the private bucket, review status and reviewer.</td></tr>
+  <tr><td><code>EvictionRequest</code></td><td>A landlord's request to end a tenancy, the tenant's response and the super admin's decision.</td></tr>
+  <tr><td><code>PlatformSettings</code></td><td>Single row of Platform Controls switches (<code>requireVerifiedLandlords</code>, <code>payUnverifiedLandlords</code>).</td></tr>
   <tr><td><code>VendorProfile</code>, <code>Product</code>, <code>MarketplaceOrder</code>, <code>MarketplaceOrderItem</code></td><td>Shops, products, orders (one payment per item).</td></tr>
   <tr><td><code>Thread</code>, <code>ThreadParticipant</code>, <code>Message</code>, <code>ThreadTransferLog</code></td><td>Chats, including support threads (<code>isSupport</code>, <code>status</code>, <code>assignedAdminId</code>, reminder timestamps) and their transfer history.</td></tr>
   <tr><td><code>Notification</code></td><td>In-app notifications, with an optional <code>threadId</code> link.</td></tr>
@@ -145,7 +148,8 @@
 <p>All in <code>PaymentsService</code>. HomeServant charges the full amount through Paystack and holds it in its own balance (<code>PAID_HELD</code>). Later it transfers the recipient's share to their verified bank account (<code>RELEASED</code>) or refunds the payer (<code>REFUNDED</code>).</p>
 <ul>
   <li>The platform keeps <strong>5%</strong> on a release, or <strong>0.2%</strong> on a rental refunded before move-in. Fees are in basis points, and amounts are converted to kobo only at the Paystack boundary.</li>
-  <li>Paystack confirms payments at <code>POST /api/paystack/webhook</code>. The signature (<code>x-paystack-signature</code>) is checked against the raw request body before anything is trusted.</li>
+  <li>Paystack confirms payments at <code>POST /api/paystack/webhook</code>. The signature (<code>x-paystack-signature</code>) is checked against the raw request body before anything is trusted. <code>charge.success</code> confirms a payment; <code>transfer.failed</code> / <code>transfer.reversed</code> put a payout back to owed. Set the Webhook URL in Paystack (Settings &gt; API Keys &amp; Webhooks) for each mode; see <code>backend/README.md</code> &rarr; <em>Paystack setup</em>.</li>
+  <li><strong>Never twice:</strong> every payout and refund runs under <code>withMoneyLock</code> (one money action per payment at a time) and asks Paystack first (<code>verifyTransfer</code> / <code>refundedSoFar</code>). Rent payouts that fail no longer block the tenant; they wait on the admin Payouts &amp; Refunds screen. Payouts to unverified landlords can be held (<code>payUnverifiedLandlords</code>).</li>
 </ul>
 <h2>Marketplace</h2>
 <ul>
@@ -205,7 +209,8 @@
 <ul>
   <li><strong>Uploads:</strong> <code>POST /uploads/sign</code> takes a file name and folder. Only image extensions and known folders are accepted. It returns a one-time Supabase upload link and the file's public URL, stored under <code>&lt;folder&gt;/&lt;userId&gt;/&lt;random&gt;</code>. Any endpoint that saves an image URL first calls <code>StorageService.assertIsOwnImage</code>, which checks it's in our bucket and really an image.</li>
   <li><strong>Email and codes:</strong> <code>OTP_PROVIDER</code> selects <code>console</code> (codes printed to the server log, for development) or <code>resend</code> (real email). <code>MailService</code> uses the same setting.</li>
-  <li><strong>Paystack:</strong> bank list, account-name lookup, charges, transfer recipients, transfers, refunds, webhook.</li>
+  <li><strong>Paystack:</strong> bank list, account-name lookup, charges, transfer recipients, transfers (and verifying a transfer by reference), refunds (and checking what was already refunded), webhook.</li>
+  <li><strong>Private uploads:</strong> identity documents go to the private bucket via <code>POST /verification/uploads/sign</code> (photo or PDF); saved paths must be in the user's own folder and are checked to really be an image or PDF. Admins see them only through 10-minute signed links. They are deleted with the account.</li>
   <li><strong>Google:</strong> ID tokens are verified with Google's library against <code>GOOGLE_CLIENT_ID</code>.</li>
   <li><strong>Delivery:</strong> <code>DELIVERY_PROVIDER</code> selects <code>console</code> (default) or <code>gig</code>. The GIG integration is unverified scaffolding.</li>
 </ul>
