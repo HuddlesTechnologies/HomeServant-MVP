@@ -174,4 +174,10 @@ class BookingsRepository {
       rethrow;
     }
   }
+
+  /// Clear requests from the landlord's dashboard feed, or put them back
+  /// ([cleared] false, for Undo). No [bookingIds] = every pending request.
+  Future<void> setFeedCleared({required bool cleared, List<String>? bookingIds}) => _client.call(() async {
+    await _client.dio.patch('/bookings/landlord/feed', data: {'cleared': cleared, if (bookingIds != null) 'bookingIds': bookingIds});
+  });
 }

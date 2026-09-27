@@ -215,7 +215,7 @@
 <table>
   <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
   <tr><td>LandlordDashboardScreen</td><td>Tabs: Home, Messages, Bookings, Profile.</td><td>(tabs below)</td></tr>
-  <tr><td>LandlordHomeTab</td><td>Stats (including the real booking-request count), an Upload a Property button, incoming bookings, uploads.</td><td><code>/bookings/landlord</code></td></tr>
+  <tr><td>LandlordHomeTab</td><td>Stats (including the real booking-request count), Upload a Property and My Tenants buttons, incoming bookings (tenant photos via <code>LandlordAvatar(photoUrl)</code>; ✕ / Clear all with Undo hide a request from the feed without declining it), uploads.</td><td><code>/bookings/landlord</code></td></tr>
   <tr><td>LandlordTenantsScreen, TenantProfileViewScreen</td><td>My Tenants: grouped from the landlord's bookings (moved in or paid shortlet), name search, Current/Former/All, rented and expiry dates. The profile shows contact details and a <code>LandlordTenancyCard</code> per tenancy with the eviction controls.</td><td><code>/bookings/landlord</code>, <code>/evictions/*</code></td></tr>
   <tr><td>VerificationSubmitScreen (<code>features/profile</code>)</td><td>"Get verified" after signup (older accounts, or resubmitting after a rejection): same ID field, file rules (photo or PDF) and private upload as signup.</td><td><code>/verification/*</code></td></tr>
   <tr><td>LandlordEvictionPanel (<code>widgets/eviction_widgets.dart</code>)</td><td>On the owner's property page: current tenant, Request eviction, the pending request and Withdraw. <code>TenantEvictionNotice</code> shows it on the tenant's History card with Respond.</td><td><code>/evictions/*</code></td></tr>

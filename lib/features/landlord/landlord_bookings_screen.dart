@@ -131,7 +131,12 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
           title: 'All Bookings',
           rows: [
             for (final b in bookings)
-              _HistoryRow(name: b.tenantName ?? 'Tenant', subtitle: b.property.title, outcome: _outcomeOf(b.status)),
+              _HistoryRow(
+                name: b.tenantName ?? 'Tenant',
+                subtitle: b.property.title,
+                outcome: _outcomeOf(b.status),
+                photoUrl: b.tenantProfilePhotoUrl,
+              ),
           ],
         ),
       ),
@@ -149,6 +154,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                 name: b.tenantName ?? 'Tenant',
                 subtitle: '${b.property.title} • ${_rentSubtitle(b)}',
                 outcome: _Outcome.accepted,
+                photoUrl: b.tenantProfilePhotoUrl,
               ),
           ],
         ),
@@ -265,7 +271,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                         ),
                         child: Row(
                           children: [
-                            const LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy),
+                            LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -414,7 +420,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                         ),
                         child: Row(
                           children: [
-                            const LandlordAvatar(radius: 18),
+                            LandlordAvatar(radius: 18, photoUrl: entry.tenantProfilePhotoUrl),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -497,7 +503,7 @@ class _ActiveRentalTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              const LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy),
+              LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -555,8 +561,9 @@ class _ActiveRentalTile extends StatelessWidget {
 }
 
 class _HistoryRow {
-  const _HistoryRow({required this.name, required this.subtitle, required this.outcome});
+  const _HistoryRow({required this.name, required this.subtitle, required this.outcome, this.photoUrl});
 
+  final String? photoUrl;
   final String name;
   final String subtitle;
   final _Outcome outcome;
@@ -617,7 +624,7 @@ class _HistoryTile extends StatelessWidget {
       decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
-          const LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy),
+          LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: row.photoUrl),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

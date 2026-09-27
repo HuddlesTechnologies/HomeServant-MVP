@@ -108,4 +108,27 @@ describeDb('eviction requests (real Postgres)', () => {
     expect(rows.find((b) => b.tenantId === tenant.id)!.tenant.phoneNumber).toBe('08011112222');
     expect(rows.find((b) => b.tenantId === requester.id)!.tenant.phoneNumber).toBeNull();
   });
+
+  it('landlords can clear requests from their feed (and undo) without declining them', async () => {
+    const landlord = await makeUser(prisma, UserRole.LANDLORD);
+    const other = await makeUser(prisma, UserRole.LANDLORD);
+    const tenant = await makeUser(prisma, UserRole.TENANT);
+    const mine = await makeProperty(prisma, landlord.id, { category: 'SHORTLET' });
+    const theirs = await makeProperty(prisma, other.id, { category: 'SHORTLET' });
+    const a = await prisma.booking.create({ data: { propertyId: mine.id, tenantId: tenant.id, status: 'PENDING' } });
+    const b = await prisma.booking.create({ data: { propertyId: mine.id, tenantId: tenant.id, status: 'PENDING' } });
+    const notMine = await prisma.booking.create({ data: { propertyId: theirs.id, tenantId: tenant.id, status: 'PENDING' } });
+    const bookings = new BookingsService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never);
+
+    // Another landlord's booking can't be touched, even by id.
+    expect(await bookings.setFeedCleared(landlord.id, true, [a.id, notMine.id])).toEqual({ count: 1 });
+    const cleared = await prisma.booking.findUniqueOrThrow({ where: { id: a.id } });
+    expect(cleared.landlordFeedClearedAt).not.toBeNull();
+    expect(cleared.status).toBe('PENDING'); // not declined
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: notMine.id } })).landlordFeedClearedAt).toBeNull();
+
+    expect(await bookings.setFeedCleared(landlord.id, true)).toEqual({ count: 2 }); // clear all
+    expect(await bookings.setFeedCleared(landlord.id, false, [b.id])).toEqual({ count: 1 }); // undo one
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: b.id } })).landlordFeedClearedAt).toBeNull();
+  });
 });

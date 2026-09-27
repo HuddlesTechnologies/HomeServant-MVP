@@ -15,6 +15,7 @@ import '../dashboard/chat_thread_screen.dart';
 import 'widgets/support_triage_badges.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/support_thread_actions.dart';
+import '../../widgets/contact_avatar.dart';
 import 'widgets/admin_badge.dart';
 
 /// The admin console's messaging area — the signed-in admin's own inbox
@@ -119,6 +120,11 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
   /// opening it — that's what makes "opening a message from the queue"
   /// itself the claim, not waiting for a reply. If another admin claimed
   /// it a moment earlier, this throws instead of navigating anywhere.
+  /// The customer behind a queued support chat, for their photo.
+  ThreadParticipant? _requesterOf(SupportQueueThread thread) => thread.requesterId == null
+      ? null
+      : ThreadParticipant(id: thread.requesterId!, fullName: thread.requesterName, profilePhotoUrl: thread.requesterPhotoUrl);
+
   Future<void> _openQueueThread(SupportQueueThread thread) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -140,6 +146,7 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
           contactName: requesterName,
           threadId: thread.id,
           adminViewOfUserId: thread.requesterId,
+          otherParticipant: _requesterOf(thread),
           showExportAction: true,
           showResolveTransferActions: true,
           onResolve: () => _resolve(thread.id),
@@ -263,13 +270,13 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
                                 decoration: adminCardDecoration,
                                 child: ChatThreadListTile(
                                   thread: thread,
-                                  avatar: CircleAvatar(
+                                  // The customer's photo when they have one.
+                                  avatar: ContactAvatar(
+                                    participant: thread.otherParticipant,
                                     radius: 22,
                                     backgroundColor: AppColors.navy.withValues(alpha: 0.1),
-                                    child: Icon(
-                                      thread.isSupport ? Icons.support_agent_rounded : Icons.person,
-                                      color: AppColors.navy,
-                                    ),
+                                    iconColor: AppColors.navy,
+                                    icon: thread.isSupport ? Icons.support_agent_rounded : Icons.person,
                                   ),
                                   nameStyle: AppTextStyles.body(
                                     color: AppColors.navy,
@@ -350,10 +357,12 @@ class _AdminMessagesTabState extends State<AdminMessagesTab> {
               decoration: adminCardDecoration,
               child: Row(
                 children: [
-                  CircleAvatar(
+                  ContactAvatar(
+                    participant: _requesterOf(thread),
                     radius: 22,
                     backgroundColor: AppColors.navy.withValues(alpha: 0.1),
-                    child: const Icon(Icons.support_agent_rounded, color: AppColors.navy),
+                    iconColor: AppColors.navy,
+                    icon: Icons.support_agent_rounded,
                   ),
                   const SizedBox(width: 12),
                   Expanded(

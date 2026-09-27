@@ -7,6 +7,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/verified_badge.dart';
+import '../../widgets/upload_picker.dart';
 import 'tenant_profile_view_screen.dart';
 
 enum _TenantFilter { current, former, all }
@@ -246,13 +247,18 @@ class _TenantTile extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Their photo; initials (white on navy) when they have none.
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: AppColors.navy,
-                  child: Text(
-                    entry.name.characters.first.toUpperCase(),
-                    style: AppTextStyles.body(color: Colors.white, size: 16, weight: FontWeight.w700),
-                  ),
+                  backgroundImage: _photo(b) == null ? null : imageProviderForPath(_photo(b)!),
+                  onBackgroundImageError: _photo(b) == null ? null : (_, __) {},
+                  child: _photo(b) != null
+                      ? null
+                      : Text(
+                          entry.name.characters.first.toUpperCase(),
+                          style: AppTextStyles.body(color: Colors.white, size: 16, weight: FontWeight.w700),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -307,6 +313,11 @@ class _TenantTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String? _photo(Booking b) {
+    final url = b.tenantProfilePhotoUrl;
+    return url == null || url.isEmpty ? null : url;
   }
 
   Widget _dateRow(String label, String value, {bool highlight = false}) => Padding(

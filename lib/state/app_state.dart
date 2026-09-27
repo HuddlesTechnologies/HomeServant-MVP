@@ -861,6 +861,13 @@ class AppState extends ChangeNotifier {
     unawaited(loadEvictions());
   }
 
+  /// Clears requests from the landlord's home feed (or restores them, for
+  /// Undo), then refreshes. Nothing is declined.
+  Future<void> setIncomingFeedCleared({required bool cleared, List<String>? bookingIds}) async {
+    await _bookingsRepo.setFeedCleared(cleared: cleared, bookingIds: bookingIds);
+    await loadLandlordBookings();
+  }
+
   Future<void> loadLandlordBookings() async {
     if (userId == null) return;
     landlordBookings = await _bookingsRepo.forLandlord();

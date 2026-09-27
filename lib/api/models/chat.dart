@@ -203,6 +203,7 @@ class SupportQueueThread {
     this.assignedAdminId,
     this.requesterId,
     this.requesterName,
+    this.requesterPhotoUrl,
     this.lastMessage,
     this.supportTopic,
     this.priority = SupportPriority.normal,
@@ -224,6 +225,7 @@ class SupportQueueThread {
   /// support conversation opened this way.
   final String? requesterId;
   final String? requesterName;
+  final String? requesterPhotoUrl;
   final ChatMessage? lastMessage;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -236,6 +238,7 @@ class SupportQueueThread {
       assignedAdminId: json['assignedAdminId'] as String?,
       requesterId: requester?['id'] as String?,
       requesterName: requester?['fullName'] as String?,
+      requesterPhotoUrl: requester?['profilePhotoUrl'] as String?,
       lastMessage: lastMessage != null ? ChatMessage.fromApi(lastMessage) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),

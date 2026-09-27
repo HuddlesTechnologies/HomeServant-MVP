@@ -869,6 +869,10 @@ model Booking {
   /// Reset to null on a successful renewal (a new leaseEndDate starts a
   /// new reminder cycle).
   lastRentReminderDaysOut Int?
+  /// The landlord cleared this request from their dashboard's "Incoming
+  /// Bookings" feed. Only hides it there: it is NOT declined, still shows in
+  /// the Bookings tab and still counts as a request waiting for an answer.
+  landlordFeedClearedAt   DateTime?
   message                 String?
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt

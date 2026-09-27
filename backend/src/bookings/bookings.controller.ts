@@ -9,6 +9,7 @@ import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { ProposeInspectionDto } from './dto/propose-inspection.dto';
 import { RespondBookingDto } from './dto/respond-booking.dto';
+import { FeedClearDto } from './dto/feed-clear.dto';
 
 @Controller('bookings')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,6 +32,14 @@ export class BookingsController {
   @Roles(UserRole.LANDLORD)
   forLandlord(@CurrentUser() user: AuthenticatedUser) {
     return this.bookings.findForLandlord(user.sub);
+  }
+
+  /// Clear requests from (or, with `cleared: false`, put them back on) the
+  /// dashboard's Incoming Bookings feed. Doesn't decline anything.
+  @Patch('landlord/feed')
+  @Roles(UserRole.LANDLORD)
+  setFeedCleared(@CurrentUser() user: AuthenticatedUser, @Body() dto: FeedClearDto) {
+    return this.bookings.setFeedCleared(user.sub, dto.cleared, dto.bookingIds);
   }
 
   @Patch(':id/respond')
