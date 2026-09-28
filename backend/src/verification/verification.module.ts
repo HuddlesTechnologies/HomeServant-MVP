@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { IdCheckModule } from '../id-check/id-check.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -8,7 +9,7 @@ import { AdminVerificationController, VerificationController } from './verificat
 import { VerificationService } from './verification.service';
 
 @Module({
-  imports: [AuthModule, NotificationsModule, MailModule, StorageModule, PaymentsModule],
+  imports: [AuthModule, NotificationsModule, MailModule, StorageModule, PaymentsModule, IdCheckModule],
   controllers: [VerificationController, AdminVerificationController],
   providers: [VerificationService],
 })

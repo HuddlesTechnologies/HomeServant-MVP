@@ -128,8 +128,23 @@ class _AdminVerificationsTabState extends State<AdminVerificationsTab> {
                                   ].join(' · '),
                                   style: AppTextStyles.body(color: AppColors.navy, size: 12.5),
                                 ),
+                                // What the issuing body said, so the queue
+                                // can be worked worst-first: a mismatch or
+                                // a number with no record is the one to
+                                // open next. "Not checked" outcomes say
+                                // nothing useful here and are left out.
+                                if (v.idCheckStatus.isAnswer || v.idCheckStatus == IdCheckStatus.error)
+                                  Text(
+                                    v.idCheckStatus.label,
+                                    style: AppTextStyles.body(color: idCheckColor(v.idCheckStatus), size: 12.5, weight: FontWeight.w600),
+                                  ),
                                 if (v.submittedAt != null)
-                                  Text('Submitted ${formatShortDate(v.submittedAt!)}', style: AppTextStyles.body(color: AppColors.hintGrey, size: 12)),
+                                  Text(
+                                    v.autoApproved
+                                        ? 'Verified automatically ${formatShortDate(v.submittedAt!)}'
+                                        : 'Submitted ${formatShortDate(v.submittedAt!)}',
+                                    style: AppTextStyles.body(color: AppColors.hintGrey, size: 12),
+                                  ),
                               ],
                             ),
                           ),

@@ -243,7 +243,7 @@
 </ul>
 <table>
   <tr><th style="width:30%">Screen</th><th>Purpose</th><th style="width:30%">Main API calls</th></tr>
-  <tr><td>AdminVerificationsTab, <code>AdminVerificationCard</code> (on the user detail page)</td><td>ID review queue (masked numbers) and the full record: number, image previews / Open PDF via 10-minute signed links, Verify / Reject with a note.</td><td><code>/admin/verifications/*</code></td></tr>
+  <tr><td>AdminVerificationsTab, <code>AdminVerificationCard</code> (on the user detail page)</td><td>ID review queue (masked numbers, with what the issuing body said so the queue can be worked worst-first) and the full record: number, the ID check panel (outcome, the name on record, "Check with the issuing body"), image previews / Open PDF via 10-minute signed links, Verify / Reject with a note. A submission verified by the check itself names no reviewer.</td><td><code>/admin/verifications/*</code></td></tr>
   <tr><td>AdminEvictionsTab</td><td>Landlord eviction requests: reason, tenant's response, Approve / Reject.</td><td><code>/admin/evictions/*</code></td></tr>
   <tr><td>AdminPlatformControlsScreen</td><td>"Only verified landlords" and "Pay unverified landlords" switches, with impact numbers, plain-language ON/OFF explanations and confirmations.</td><td><code>/admin/platform-settings</code></td></tr>
   <tr><td>AdminPayoutsScreen</td><td>Payouts &amp; Refunds that didn't go through: reason, last error, Retry payout / Retry refund / Refund tenant. Every action is safe to repeat (the server locks and checks Paystack first).</td><td><code>/admin/payouts/*</code></td></tr>

@@ -21,6 +21,21 @@ Color verificationStatusColor(VerificationStatus? status) => switch (status) {
   _ => const Color(0xFF5B6170),
 };
 
+/// Grey for "we don't know" (never checked, or an ID type the provider
+/// doesn't cover), amber for a check that couldn't be made, red for a real
+/// negative answer from the registry, green for a confirmation. All four
+/// read against white and off-white — the two backgrounds they're drawn on.
+const _grey = Color(0xFF5B6170);
+
+Color idCheckColor(IdCheckStatus status) => switch (status) {
+  IdCheckStatus.match => _green,
+  IdCheckStatus.mismatch => _red,
+  IdCheckStatus.notFound => _red,
+  IdCheckStatus.notRun => _grey,
+  IdCheckStatus.unsupported => _grey,
+  IdCheckStatus.error => _amber,
+};
+
 /// "Identity verification" on an admin's user detail page: the full ID
 /// number, the landlord's certificate and document (short-lived signed
 /// links from the private bucket), and Approve / Reject while pending.
@@ -40,6 +55,7 @@ class _AdminVerificationCardState extends State<AdminVerificationCard> {
   VerificationDetail? _detail;
   String? _error;
   DateTime? _loadedAt;
+  bool _rechecking = false;
 
   bool get _canView => context.read<AppState>().adminLevel?.atLeastModerator ?? false;
 
@@ -77,6 +93,30 @@ class _AdminVerificationCardState extends State<AdminVerificationCard> {
     final launched = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     if (!launched && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Couldn't open the document")));
+    }
+  }
+
+  /// Asks the issuing body again. Each press costs a real lookup, so this
+  /// is a button rather than something the card does on its own — and a
+  /// clean answer can verify a tenant without a decision here.
+  Future<void> _recheck() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _rechecking = true;
+      _error = null;
+    });
+    try {
+      final detail = await context.read<AppState>().verification.recheck(widget.userId);
+      if (!mounted) return;
+      setState(() {
+        _detail = detail;
+        _loadedAt = DateTime.now();
+      });
+      messenger.showSnackBar(SnackBar(content: Text(detail.idCheckStatus.label)));
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } finally {
+      if (mounted) setState(() => _rechecking = false);
     }
   }
 
@@ -146,6 +186,10 @@ class _AdminVerificationCardState extends State<AdminVerificationCard> {
             LabeledValueRow('Means of ID', d.idType?.label ?? 'Not given'),
             LabeledValueRow('ID Number', d.idNumber ?? 'Not given'),
             if (d.submittedAt != null) LabeledValueRow('Submitted', formatShortDate(d.submittedAt!)),
+            if (d.idType != null) ...[
+              const SizedBox(height: 12),
+              _IdCheckBlock(detail: d, busy: _rechecking, onRecheck: _recheck),
+            ],
             if (widget.isLandlord) ...[
               const SizedBox(height: 10),
               _DocumentTile(
@@ -171,7 +215,11 @@ class _AdminVerificationCardState extends State<AdminVerificationCard> {
               const SizedBox(height: 10),
               LabeledValueRow(
                 d.status == VerificationStatus.approved ? 'Verified by' : 'Reviewed by',
-                '${d.reviewedBy?.name ?? 'an admin'}, ${formatShortDate(d.reviewedAt!)}',
+                d.autoApproved
+                    // Nobody decided this one, so naming "an admin" would
+                    // be a fiction — the check itself did it.
+                    ? 'the automatic ID check, ${formatShortDate(d.reviewedAt!)}'
+                    : '${d.reviewedBy?.name ?? 'an admin'}, ${formatShortDate(d.reviewedAt!)}',
               ),
               if (d.reviewNote != null) LabeledValueRow('Note', d.reviewNote!),
             ],
@@ -213,6 +261,81 @@ class _AdminVerificationCardState extends State<AdminVerificationCard> {
                 ],
               ),
             ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// What the body that issued this ID said about the number — the thing a
+/// reviewer should read before deciding anything, and the reason an
+/// approved submission may name no reviewer at all. Navy text on the
+/// card's own off-white panel.
+class _IdCheckBlock extends StatelessWidget {
+  const _IdCheckBlock({required this.detail, required this.busy, required this.onRecheck});
+
+  final VerificationDetail detail;
+  final bool busy;
+  final VoidCallback onRecheck;
+
+  @override
+  Widget build(BuildContext context) {
+    final check = detail.idCheckStatus;
+    final colour = idCheckColor(check);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${detail.idType?.label ?? 'ID'} check',
+                  style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 13),
+                ),
+              ),
+              AdminBadge(text: check.label, color: colour),
+            ],
+          ),
+          if (detail.idCheckName != null) ...[
+            const SizedBox(height: 6),
+            LabeledValueRow('Name on record', detail.idCheckName!),
+          ],
+          if (detail.idCheckDetail != null) ...[
+            const SizedBox(height: 6),
+            Text(detail.idCheckDetail!, style: AppTextStyles.body(color: colour, size: 12.5)),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            detail.idCheckedAt == null
+                ? 'This number has not been checked with the issuing body.'
+                : 'Checked ${formatShortDate(detail.idCheckedAt!)}'
+                      '${detail.idCheckProvider == null ? '' : ' via ${detail.idCheckProvider}'}'
+                      '${detail.idCheckReference == null ? '' : ' · ref ${detail.idCheckReference}'}',
+            style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
+          ),
+          // A confirmation won't change on a second ask, so re-checking is
+          // offered for every other outcome only.
+          if (check != IdCheckStatus.match) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: busy ? null : onRecheck,
+              icon: busy
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.navy))
+                  : const Icon(Icons.travel_explore_rounded, color: AppColors.navy, size: 18),
+              label: Text(
+                busy ? 'Checking…' : 'Check with the issuing body',
+                style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 12.5),
+              ),
+            ),
           ],
         ],
       ),

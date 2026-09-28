@@ -61,4 +61,13 @@ export class AdminVerificationController {
   review(@CurrentUser() user: AuthenticatedUser, @Param('userId') userId: string, @Body() dto: ReviewVerificationDto) {
     return this.verification.review(user.sub, userId, dto.decision, dto.note);
   }
+
+  /// Runs the ID number past the issuing body again — for a submission
+  /// whose check errored, or one made before a provider was configured.
+  /// Each call costs a real lookup, hence a button rather than a retry
+  /// loop. A tenant whose number comes back clean is verified by it.
+  @Post('user/:userId/recheck')
+  recheck(@Param('userId') userId: string) {
+    return this.verification.recheck(userId);
+  }
 }
