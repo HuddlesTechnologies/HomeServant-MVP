@@ -67,6 +67,38 @@ class SupportNote {
   }
 }
 
+/// A phone call an admin placed to the customer from a chat, with the
+/// reason they gave (backend SupportCallLog).
+class SupportCall {
+  const SupportCall({
+    required this.id,
+    required this.phoneNumber,
+    required this.reason,
+    required this.createdAt,
+    this.adminId,
+    this.adminName,
+  });
+
+  final String id;
+  final String phoneNumber;
+  final String reason;
+  final DateTime createdAt;
+  final String? adminId;
+  final String? adminName;
+
+  factory SupportCall.fromApi(Map<String, dynamic> json) {
+    final admin = json['admin'] as Map<String, dynamic>?;
+    return SupportCall(
+      id: json['id'] as String,
+      phoneNumber: json['phoneNumber'] as String,
+      reason: json['reason'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      adminId: admin?['id'] as String?,
+      adminName: admin?['fullName'] as String?,
+    );
+  }
+}
+
 /// A shared ready-made answer admins can insert into a reply.
 class SavedReply {
   const SavedReply({required this.id, required this.title, required this.body, this.createdById});

@@ -345,6 +345,8 @@ model User {
   threadTransfersFrom    ThreadTransferLog[]    @relation("ThreadTransfersFrom")
   threadTransfersTo      ThreadTransferLog[]    @relation("ThreadTransfersTo")
   supportNotes           SupportNote[]          @relation("SupportNotesAuthored")
+  supportCallsPlaced     SupportCallLog[]       @relation("SupportCallsPlaced")
+  supportCallsReceived   SupportCallLog[]       @relation("SupportCallsReceived")
   savedReplies           SavedReply[]           @relation("SavedRepliesCreated")
   pushSubscriptions      PushSubscription[]
   /// Admins only: the super admin who created this account through the
@@ -408,6 +410,18 @@ enum ActivityLogType {
   /// unlike the other user-security actions above (MODERATOR+). [reason]
   /// holds why.
   ADMIN_USER_2FA_DISABLED
+  /// An admin phoned the customer from a chat — see
+  /// SupportToolsService.logCall. [reason] holds why; the full record
+  /// (thread, number) is the SupportCallLog row.
+  SUPPORT_CUSTOMER_CALLED
+  /// A moderator/super admin permanently banned a user — see
+  /// AdminService.banUser. [reason] holds why.
+  ADMIN_USER_BANNED
+  /// A super admin lifted a permanent ban — see AdminService.unbanUser.
+  ADMIN_USER_UNBANNED
+  /// An admin changed a listing's search ranking boost — see
+  /// AdminService.setPropertyBoost. [reason] holds why.
+  ADMIN_PROPERTY_BOOSTED
 }
 
 /// Site-wide admin audit trail (Activity Log console section) — every
@@ -702,6 +716,7 @@ model Thread {
   participants ThreadParticipant[]
   messages     Message[]
   transferLogs ThreadTransferLog[]
+  callLogs     SupportCallLog[]
 
   @@index([propertyId])
   @@index([orderId])
@@ -1118,6 +1133,26 @@ model SupportNote {
   author    User?    @relation("SupportNotesAuthored", fields: [authorId], references: [id], onDelete: SetNull)
   body      String
   createdAt DateTime @default(now())
+
+  @@index([threadId])
+}
+
+/// One phone call an admin placed to the customer from a chat, with the
+/// reason they had to give first — kept with the conversation (so it goes
+/// when the conversation is cleaned up, like its notes); the activity log
+/// keeps its own permanent SUPPORT_CUSTOMER_CALLED entry. [phoneNumber] is
+/// the number as it was when the call was placed.
+model SupportCallLog {
+  id          String   @id @default(uuid())
+  threadId    String
+  thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  adminId     String?
+  admin       User?    @relation("SupportCallsPlaced", fields: [adminId], references: [id], onDelete: SetNull)
+  customerId  String?
+  customer    User?    @relation("SupportCallsReceived", fields: [customerId], references: [id], onDelete: SetNull)
+  phoneNumber String
+  reason      String
+  createdAt   DateTime @default(now())
 
   @@index([threadId])
 }

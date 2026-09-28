@@ -184,6 +184,13 @@ class _AdminActivityLogScreenState extends State<AdminActivityLogScreen> {
                                         : entry.actor?.displayName ?? 'Unknown',
                                     style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
                                   ),
+                                  if (entry.reason?.trim().isNotEmpty == true) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Reason: ${entry.reason!.trim()}',
+                                      style: AppTextStyles.body(color: AppColors.navy, size: 12.5),
+                                    ),
+                                  ],
                                   if (entry.ip != null || entry.location != null) ...[
                                     const SizedBox(height: 4),
                                     Text(

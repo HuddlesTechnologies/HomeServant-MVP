@@ -24,7 +24,13 @@ import 'widgets/admin_verification_card.dart';
 /// AdminService.findUserDetail) rather than the trimmed-down list-row
 /// shape, and is where "Message" (start a console-to-user chat) lives.
 class AdminUserDetailScreen extends StatefulWidget {
-  const AdminUserDetailScreen({super.key, required this.userId, this.asPopup = false, this.title = 'User Details'});
+  const AdminUserDetailScreen({
+    super.key,
+    required this.userId,
+    this.asPopup = false,
+    this.title = 'User Details',
+    this.showMessageAction = true,
+  });
 
   final String userId;
 
@@ -32,6 +38,10 @@ class AdminUserDetailScreen extends StatefulWidget {
   /// the back arrow becomes a close button.
   final bool asPopup;
   final String title;
+
+  /// False when opened from inside a chat with this user — "Message" would
+  /// only open the same conversation again.
+  final bool showMessageAction;
 
   @override
   State<AdminUserDetailScreen> createState() => _AdminUserDetailScreenState();
@@ -368,11 +378,12 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               icon: const Icon(Icons.edit_outlined, color: Colors.white),
               tooltip: 'Edit',
             ),
-            IconButton(
-              onPressed: () => _message(user),
-              icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
-              tooltip: 'Message',
-            ),
+            if (widget.showMessageAction)
+              IconButton(
+                onPressed: () => _message(user),
+                icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
+                tooltip: 'Message',
+              ),
           ],
         ],
       ),
@@ -751,7 +762,12 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
 /// The full user profile (every detail and every action the admin's level
 /// allows, exactly as on the Users screen) in a pop-up over the current
 /// page. Used by the property detail page's "View profile" button.
-Future<void> showAdminUserProfilePopup(BuildContext context, {required String userId, String title = 'User Details'}) {
+Future<void> showAdminUserProfilePopup(
+  BuildContext context, {
+  required String userId,
+  String title = 'User Details',
+  bool showMessageAction = true,
+}) {
   return showDialog<void>(
     context: context,
     builder: (dialogContext) {
@@ -766,7 +782,7 @@ Future<void> showAdminUserProfilePopup(BuildContext context, {required String us
           child: SizedBox(
             width: size.width,
             height: size.height * 0.9,
-            child: AdminUserDetailScreen(userId: userId, asPopup: true, title: title),
+            child: AdminUserDetailScreen(userId: userId, asPopup: true, title: title, showMessageAction: showMessageAction),
           ),
         ),
       );

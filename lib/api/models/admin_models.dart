@@ -873,7 +873,11 @@ enum ActivityLogType {
   adminUserEmailChanged,
   adminUserPasswordResetSent,
   adminUserPasswordChanged,
-  adminUser2faDisabled;
+  adminUser2faDisabled,
+  supportCustomerCalled,
+  adminUserBanned,
+  adminUserUnbanned,
+  adminPropertyBoosted;
 
   static ActivityLogType fromApi(String value) => switch (value) {
     'ADMIN_LOGIN' => ActivityLogType.adminLogin,
@@ -890,6 +894,10 @@ enum ActivityLogType {
     'ADMIN_USER_PASSWORD_RESET_SENT' => ActivityLogType.adminUserPasswordResetSent,
     'ADMIN_USER_PASSWORD_CHANGED' => ActivityLogType.adminUserPasswordChanged,
     'ADMIN_USER_2FA_DISABLED' => ActivityLogType.adminUser2faDisabled,
+    'SUPPORT_CUSTOMER_CALLED' => ActivityLogType.supportCustomerCalled,
+    'ADMIN_USER_BANNED' => ActivityLogType.adminUserBanned,
+    'ADMIN_USER_UNBANNED' => ActivityLogType.adminUserUnbanned,
+    'ADMIN_PROPERTY_BOOSTED' => ActivityLogType.adminPropertyBoosted,
     _ => ActivityLogType.adminLogin,
   };
 
@@ -911,6 +919,10 @@ enum ActivityLogType {
     ActivityLogType.adminUserPasswordResetSent => 'ADMIN_USER_PASSWORD_RESET_SENT',
     ActivityLogType.adminUserPasswordChanged => 'ADMIN_USER_PASSWORD_CHANGED',
     ActivityLogType.adminUser2faDisabled => 'ADMIN_USER_2FA_DISABLED',
+    ActivityLogType.supportCustomerCalled => 'SUPPORT_CUSTOMER_CALLED',
+    ActivityLogType.adminUserBanned => 'ADMIN_USER_BANNED',
+    ActivityLogType.adminUserUnbanned => 'ADMIN_USER_UNBANNED',
+    ActivityLogType.adminPropertyBoosted => 'ADMIN_PROPERTY_BOOSTED',
   };
 
   String get label => switch (this) {
@@ -928,6 +940,10 @@ enum ActivityLogType {
     ActivityLogType.adminUserPasswordResetSent => 'Sent a user a password reset',
     ActivityLogType.adminUserPasswordChanged => "Changed a user's password",
     ActivityLogType.adminUser2faDisabled => "Disabled a user's two-factor authentication",
+    ActivityLogType.supportCustomerCalled => 'Called a customer',
+    ActivityLogType.adminUserBanned => 'Permanently banned a user',
+    ActivityLogType.adminUserUnbanned => 'Lifted a ban',
+    ActivityLogType.adminPropertyBoosted => "Changed a listing's ranking",
   };
 }
 
@@ -955,6 +971,7 @@ class ActivityLogEntry {
     this.target,
     this.ip,
     this.location,
+    this.reason,
     required this.createdAt,
   });
 
@@ -964,6 +981,9 @@ class ActivityLogEntry {
   final ActivityLogPersonRef? target;
   final String? ip;
   final String? location;
+
+  /// Why the admin did it, for actions that ask (calls, bans, deletions…).
+  final String? reason;
   final DateTime createdAt;
 
   factory ActivityLogEntry.fromApi(Map<String, dynamic> json) => ActivityLogEntry(
@@ -973,6 +993,7 @@ class ActivityLogEntry {
     target: json['target'] != null ? ActivityLogPersonRef.fromApi(json['target'] as Map<String, dynamic>) : null,
     ip: json['ip'] as String?,
     location: json['location'] as String?,
+    reason: json['reason'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
   );
 }

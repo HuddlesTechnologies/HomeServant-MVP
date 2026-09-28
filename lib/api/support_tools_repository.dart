@@ -25,6 +25,20 @@ class SupportToolsRepository {
     );
   });
 
+  /// Records a call to the customer with [reason] (required, kept with the
+  /// chat) and returns the number to dial.
+  Future<({String phoneNumber, String? customerName})> logCall(String threadId, String reason) => _client.call(() async {
+    final response = await _client.dio.post('/threads/$threadId/calls', data: {'reason': reason});
+    final data = response.data as Map<String, dynamic>;
+    return (phoneNumber: data['phoneNumber'] as String, customerName: data['customerName'] as String?);
+  });
+
+  /// Every call placed from this chat, newest first.
+  Future<List<SupportCall>> calls(String threadId) => _client.call(() async {
+    final response = await _client.dio.get('/threads/$threadId/calls');
+    return (response.data as List).cast<Map<String, dynamic>>().map(SupportCall.fromApi).toList();
+  });
+
   Future<CustomerContext> customerContext(String threadId) => _client.call(() async {
     final response = await _client.dio.get('/threads/$threadId/customer-context');
     return CustomerContext.fromApi(response.data as Map<String, dynamic>);

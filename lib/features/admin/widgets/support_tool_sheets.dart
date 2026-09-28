@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../api/api_exception.dart';
 import '../../../api/models/support_tools.dart';
 import '../../../core/date_format.dart';
@@ -611,6 +615,216 @@ class _CustomerContextSheetState extends State<_CustomerContextSheet> {
                       ]),
                     ],
                   ),
+      ),
+    );
+  }
+}
+
+// --- Phone calls --------------------------------------------------------------
+
+/// "Call customer": the admin gives a reason (required — it's logged with
+/// this chat and in the activity log), then the call is recorded and the
+/// device's dialler opens. On the website the browser hands the number to
+/// whatever places calls on that computer (a linked phone, Teams, FaceTime…),
+/// and the number is always shown with a Copy button in case nothing does.
+/// Past calls from this chat are listed underneath.
+/// [canCall] false shows only the call log (a read-only oversight view).
+Future<void> showCallCustomerSheet(BuildContext context, String threadId, {String? customerName, bool canCall = true}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.white,
+    isScrollControlled: true,
+    shape: _sheetShape,
+    builder: (_) => _CallSheet(threadId: threadId, customerName: customerName, canCall: canCall),
+  );
+}
+
+class _CallSheet extends StatefulWidget {
+  const _CallSheet({required this.threadId, required this.customerName, required this.canCall});
+  final String threadId;
+  final String? customerName;
+  final bool canCall;
+
+  @override
+  State<_CallSheet> createState() => _CallSheetState();
+}
+
+class _CallSheetState extends State<_CallSheet> {
+  final _reason = TextEditingController();
+  List<SupportCall>? _calls;
+  String? _loadError;
+  String? _formError;
+  bool _calling = false;
+
+  /// Set once a call was logged — the number, shown for dialling by hand.
+  String? _dialledNumber;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final calls = await context.read<AppState>().supportTools.calls(widget.threadId);
+      if (mounted) setState(() => _calls = calls);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _loadError = e.message);
+    }
+  }
+
+  Future<void> _call() async {
+    final reason = _reason.text.trim();
+    if (reason.length < 10) {
+      setState(() => _formError = 'Give a reason of at least 10 characters — it is logged with this chat.');
+      return;
+    }
+    setState(() {
+      _calling = true;
+      _formError = null;
+    });
+    try {
+      final result = await context.read<AppState>().supportTools.logCall(widget.threadId, reason);
+      if (!mounted) return;
+      setState(() {
+        _dialledNumber = result.phoneNumber;
+        _reason.clear();
+      });
+      unawaited(_load());
+      final uri = Uri(scheme: 'tel', path: result.phoneNumber.replaceAll(RegExp(r'[^0-9+]'), ''));
+      try {
+        await launchUrl(uri);
+      } catch (_) {
+        // Nothing on this device places calls — the number is shown below.
+      }
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _formError = e.message);
+    } finally {
+      if (mounted) setState(() => _calling = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final calls = _calls;
+    final who = widget.customerName?.trim().isNotEmpty == true ? widget.customerName!.trim() : 'the customer';
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            children: [
+              Text(widget.canCall ? 'Call $who' : 'Calls from this chat', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+              if (widget.canCall) ...[
+                const SizedBox(height: 4),
+                Text(
+                  'Say why you are calling. The reason, the time and your name are saved with this chat and in the activity log.',
+                  style: _body(size: 13, alpha: 0.65),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _reason,
+                  minLines: 2,
+                  maxLines: 4,
+                  maxLength: 500,
+                  style: _body(),
+                  cursorColor: AppColors.navy,
+                  decoration: _fieldDecoration('Reason for calling (e.g. confirm the refund account details)').copyWith(
+                    counterStyle: _body(size: 11, alpha: 0.5),
+                  ),
+                ),
+                if (_formError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(_formError!, style: AppTextStyles.body(color: Colors.red.shade700, size: 12.5)),
+                ],
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _calling ? null : _call,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.navy,
+                      disabledBackgroundColor: AppColors.navy.withValues(alpha: 0.35),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                    ),
+                    icon: _calling
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.call_rounded, color: Colors.white),
+                    label: Text('Log reason and call', style: AppTextStyles.button(color: Colors.white, size: 14)),
+                  ),
+                ),
+                if (_dialledNumber != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                    decoration: BoxDecoration(color: AppColors.navy.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Call logged. If your dialler didn\'t open, dial:', style: _body(size: 12.5, alpha: 0.7)),
+                              const SizedBox(height: 2),
+                              SelectableText(_dialledNumber!, style: _body(size: 16, weight: FontWeight.w800)),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: _dialledNumber!));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Number copied')));
+                          },
+                          icon: const Icon(Icons.copy_rounded, color: AppColors.navy),
+                          tooltip: 'Copy number',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Text('Earlier calls', style: _body(size: 14, weight: FontWeight.w700)),
+              ],
+              const SizedBox(height: 8),
+              if (_loadError != null)
+                Text(_loadError!, style: _body(alpha: 0.7))
+              else if (calls == null)
+                const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(color: AppColors.navy)))
+              else if (calls.isEmpty)
+                Text('No calls from this chat yet.', style: _body(alpha: 0.6))
+              else
+                for (final call in calls)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: AppColors.navy.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(call.reason, style: _body()),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${call.adminName ?? 'A former admin'} called ${call.phoneNumber} · ${_stamp(call.createdAt)}',
+                          style: _body(size: 11.5, alpha: 0.6),
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -50,7 +50,7 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
       activityLog as never,
       storage as never,
     );
-    tools = new SupportToolsService(prisma as never, chat, gateway as never, fakePresence(online) as never);
+    tools = new SupportToolsService(prisma as never, chat, gateway as never, fakePresence(online) as never, activityLog as never);
   });
 
   async function tenantLandlordProperty() {

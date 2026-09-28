@@ -22,6 +22,7 @@ import '../../widgets/upload_picker.dart';
 import '../Market place/models/order_options.dart';
 import '../admin/widgets/support_tool_sheets.dart';
 import '../admin/chat_transcript_pdf.dart';
+import '../admin/admin_user_detail_screen.dart' show showAdminUserProfilePopup;
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
@@ -245,6 +246,55 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       if (mounted) unawaited(_refreshAccess());
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// The admin's tools for this chat, in app-bar order: calling and editing
+  /// the customer (any admin chat with a customer on it), then the support
+  /// tools (handling admin and super admins only — see [_history]).
+  List<({String id, String label, IconData icon})> get _adminTools {
+    if (!context.read<AppState>().role.isAdmin) return const [];
+    final customerId = widget.adminViewOfUserId;
+    return [
+      if (customerId != null && !widget.readOnly)
+        (id: 'call', label: 'Call customer', icon: Icons.call_outlined),
+      // Oversight views can't call, but can see the calls made.
+      if (widget.readOnly) (id: 'calls', label: 'Calls from this chat', icon: Icons.phone_callback_outlined),
+      if (customerId != null && !widget.readOnly)
+        (id: 'edit', label: 'Edit customer details', icon: Icons.manage_accounts_outlined),
+      if (_history != null) ...[
+        (id: 'customer', label: 'Customer details', icon: Icons.badge_outlined),
+        (id: 'notes', label: 'Internal notes', icon: Icons.sticky_note_2_outlined),
+        (id: 'triage', label: 'Topic & priority', icon: Icons.flag_outlined),
+        (id: 'history', label: 'Handling history', icon: Icons.history_rounded),
+      ],
+    ];
+  }
+
+  Future<void> _runAdminTool(String id) async {
+    final threadId = widget.threadId!;
+    switch (id) {
+      case 'call':
+        await showCallCustomerSheet(context, threadId, customerName: widget.contactName);
+      case 'calls':
+        await showCallCustomerSheet(context, threadId, customerName: widget.contactName, canCall: false);
+      case 'edit':
+        // The full profile, with exactly the edits this admin's level allows
+        // (the server enforces the same levels).
+        await showAdminUserProfilePopup(context, userId: widget.adminViewOfUserId!, title: 'Customer Details', showMessageAction: false);
+        // A name or phone change should show in the info panel right away.
+        if (mounted && _recipientDetail != null) {
+          setState(() => _recipientDetail = null);
+          if (_infoPanelOpen) unawaited(_loadRecipientDetail());
+        }
+      case 'customer':
+        await showCustomerContextSheet(context, threadId);
+      case 'notes':
+        await showSupportNotesSheet(context, threadId);
+      case 'triage':
+        await _openTriage();
+      default:
+        _showHistorySheet();
     }
   }
 
@@ -525,8 +575,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   Future<void> _toggleInfoPanel() async {
     setState(() => _infoPanelOpen = !_infoPanelOpen);
+    if (_infoPanelOpen) await _loadRecipientDetail();
+  }
+
+  Future<void> _loadRecipientDetail() async {
     final userId = widget.adminViewOfUserId;
-    if (!_infoPanelOpen || userId == null || _recipientDetail != null || _loadingRecipientDetail) return;
+    if (userId == null || _recipientDetail != null || _loadingRecipientDetail) return;
     setState(() {
       _loadingRecipientDetail = true;
       _recipientDetailError = null;
@@ -796,51 +850,36 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
               child: Text('End chat', style: AppTextStyles.body(color: theme.foreground, size: 14, weight: FontWeight.w700)),
             ),
           // Support tools — shown to the admin handling a support chat and
-          // to super admins (the same people the handling history is for).
-          if (_history != null && widget.threadId != null && MediaQuery.of(context).size.width < 700)
-            // Phone width: one menu instead of four icons. The menu is a
+          // to super admins (the same people the handling history is for) —
+          // plus calling and editing the customer, for any admin chat.
+          if (widget.threadId != null && _adminTools.isNotEmpty && MediaQuery.of(context).size.width < 700)
+            // Phone width: one menu instead of a row of icons. The menu is a
             // light Material surface, so items use onSurface (fixed navy).
             PopupMenuButton<String>(
               icon: Icon(Icons.support_agent_rounded, color: theme.foreground),
               tooltip: 'Support tools',
-              onSelected: (action) => switch (action) {
-                'customer' => showCustomerContextSheet(context, widget.threadId!),
-                'notes' => showSupportNotesSheet(context, widget.threadId!),
-                'triage' => _openTriage(),
-                _ => Future.sync(_showHistorySheet),
-              },
+              onSelected: _runAdminTool,
               itemBuilder: (_) => [
-                for (final (value, label) in const [
-                  ('customer', 'Customer details'),
-                  ('notes', 'Internal notes'),
-                  ('triage', 'Topic & priority'),
-                  ('history', 'Handling history'),
-                ])
-                  PopupMenuItem(value: value, child: Text(label, style: AppTextStyles.body(color: theme.onSurface, size: 14))),
+                for (final tool in _adminTools)
+                  PopupMenuItem(
+                    value: tool.id,
+                    child: Row(
+                      children: [
+                        Icon(tool.icon, color: theme.onSurface, size: 20),
+                        const SizedBox(width: 12),
+                        Text(tool.label, style: AppTextStyles.body(color: theme.onSurface, size: 14)),
+                      ],
+                    ),
+                  ),
               ],
             )
-          else if (_history != null && widget.threadId != null) ...[
-            IconButton(
-              onPressed: () => showCustomerContextSheet(context, widget.threadId!),
-              icon: Icon(Icons.badge_outlined, color: theme.foreground),
-              tooltip: 'Customer details',
-            ),
-            IconButton(
-              onPressed: () => showSupportNotesSheet(context, widget.threadId!),
-              icon: Icon(Icons.sticky_note_2_outlined, color: theme.foreground),
-              tooltip: 'Internal notes',
-            ),
-            IconButton(
-              onPressed: _openTriage,
-              icon: Icon(Icons.flag_outlined, color: theme.foreground),
-              tooltip: 'Topic & priority',
-            ),
-            IconButton(
-              onPressed: _showHistorySheet,
-              icon: Icon(Icons.history_rounded, color: theme.foreground),
-              tooltip: 'Handling history',
-            ),
-          ],
+          else if (widget.threadId != null)
+            for (final tool in _adminTools)
+              IconButton(
+                onPressed: () => _runAdminTool(tool.id),
+                icon: Icon(tool.icon, color: theme.foreground),
+                tooltip: tool.label,
+              ),
           if (widget.adminViewOfUserId != null)
             IconButton(
               onPressed: _toggleInfoPanel,
