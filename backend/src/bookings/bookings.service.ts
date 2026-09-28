@@ -57,6 +57,10 @@ export class BookingsService {
       throw new ForbiddenException("This landlord hasn't been verified yet, so this property can't be booked right now");
     }
 
+    if (property.hiddenByLandlordAt) {
+      throw new ForbiddenException("The landlord has hidden this listing for now, so it can't be booked");
+    }
+
     const isShortlet = property.category === PropertyCategory.SHORTLET;
     if (isShortlet && (!dto.nights || !dto.requestedDate)) {
       throw new BadRequestException('requestedDate and nights are required when booking a Shortlet');

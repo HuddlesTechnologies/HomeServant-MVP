@@ -631,6 +631,18 @@ model Property {
   /// since one shortlet listing is a single bookable unit.
   unitAddress        String?
   roomNumber         String?
+  /// How many times the landlord has changed this listing's photos in the
+  /// current allowance (PlatformSettings.maxListingImageChanges). Reaching
+  /// the limit locks the photos until [imagesLockedUntil]; once that has
+  /// passed, the next change starts a fresh allowance. The photos a
+  /// listing is created with don't count. See PropertiesService.update.
+  imageChangesUsed   Int              @default(0)
+  imagesLockedUntil  DateTime?
+  /// Set while the landlord has hidden this listing themselves (only
+  /// possible while it isn't occupied) — left out of browse and search and
+  /// can't be booked, but otherwise untouched. Cleared when they show it
+  /// again.
+  hiddenByLandlordAt DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -1316,6 +1328,10 @@ model PlatformSettings {
   /// and released automatically once the landlord is verified, or when this
   /// is switched back on. See PaymentsService.releaseOrHoldForVerification.
   payUnverifiedLandlords   Boolean  @default(true)
+  /// How many times a landlord may change a listing's photos before they
+  /// are locked for [listingImageLockDays] days (see Property.imageChangesUsed).
+  maxListingImageChanges   Int      @default(3)
+  listingImageLockDays     Int      @default(14)
   updatedById              String?
   updatedBy                User?    @relation("PlatformSettingsEditor", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt                DateTime @updatedAt

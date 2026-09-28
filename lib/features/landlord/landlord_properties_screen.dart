@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../api/api_exception.dart';
 import 'package:provider/provider.dart';
 import '../../api/models/booking.dart';
 import '../../core/date_format.dart';
@@ -254,6 +255,7 @@ class _LandlordPropertiesScreenState extends State<LandlordPropertiesScreen> {
                               onEdit: () => Navigator.of(context).push(
                                 MaterialPageRoute(builder: (_) => LandlordAddPropertyScreen(initial: property)),
                               ),
+                              onToggleHidden: () => _toggleHidden(context, property),
                             );
                           },
                         ),
@@ -264,6 +266,45 @@ class _LandlordPropertiesScreenState extends State<LandlordPropertiesScreen> {
         ),
       ),
     );
+  }
+}
+
+/// Hides an unoccupied listing (after confirming what that means) or shows
+/// a hidden one again.
+Future<void> _toggleHidden(BuildContext context, Property property) async {
+  final hide = !property.hiddenByLandlord;
+  if (hide) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text('Hide this listing?', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+        content: Text(
+          "Tenants won't find it in search and it can't be booked until you show it again. "
+          'Nothing else changes — you can show it again any time.',
+          style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.8), size: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('Cancel', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(backgroundColor: AppColors.navy),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('Hide listing', style: AppTextStyles.body(color: Colors.white, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await context.read<AppState>().setLandlordPropertyHidden(property.id, hide);
+    messenger.showSnackBar(SnackBar(content: Text(hide ? '${property.title} is now hidden' : '${property.title} is visible again')));
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
   }
 }
 
@@ -322,6 +363,7 @@ class _PropertyTile extends StatelessWidget {
     required this.pendingRequests,
     required this.onTap,
     required this.onEdit,
+    required this.onToggleHidden,
   });
 
   /// Booking requests on this listing still waiting on the landlord.
@@ -336,6 +378,7 @@ class _PropertyTile extends StatelessWidget {
   final Booking? activeBooking;
   final VoidCallback onTap;
   final VoidCallback onEdit;
+  final VoidCallback onToggleHidden;
 
   @override
   Widget build(BuildContext context) {
@@ -407,6 +450,12 @@ class _PropertyTile extends StatelessWidget {
                           background: AppColors.navy,
                           foreground: Colors.white,
                         ),
+                      if (property.hiddenByLandlord)
+                        _Pill(
+                          label: 'Hidden from tenants',
+                          background: AppColors.navy.withValues(alpha: 0.08),
+                          foreground: AppColors.navy,
+                        ),
                       if (!property.messagingEnabled)
                         _Pill(
                           label: 'Messaging off',
@@ -436,10 +485,28 @@ class _PropertyTile extends StatelessWidget {
                 ],
               ),
             ),
-            IconButton(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, color: AppColors.navy),
-              tooltip: 'Edit listing',
+            // The menu is a light Material surface: navy text on white.
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded, color: AppColors.navy),
+              tooltip: 'Listing options',
+              color: Colors.white,
+              onSelected: (value) => value == 'edit' ? onEdit() : onToggleHidden(),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Text('Edit listing', style: AppTextStyles.body(color: AppColors.navy, size: 14)),
+                ),
+                // Only an unoccupied listing can be hidden; a hidden one can
+                // always be shown again.
+                if (property.hiddenByLandlord || !occupied)
+                  PopupMenuItem(
+                    value: 'visibility',
+                    child: Text(
+                      property.hiddenByLandlord ? 'Show to tenants again' : 'Hide from tenants',
+                      style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

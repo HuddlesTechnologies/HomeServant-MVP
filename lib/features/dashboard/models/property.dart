@@ -29,6 +29,11 @@ class Property {
     this.shortletUnavailableUntil,
     this.landlordVerified = false,
     this.hiddenUntilLandlordVerified = false,
+    this.hiddenByLandlord = false,
+    this.imageChangesLeft,
+    this.imageChangesAllowed,
+    this.imagesLockedUntil,
+    this.imageLockDays,
   });
 
   /// Builds a [Property] from a `GET /properties` / `GET /properties/:id`
@@ -73,6 +78,11 @@ class Property {
           false,
       landlordVerified: json['landlordVerified'] as bool? ?? false,
       hiddenUntilLandlordVerified: json['hiddenUntilLandlordVerified'] as bool? ?? false,
+      hiddenByLandlord: json['hiddenByLandlord'] as bool? ?? (json['hiddenByLandlordAt'] != null),
+      imageChangesLeft: json['imageChangesLeft'] as int?,
+      imageChangesAllowed: json['imageChangesAllowed'] as int?,
+      imagesLockedUntil: _parseDate(json['imagesLockedUntil']),
+      imageLockDays: json['imageLockDays'] as int?,
       shortletUnavailableUntil: _parseDate(json['availableAgainAt']) ??
           _parseDate(json['shortletUnavailableUntil']) ??
           _parseDate(json['unavailableUntil']),
@@ -155,6 +165,11 @@ class Property {
     shortletUnavailableUntil: shortletUnavailableUntil,
     landlordVerified: landlordVerified,
     hiddenUntilLandlordVerified: hiddenUntilLandlordVerified,
+    hiddenByLandlord: hiddenByLandlord,
+    imageChangesLeft: imageChangesLeft,
+    imageChangesAllowed: imageChangesAllowed,
+    imagesLockedUntil: imagesLockedUntil,
+    imageLockDays: imageLockDays,
   );
 
   static String _categoryFromApi(String value) => switch (value) {
@@ -183,6 +198,23 @@ class Property {
   /// from browsing because its landlord isn't verified. A tenant who already
   /// booked or saved it still sees it, with this explained.
   final bool hiddenUntilLandlordVerified;
+
+  /// The landlord has hidden this (unoccupied) listing themselves: it's out
+  /// of browse and search and can't be booked until they show it again.
+  final bool hiddenByLandlord;
+
+  /// Landlord's own view: how many more times the photos can be changed
+  /// before they lock, out of [imageChangesAllowed] — null from an older API.
+  final int? imageChangesLeft;
+  final int? imageChangesAllowed;
+
+  /// Set while the photos are locked after the last allowed change.
+  final DateTime? imagesLockedUntil;
+
+  /// How many days the photos lock for once the last change is used.
+  final int? imageLockDays;
+
+  bool get imagesLocked => imagesLockedUntil != null && imagesLockedUntil!.isAfter(DateTime.now());
 
   final String id;
 

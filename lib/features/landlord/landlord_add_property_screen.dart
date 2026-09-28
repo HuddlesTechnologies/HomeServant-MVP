@@ -11,6 +11,7 @@ import '../../widgets/pill_button.dart';
 import '../../widgets/pill_text_field.dart';
 import '../../widgets/payout_required_dialog.dart';
 import '../../widgets/upload_picker.dart';
+import '../../core/date_format.dart';
 import '../dashboard/models/property.dart';
 import '../../widgets/bank_details_screen.dart';
 
@@ -59,6 +60,54 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   bool _messagingEnabled = true;
 
   bool get _isEditing => widget.initial != null;
+
+  /// Editing a listing whose photo changes are used up: the photos can't be
+  /// changed until the lock ends (see backend PropertiesService.update).
+  bool get _photosLocked => widget.initial?.imagesLocked ?? false;
+
+  /// Whether the photos (or their order) differ from what's saved.
+  bool get _photosChanged {
+    final initial = widget.initial;
+    if (initial == null) return false;
+    final before = [initial.image, ...initial.galleryImages];
+    final now = _images.map((i) => i.path).toList();
+    if (before.length != now.length) return true;
+    for (var i = 0; i < now.length; i++) {
+      if (before[i] != now[i]) return true;
+    }
+    return false;
+  }
+
+  /// Asks before a save that uses the listing's last photo change.
+  Future<bool> _confirmLastPhotoChange() async {
+    final initial = widget.initial;
+    if (initial == null || !_photosChanged || initial.imageChangesLeft != 1) return true;
+    final days = initial.imageLockDays ?? 14;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            backgroundColor: Colors.white,
+            title: Text('Last photo change', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+            content: Text(
+              "This is the last time you can change this listing's photos for now. After saving, they'll be locked for $days days.",
+              style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.8), size: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: Text('Go back', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+              ),
+              TextButton(
+                style: TextButton.styleFrom(backgroundColor: AppColors.navy),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text('Save photos', style: AppTextStyles.body(color: Colors.white, weight: FontWeight.w700)),
+              ),
+            ],
+          ),
+    );
+    return ok == true;
+  }
 
   @override
   void initState() {
@@ -139,7 +188,8 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     if (appState.accountNumber != null && appState.accountNumber!.isNotEmpty) return true;
     final proceed = await showPayoutRequiredDialog(
       context,
-      body: 'Please add your Payout Account details in Settings before listing a property. '
+      body:
+          'Please add your Payout Account details in Settings before listing a property. '
           'Tenant rent payments are held in escrow and released to your bank account.',
     );
     if (proceed == true && mounted) {
@@ -165,7 +215,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
       return;
     }
     if (!_isEditing && !await _ensurePayoutDetails()) return;
-    if (!mounted) return;
+    if (!mounted || !await _confirmLastPhotoChange() || !mounted) return;
     setState(() => _saving = true);
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
@@ -184,7 +234,8 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
       }
       final isShortlet = _category == 'Shortlet';
       final basis = widget.initial;
-      final property = (basis?.copyWith(
+      final property =
+          (basis?.copyWith(
             title: _title.text.trim(),
             location: _location.text.trim(),
             state: _state!,
@@ -223,9 +274,8 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
             unitAddress: isShortlet ? _unitAddress.text.trim() : null,
             roomNumber: isShortlet ? _roomNumber.text.trim() : null,
           );
-      final saved = _isEditing
-          ? await appState.updateLandlordProperty(property)
-          : await appState.addLandlordProperty(property);
+      final saved =
+          _isEditing ? await appState.updateLandlordProperty(property) : await appState.addLandlordProperty(property);
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text(_isEditing ? '${saved.title} updated' : '${saved.title} added to My Properties')),
@@ -254,6 +304,10 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                 'Photos ($_minImages-$_maxImages) · ${_images.length}/$_maxImages',
                 style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
               ),
+              if (_isEditing && widget.initial!.imageChangesAllowed != null) ...[
+                const SizedBox(height: 4),
+                _PhotoAllowanceNote(property: widget.initial!),
+              ],
               const SizedBox(height: 8),
               SizedBox(
                 height: 84,
@@ -265,14 +319,14 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                         padding: const EdgeInsets.only(right: 10),
                         child: _PickedPhotoTile(
                           isCover: image == _images.first,
-                          onRemove: () => setState(() => _images.remove(image)),
+                          onRemove: _photosLocked ? null : () => setState(() => _images.remove(image)),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(14),
                             child: Image(image: image.imageProvider, width: 84, height: 84, fit: BoxFit.cover),
                           ),
                         ),
                       ),
-                    if (_images.length < _maxImages)
+                    if (_images.length < _maxImages && !_photosLocked)
                       GestureDetector(
                         onTap: _addImages,
                         child: Container(
@@ -469,12 +523,65 @@ class _VideoPicker extends StatelessWidget {
 /// One thumbnail in the photo picker's horizontal strip — a remove button
 /// and, on the first (cover) photo, a small badge so it's clear which one
 /// becomes the listing's main image.
+/// "2 of 3 photo changes left" — or, once they're used up, until when the
+/// photos are locked and that deleting the listing is the way round it.
+/// Navy on the offWhite page background.
+class _PhotoAllowanceNote extends StatelessWidget {
+  const _PhotoAllowanceNote({required this.property});
+
+  final Property property;
+
+  @override
+  Widget build(BuildContext context) {
+    final allowed = property.imageChangesAllowed!;
+    final left = property.imageChangesLeft ?? allowed;
+    final days = property.imageLockDays ?? 14;
+    final text =
+        property.imagesLocked
+            ? "Photos locked until ${formatShortDate(property.imagesLockedUntil!.toLocal())} — you've used all $allowed photo "
+                "changes for this listing. You can still edit everything else. To use different photos sooner, delete the "
+                "listing and list it again (not possible while it's occupied)."
+            : '$left of $allowed photo changes left. Each save that changes the photos uses one; after the last one, '
+                'photos lock for $days days.';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: (property.imagesLocked ? const Color(0xFFB54708) : AppColors.navy).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            property.imagesLocked ? Icons.lock_clock_outlined : Icons.photo_library_outlined,
+            size: 18,
+            color: property.imagesLocked ? const Color(0xFF93370D) : AppColors.navy,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.body(
+                color: property.imagesLocked ? const Color(0xFF93370D) : AppColors.navy,
+                size: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PickedPhotoTile extends StatelessWidget {
   const _PickedPhotoTile({required this.child, required this.isCover, required this.onRemove});
 
   final Widget child;
   final bool isCover;
-  final VoidCallback onRemove;
+
+  /// Null hides the remove button (photos locked).
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -492,21 +599,25 @@ class _PickedPhotoTile extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
-                child: Text('Cover', style: AppTextStyles.body(color: Colors.white, size: 9.5, weight: FontWeight.w700)),
+                child: Text(
+                  'Cover',
+                  style: AppTextStyles.body(color: Colors.white, size: 9.5, weight: FontWeight.w700),
+                ),
               ),
             ),
-          Positioned(
-            top: -6,
-            right: -6,
-            child: GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                padding: const EdgeInsets.all(3),
-                decoration: const BoxDecoration(color: Colors.black87, shape: BoxShape.circle),
-                child: const Icon(Icons.close_rounded, color: Colors.white, size: 14),
+          if (onRemove != null)
+            Positioned(
+              top: -6,
+              right: -6,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(color: Colors.black87, shape: BoxShape.circle),
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 14),
+                ),
               ),
             ),
-          ),
         ],
       ),
     );
@@ -531,9 +642,7 @@ class _StateDropdown extends StatelessWidget {
           decoration: const InputDecoration(border: InputBorder.none),
           hint: Text('State', style: AppTextStyles.body(color: AppColors.hintGrey)),
           style: AppTextStyles.body(color: AppColors.navy),
-          items: [
-            for (final state in nigerianStates) DropdownMenuItem(value: state, child: Text(state)),
-          ],
+          items: [for (final state in nigerianStates) DropdownMenuItem(value: state, child: Text(state))],
           onChanged: onChanged,
         ),
       ),
@@ -599,7 +708,10 @@ class _MessagingToggle extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Allow Tenant Messages', style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w600)),
+                Text(
+                  'Allow Tenant Messages',
+                  style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w600),
+                ),
                 Text(
                   'Off means tenants pay rent directly — no messaging or inspection booking for this listing',
                   style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),

@@ -35,7 +35,15 @@ export class PlatformSettingsService {
     return { ...settings, stats: { totalListings, unverifiedListings, verifiedLandlords, landlordsWithListings } };
   }
 
-  async update(adminId: string, data: { requireVerifiedLandlords?: boolean; payUnverifiedLandlords?: boolean }) {
+  async update(
+    adminId: string,
+    data: {
+      requireVerifiedLandlords?: boolean;
+      payUnverifiedLandlords?: boolean;
+      maxListingImageChanges?: number;
+      listingImageLockDays?: number;
+    },
+  ) {
     const before = await this.requireVerifiedLandlords();
     await this.prisma.platformSettings.upsert({
       where: { id: 1 },
@@ -89,6 +97,16 @@ export class PlatformSettingsService {
   async payUnverifiedLandlords(): Promise<boolean> {
     const row = await this.prisma.platformSettings.findUnique({ where: { id: 1 }, select: { payUnverifiedLandlords: true } });
     return row?.payUnverifiedLandlords ?? true;
+  }
+
+  /// How many photo changes a listing gets before they lock, and for how
+  /// long (see Property.imageChangesUsed). Defaults when the row is missing.
+  async listingImageRules(): Promise<{ maxChanges: number; lockDays: number }> {
+    const row = await this.prisma.platformSettings.findUnique({
+      where: { id: 1 },
+      select: { maxListingImageChanges: true, listingImageLockDays: true },
+    });
+    return { maxChanges: row?.maxListingImageChanges ?? 3, lockDays: row?.listingImageLockDays ?? 14 };
   }
 
   async requireVerifiedLandlords(): Promise<boolean> {

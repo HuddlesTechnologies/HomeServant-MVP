@@ -159,6 +159,8 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
             ),
             const SizedBox(height: 14),
             _payoutCard(s),
+            const SizedBox(height: 16),
+            _photoLimitsCard(s),
           ],
         ],
       ),
@@ -193,6 +195,69 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _setNumber(String key, int value) async {
+    setState(() => _saving = true);
+    try {
+      final updated = await context.read<AppState>().verification.updatePlatformSettings({key: value});
+      if (mounted) setState(() => _settings = updated);
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  /// Listing photo changes: how many a landlord gets, and how long photos
+  /// lock afterwards. White card, navy text.
+  Widget _photoLimitsCard(PlatformSettings s) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.photo_library_outlined, color: AppColors.navy, size: 20),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  'Listing photo changes',
+                  style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 15),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Landlords can change a listing\'s photos this many times. After the last change the photos are locked '
+            'for the number of days below, then a new allowance starts. Deleting the listing is always possible '
+            'unless it\'s occupied.',
+            style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.75), size: 12.5),
+          ),
+          const SizedBox(height: 12),
+          _Stepper(
+            label: 'Changes allowed',
+            value: s.maxListingImageChanges,
+            min: 1,
+            max: 20,
+            busy: _saving,
+            onChanged: (v) => _setNumber('maxListingImageChanges', v),
+          ),
+          const SizedBox(height: 8),
+          _Stepper(
+            label: 'Days locked afterwards',
+            value: s.listingImageLockDays,
+            min: 1,
+            max: 180,
+            busy: _saving,
+            onChanged: (v) => _setNumber('listingImageLockDays', v),
+          ),
+        ],
+      ),
+    );
   }
 
   /// "Pay unverified landlords" — what ON and OFF each do, in plain words,
@@ -315,4 +380,59 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
       ],
     ),
   );
+}
+
+/// A labelled − value + control for a small whole number setting. Navy on
+/// the white card.
+class _Stepper extends StatelessWidget {
+  const _Stepper({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.busy,
+    required this.onChanged,
+  });
+
+  final String label;
+  final int value;
+  final int min;
+  final int max;
+  final bool busy;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: AppTextStyles.body(color: AppColors.navy, size: 13.5, weight: FontWeight.w600))),
+          IconButton(
+            onPressed: busy || value <= min ? null : () => onChanged(value - 1),
+            icon: const Icon(Icons.remove_circle_outline_rounded),
+            color: AppColors.navy,
+            disabledColor: AppColors.navy.withValues(alpha: 0.3),
+            tooltip: 'Decrease',
+          ),
+          SizedBox(
+            width: 40,
+            child: Text(
+              '$value',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.body(color: AppColors.navy, size: 16, weight: FontWeight.w800),
+            ),
+          ),
+          IconButton(
+            onPressed: busy || value >= max ? null : () => onChanged(value + 1),
+            icon: const Icon(Icons.add_circle_outline_rounded),
+            color: AppColors.navy,
+            disabledColor: AppColors.navy.withValues(alpha: 0.3),
+            tooltip: 'Increase',
+          ),
+        ],
+      ),
+    );
+  }
 }

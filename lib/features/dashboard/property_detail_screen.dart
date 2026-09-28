@@ -256,9 +256,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             ],
                           ),
                           const SizedBox(height: 26),
-                          if (property.hiddenUntilLandlordVerified) ...[
+                          if (property.hiddenUntilLandlordVerified || property.hiddenByLandlord) ...[
                             HiddenListingNotice(
                               ownerView: isOwner,
+                              byLandlord: property.hiddenByLandlord && !property.hiddenUntilLandlordVerified,
                               isShortlet: property.category == 'Shortlet',
                               hasBooking: context.watch<AppState>().myBookings.any(
                                 (b) =>
@@ -452,10 +453,15 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: theme.accent,
+                                  // Disabled (busy, or hidden by the landlord) keeps the accent so
+                                  // the onAccent label still contrasts — not Material's grey.
+                                  disabledBackgroundColor: theme.accent,
                                   padding: const EdgeInsets.symmetric(vertical: 18),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                                 ),
-                                onPressed: _bookingBusy
+                                // A listing its landlord has hidden can't be
+                                // booked (the server refuses too).
+                                onPressed: _bookingBusy || property.hiddenByLandlord
                                     ? null
                                     : () async {
                                         final messenger = ScaffoldMessenger.of(context);
@@ -508,7 +514,11 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                         child: CircularProgressIndicator(strokeWidth: 2.4, color: theme.onAccent),
                                       )
                                     : Text(
-                                        isShortlet ? 'Book Now' : 'Rent Now',
+                                        property.hiddenByLandlord
+                                            ? 'Not available right now'
+                                            : isShortlet
+                                            ? 'Book Now'
+                                            : 'Rent Now',
                                         style: AppTextStyles.button(color: theme.onAccent),
                                       ),
                               ),

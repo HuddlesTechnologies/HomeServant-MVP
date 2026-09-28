@@ -860,6 +860,7 @@ class AdminProperty {
     this.landlordName,
     this.landlordEmail,
     this.isOccupied = false,
+    this.hiddenByLandlord = false,
     required this.createdAt,
   });
 
@@ -871,6 +872,9 @@ class AdminProperty {
   final String? imageUrl;
   final String? landlordName;
   final String? landlordEmail;
+
+  /// The landlord has hidden this listing from tenants themselves.
+  final bool hiddenByLandlord;
 
   /// True while a landlord-side "can't re-list an occupied property" rule
   /// is in effect — a moderator/super admin can override it (see
@@ -890,6 +894,7 @@ class AdminProperty {
       landlordName: landlord?['fullName'] as String?,
       landlordEmail: landlord?['email'] as String?,
       isOccupied: json['isOccupied'] as bool? ?? false,
+      hiddenByLandlord: json['hiddenByLandlordAt'] != null,
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }

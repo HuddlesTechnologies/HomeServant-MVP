@@ -79,6 +79,12 @@ class VerificationRepository {
     return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
   });
 
+  /// Any other Platform Controls values (e.g. `maxListingImageChanges`).
+  Future<PlatformSettings> updatePlatformSettings(Map<String, dynamic> values) => _client.call(() async {
+    final response = await _client.dio.patch('/admin/platform-settings', data: values);
+    return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
+  });
+
   // --- Payouts & refunds needing attention (super admin) -----------------------
 
   Future<List<StuckPayment>> stuckPayments() => _client.call(() async {

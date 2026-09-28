@@ -3,6 +3,7 @@ import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { CreatePropertyDto } from './dto/create-property.dto';
@@ -15,9 +16,12 @@ export class PropertiesController {
   constructor(private readonly properties: PropertiesService) {}
 
   /// Public — the tenant-facing browse/search feed doesn't require login.
+  /// A signed-in landlord listing their own properties also gets the ones
+  /// they've hidden.
   @Get()
-  findMany(@Query() query: QueryPropertiesDto) {
-    return this.properties.findMany(query);
+  @UseGuards(OptionalJwtAuthGuard)
+  findMany(@Query() query: QueryPropertiesDto, @CurrentUser() user: AuthenticatedUser | null) {
+    return this.properties.findMany(query, user?.sub);
   }
 
   @Get(':id')

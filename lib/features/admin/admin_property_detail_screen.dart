@@ -4,6 +4,7 @@ import '../../api/api_exception.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
+import '../../core/date_format.dart';
 import '../../state/app_state.dart';
 import '../dashboard/models/property.dart';
 import '../dashboard/widgets/property_image.dart';
@@ -159,10 +160,21 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
                               child: Text(property.title, style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
                             ),
                             if (property.isOccupied) const AdminBadge(text: 'Occupied', color: Colors.orange),
+                            if (property.hiddenByLandlord) ...[
+                              const SizedBox(width: 6),
+                              const AdminBadge(text: 'Hidden by landlord', color: AppColors.navy),
+                            ],
                           ],
                         ),
                         const SizedBox(height: 14),
                         LabeledValueRow('Listing #', property.listingNumber?.toString() ?? '—'),
+                        if (property.imageChangesAllowed != null)
+                          LabeledValueRow(
+                            'Photo changes',
+                            property.imagesLocked
+                                ? 'Locked until ${formatShortDate(property.imagesLockedUntil!.toLocal())}'
+                                : '${property.imageChangesLeft} of ${property.imageChangesAllowed} left',
+                          ),
                         LabeledValueRow('Location', property.location),
                         LabeledValueRow('State', property.state),
                         LabeledValueRow('Category', property.category),

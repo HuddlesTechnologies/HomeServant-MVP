@@ -13,7 +13,14 @@ class PlatformSettings {
     required this.landlordsWithListings,
     this.updatedAt,
     this.updatedByName,
+    this.maxListingImageChanges = 3,
+    this.listingImageLockDays = 14,
   });
+
+  /// How many times a landlord may change a listing's photos before they
+  /// lock, and for how many days.
+  final int maxListingImageChanges;
+  final int listingImageLockDays;
 
   final bool requireVerifiedLandlords;
 
@@ -46,6 +53,8 @@ class PlatformSettings {
       unverifiedListings: stats['unverifiedListings'] as int? ?? 0,
       verifiedLandlords: stats['verifiedLandlords'] as int? ?? 0,
       landlordsWithListings: stats['landlordsWithListings'] as int? ?? 0,
+      maxListingImageChanges: json['maxListingImageChanges'] as int? ?? 3,
+      listingImageLockDays: json['listingImageLockDays'] as int? ?? 14,
       updatedAt: json['updatedAt'] is String ? DateTime.tryParse(json['updatedAt'] as String)?.toLocal() : null,
       updatedByName: by == null ? null : ((by['fullName'] as String?)?.trim().isNotEmpty == true ? by['fullName'] as String : by['email'] as String?),
     );

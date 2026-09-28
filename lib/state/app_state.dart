@@ -783,6 +783,17 @@ class AppState extends ChangeNotifier {
     return updated;
   }
 
+  /// Hides an unoccupied listing from browse, search and booking (or shows
+  /// it again) — `PATCH /properties/:id` with `isHidden`. The server
+  /// refuses to hide an occupied listing, with the reason.
+  Future<Property> setLandlordPropertyHidden(String id, bool hidden) async {
+    final updated = await _propertiesRepo.update(id, {'isHidden': hidden});
+    _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
+    if (hidden) properties = [for (final p in properties) if (p.id != id) p];
+    notifyListeners();
+    return updated;
+  }
+
   /// `DELETE /properties/:id`. The server refuses while the property is
   /// occupied or a tenant's payment is in play (PropertiesService
   /// .deletionBlockReason) — that ApiException's message says why.
