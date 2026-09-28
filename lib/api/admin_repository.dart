@@ -205,6 +205,14 @@ class AdminRepository {
     });
   }
 
+  /// Moderator+. Search ranking: [level] 0 normal, 1 boosted, 2 top, for
+  /// [days] days (null = until changed).
+  Future<void> setPropertyBoost(String id, {required int level, int? days, required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/properties/$id/boost', data: {'level': level, if (days != null) 'days': days, 'reason': reason});
+    });
+  }
+
   Future<void> removeProperty(String id, {required String reason}) {
     return _client.call(() async {
       await _client.dio.delete('/admin/properties/$id', data: {'reason': reason});

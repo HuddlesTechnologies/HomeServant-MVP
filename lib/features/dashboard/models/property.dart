@@ -34,6 +34,11 @@ class Property {
     this.imageChangesAllowed,
     this.imagesLockedUntil,
     this.imageLockDays,
+    this.featured = false,
+    this.featuredUntil,
+    this.adminBoost = 0,
+    this.adminBoostUntil,
+    this.bookingsCount,
   });
 
   /// Builds a [Property] from a `GET /properties` / `GET /properties/:id`
@@ -83,6 +88,11 @@ class Property {
       imageChangesAllowed: json['imageChangesAllowed'] as int?,
       imagesLockedUntil: _parseDate(json['imagesLockedUntil']),
       imageLockDays: json['imageLockDays'] as int?,
+      featured: json['featured'] as bool? ?? false,
+      featuredUntil: _parseDate(json['featuredUntil']),
+      adminBoost: json['adminBoost'] as int? ?? 0,
+      adminBoostUntil: _parseDate(json['adminBoostUntil']),
+      bookingsCount: (json['_count'] as Map<String, dynamic>?)?['bookings'] as int?,
       shortletUnavailableUntil: _parseDate(json['availableAgainAt']) ??
           _parseDate(json['shortletUnavailableUntil']) ??
           _parseDate(json['unavailableUntil']),
@@ -170,6 +180,11 @@ class Property {
     imageChangesAllowed: imageChangesAllowed,
     imagesLockedUntil: imagesLockedUntil,
     imageLockDays: imageLockDays,
+    featured: featured,
+    featuredUntil: featuredUntil,
+    adminBoost: adminBoost,
+    adminBoostUntil: adminBoostUntil,
+    bookingsCount: bookingsCount,
   );
 
   static String _categoryFromApi(String value) => switch (value) {
@@ -213,6 +228,21 @@ class Property {
 
   /// How many days the photos lock for once the last change is used.
   final int? imageLockDays;
+
+  /// A paid "Featured" ad is running (shown to tenants as "Featured"),
+  /// until [featuredUntil] (including any extension already paid for).
+  final bool featured;
+  final DateTime? featuredUntil;
+
+  /// Admin search ranking (admin console only): 0 normal, 1 boosted, 2 top,
+  /// until [adminBoostUntil] (null = until changed).
+  final int adminBoost;
+  final DateTime? adminBoostUntil;
+
+  /// Admin console only: how many bookings this listing has had.
+  final int? bookingsCount;
+
+  bool get adminBoostActive => adminBoost > 0 && (adminBoostUntil == null || adminBoostUntil!.isAfter(DateTime.now()));
 
   bool get imagesLocked => imagesLockedUntil != null && imagesLockedUntil!.isAfter(DateTime.now());
 

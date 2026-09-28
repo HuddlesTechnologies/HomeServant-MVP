@@ -161,6 +161,8 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
             _payoutCard(s),
             const SizedBox(height: 16),
             _photoLimitsCard(s),
+            const SizedBox(height: 16),
+            _adsCard(s),
           ],
         ],
       ),
@@ -254,6 +256,110 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
             max: 180,
             busy: _saving,
             onChanged: (v) => _setNumber('listingImageLockDays', v),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _editFee(PlatformSettings s) async {
+    final controller = TextEditingController(text: '${s.featuredListingFeeNaira}');
+    final value = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text('Featured ad price', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          style: AppTextStyles.body(color: AppColors.navy, size: 15),
+          cursorColor: AppColors.navy,
+          decoration: InputDecoration(
+            prefixText: '₦ ',
+            prefixStyle: AppTextStyles.body(color: AppColors.navy, size: 15),
+            labelText: 'Price per ad (naira)',
+            labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('Cancel', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(backgroundColor: AppColors.navy),
+            onPressed: () => Navigator.of(dialogContext).pop(int.tryParse(controller.text.replaceAll(RegExp(r'[^0-9]'), ''))),
+            child: Text('Save', style: AppTextStyles.body(color: Colors.white, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || !mounted) return;
+    await _setNumber('featuredListingFeeNaira', value);
+  }
+
+  /// Landlords' paid "Featured" ads, and how much room promoted listings
+  /// get in search. White card, navy text.
+  Widget _adsCard(PlatformSettings s) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.campaign_outlined, color: AppColors.navy, size: 20),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text('Featured ads & ranking', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 15)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Landlords can pay to feature a listing. Featured listings are labelled "Featured" for tenants. Featured and '
+            'admin-ranked listings share one promoted spot in every few search results (the rest are ordinary listings, '
+            'newest first), and only while they can be booked.',
+            style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.75), size: 12.5),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+            decoration: BoxDecoration(color: AppColors.offWhite, borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              children: [
+                Expanded(child: Text('Price per ad', style: AppTextStyles.body(color: AppColors.navy, size: 13.5, weight: FontWeight.w600))),
+                Text('₦${formatWithThousandsSeparator(s.featuredListingFeeNaira)}', style: AppTextStyles.body(color: AppColors.navy, size: 15, weight: FontWeight.w800)),
+                IconButton(
+                  onPressed: _saving ? null : () => _editFee(s),
+                  icon: const Icon(Icons.edit_outlined),
+                  color: AppColors.navy,
+                  disabledColor: AppColors.navy.withValues(alpha: 0.3),
+                  tooltip: 'Change price',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          _Stepper(
+            label: 'Days an ad runs',
+            value: s.featuredListingDays,
+            min: 1,
+            max: 90,
+            busy: _saving,
+            onChanged: (v) => _setNumber('featuredListingDays', v),
+          ),
+          const SizedBox(height: 8),
+          _Stepper(
+            label: 'One promoted listing in every',
+            value: s.promotedSlotEvery,
+            min: 2,
+            max: 20,
+            busy: _saving,
+            onChanged: (v) => _setNumber('promotedSlotEvery', v),
           ),
         ],
       ),

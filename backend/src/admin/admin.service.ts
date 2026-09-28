@@ -1026,14 +1026,26 @@ export class AdminService {
     const [items, total] = await Promise.all([
       this.prisma.property.findMany({
         where,
-        include: { landlord: { select: { id: true, fullName: true, email: true } } },
+        include: {
+          landlord: { select: { id: true, fullName: true, email: true } },
+          promotions: { where: { status: 'ACTIVE', endsAt: { gt: new Date() } }, select: { startsAt: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.property.count({ where }),
     ]);
-    return { items, total, page, pageSize };
+    const now = new Date();
+    return {
+      items: items.map(({ promotions, ...p }) => ({
+        ...p,
+        featured: promotions.some((promo) => promo.startsAt && promo.startsAt <= now),
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   /// Full listing — everything `findProperties` already fetches via
@@ -1045,10 +1057,44 @@ export class AdminService {
       include: {
         landlord: { select: { id: true, fullName: true, email: true, phoneNumber: true } },
         _count: { select: { bookings: true, favorites: true, reviews: true } },
+        // Paid "Featured" ads, newest first.
+        promotions: {
+          where: { status: 'ACTIVE' },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, days: true, amountKobo: true, paidAt: true, startsAt: true, endsAt: true },
+        },
       },
     });
     if (!property) throw new NotFoundException('Property not found');
-    return property;
+    const now = new Date();
+    const live = property.promotions.filter((p) => p.startsAt && p.endsAt && p.startsAt <= now && p.endsAt > now);
+    const featuredUntil = live.length
+      ? property.promotions.reduce<Date | null>((max, p) => (p.endsAt && (!max || p.endsAt > max) ? p.endsAt : max), null)
+      : null;
+    return { ...property, featured: live.length > 0, featuredUntil };
+  }
+
+  /// Moderator+. Search ranking for a listing (e.g. a popular shortlet):
+  /// [level] 0 = normal, 1 = boosted, 2 = top, for [days] days or until
+  /// changed (null). It only ever moves a listing up among bookable
+  /// listings and into the limited promoted slots — never above an
+  /// available listing when it's unavailable itself (see
+  /// listing-ranking.ts). Logged with the reason.
+  async setPropertyBoost(id: string, level: number, days: number | null | undefined, reason: string, actorId: string) {
+    const property = await this.prisma.property.findUnique({ where: { id }, select: { id: true, landlordId: true } });
+    if (!property) throw new NotFoundException('Property not found');
+    const until = level > 0 && days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+    const updated = await this.prisma.property.update({
+      where: { id },
+      data: { adminBoost: level, adminBoostUntil: until },
+      select: { id: true, adminBoost: true, adminBoostUntil: true },
+    });
+    await this.activityLog.log(ActivityLogType.ADMIN_PROPERTY_BOOSTED, {
+      actorId,
+      targetId: property.landlordId,
+      reason: `${['Normal', 'Boosted', 'Top'][level]}${until ? ` until ${until.toDateString()}` : ''} — ${reason.trim()}`,
+    });
+    return updated;
   }
 
   /// A landlord can't re-list their own occupied property (a tenant's

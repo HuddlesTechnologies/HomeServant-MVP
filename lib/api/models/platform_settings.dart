@@ -15,7 +15,17 @@ class PlatformSettings {
     this.updatedByName,
     this.maxListingImageChanges = 3,
     this.listingImageLockDays = 14,
+    this.featuredListingFeeNaira = 5000,
+    this.featuredListingDays = 7,
+    this.promotedSlotEvery = 3,
   });
+
+  /// Paid "Featured" ads: price (naira) and how long one runs.
+  final int featuredListingFeeNaira;
+  final int featuredListingDays;
+
+  /// Fairness: one promoted listing in every N search results.
+  final int promotedSlotEvery;
 
   /// How many times a landlord may change a listing's photos before they
   /// lock, and for how many days.
@@ -55,6 +65,9 @@ class PlatformSettings {
       landlordsWithListings: stats['landlordsWithListings'] as int? ?? 0,
       maxListingImageChanges: json['maxListingImageChanges'] as int? ?? 3,
       listingImageLockDays: json['listingImageLockDays'] as int? ?? 14,
+      featuredListingFeeNaira: json['featuredListingFeeNaira'] as int? ?? 5000,
+      featuredListingDays: json['featuredListingDays'] as int? ?? 7,
+      promotedSlotEvery: json['promotedSlotEvery'] as int? ?? 3,
       updatedAt: json['updatedAt'] is String ? DateTime.tryParse(json['updatedAt'] as String)?.toLocal() : null,
       updatedByName: by == null ? null : ((by['fullName'] as String?)?.trim().isNotEmpty == true ? by['fullName'] as String : by['email'] as String?),
     );

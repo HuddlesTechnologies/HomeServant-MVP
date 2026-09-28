@@ -9,6 +9,7 @@ import { StorageService } from '../storage/storage.service';
 import { CreatePropertyDto } from './dto/create-property.dto';
 import { QueryPropertiesDto } from './dto/query-properties.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
+import { rankListings } from './listing-ranking';
 
 interface ShortletAvailability {
   isCurrentlyUnavailable: boolean;
@@ -106,25 +107,43 @@ export class PropertiesService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    const [items, total] = await Promise.all([
-      this.prisma.property.findMany({
-        where,
-        include: landlordInclude,
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.property.count({ where }),
-    ]);
+    let items: Prisma.PropertyGetPayload<{ include: typeof landlordInclude }>[];
+    let total: number;
+    if (query.landlordId) {
+      // One landlord's own listings: simply newest first.
+      [items, total] = await Promise.all([
+        this.prisma.property.findMany({
+          where,
+          include: landlordInclude,
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        this.prisma.property.count({ where }),
+      ]);
+    } else {
+      // Browse/search: the fair ranking (see listing-ranking.ts) decides
+      // the order over every match, then the page is cut from it.
+      const order = await this.rankedIds(where);
+      total = order.length;
+      const pageIds = order.slice((page - 1) * pageSize, page * pageSize);
+      const rows = await this.prisma.property.findMany({ where: { id: { in: pageIds } }, include: landlordInclude });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      items = pageIds.map((id) => byId.get(id)).filter((r): r is (typeof rows)[number] => !!r);
+    }
 
     const ratings = await this.reviews.summaryForProperties(items.map((p) => p.id));
     const shortletAvailability = await this.shortletAvailabilityForProperties(items);
     const imageRules = await this.platform.listingImageRules();
+    const featured = await this.featuredUntil(items.map((p) => p.id));
     return {
       items: items.map((p) => withLandlordVerified(p, requireVerified)).map((p) => ({
         ...p,
         ...imageAllowance(p, imageRules),
         hiddenByLandlord: !!p.hiddenByLandlordAt,
+        // A paid ad is running — tenants see a "Featured" label.
+        featured: featured.has(p.id),
+        featuredUntil: featured.get(p.id) ?? null,
         ...(ratings.get(p.id) ?? { avgRating: 0, reviewCount: 0 }),
         ...(shortletAvailability.get(p.id) ?? {}),
       })),
@@ -142,13 +161,61 @@ export class PropertiesService {
     if (!property) throw new NotFoundException('Property not found');
     const ratings = await this.reviews.summaryForProperties([id]);
     const shortletAvailability = await this.shortletAvailabilityForProperties([property]);
+    const featured = await this.featuredUntil([id]);
     return {
       ...withLandlordVerified(property, await this.platform.requireVerifiedLandlords()),
       ...imageAllowance(property, await this.platform.listingImageRules()),
+      featured: featured.has(id),
+      featuredUntil: featured.get(id) ?? null,
       hiddenByLandlord: !!property.hiddenByLandlordAt,
       ...(ratings.get(id) ?? { avgRating: 0, reviewCount: 0 }),
       ...(shortletAvailability.get(id) ?? {}),
     };
+  }
+
+  /// The browse order for every listing matching [where] — see
+  /// rankListings for the rules.
+  private async rankedIds(where: Prisma.PropertyWhereInput): Promise<string[]> {
+    const now = new Date();
+    const candidates = await this.prisma.property.findMany({
+      where,
+      select: { id: true, createdAt: true, category: true, isOccupied: true, adminBoost: true, adminBoostUntil: true },
+    });
+    const [availability, featured, slotEvery] = await Promise.all([
+      this.shortletAvailabilityForProperties(candidates),
+      this.featuredUntil(candidates.map((c) => c.id)),
+      this.platform.promotedSlotEvery(),
+    ]);
+    return rankListings(
+      candidates.map((c) => ({
+        id: c.id,
+        createdAt: c.createdAt,
+        available: c.category === PropertyCategory.SHORTLET ? !availability.get(c.id)?.isCurrentlyUnavailable : !c.isOccupied,
+        adminBoost: !c.adminBoostUntil || c.adminBoostUntil > now ? c.adminBoost : 0,
+        featured: featured.has(c.id),
+      })),
+      slotEvery,
+      now.toISOString().slice(0, 10),
+    );
+  }
+
+  /// Listings among [ids] with a paid "Featured" ad running now, and when
+  /// it (including any already-paid extension) ends.
+  async featuredUntil(ids: string[]): Promise<Map<string, Date>> {
+    if (ids.length === 0) return new Map();
+    const now = new Date();
+    const running = await this.prisma.listingPromotion.findMany({
+      where: { propertyId: { in: ids }, status: 'ACTIVE', endsAt: { gt: now } },
+      select: { propertyId: true, startsAt: true, endsAt: true },
+    });
+    const live = new Set(running.filter((p) => p.startsAt && p.startsAt <= now).map((p) => p.propertyId));
+    const result = new Map<string, Date>();
+    for (const promo of running) {
+      if (!live.has(promo.propertyId) || !promo.endsAt) continue;
+      const current = result.get(promo.propertyId);
+      if (!current || promo.endsAt > current) result.set(promo.propertyId, promo.endsAt);
+    }
+    return result;
   }
 
   /// A Shortlet's "unavailable"/countdown state is derived, never stored —

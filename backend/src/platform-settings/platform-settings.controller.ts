@@ -32,6 +32,24 @@ class UpdatePlatformSettingsDto {
   @Min(1)
   @Max(180)
   listingImageLockDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(100)
+  @Max(10_000_000)
+  featuredListingFeeNaira?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  featuredListingDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(20)
+  promotedSlotEvery?: number;
 }
 
 /// Platform Controls in the admin console — SUPER_ADMIN only.

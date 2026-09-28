@@ -135,6 +135,9 @@ class AppState extends ChangeNotifier {
   EvictionsRepository get evictionsRepo => _evictionsRepo;
   VerificationRepository get verification => _verificationRepo;
 
+  /// Listing calls not covered by the cached lists (e.g. featured ads).
+  PropertiesRepository get listings => _propertiesRepo;
+
   /// True once [load] has finished restoring (or found nothing to restore).
   /// AppLockGate waits for this before deciding whether a cold start should
   /// open locked, so it reads the setting as it was *before* this launch —

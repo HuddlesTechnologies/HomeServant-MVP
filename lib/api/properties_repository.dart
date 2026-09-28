@@ -60,6 +60,28 @@ class PropertiesRepository {
     });
   }
 
+  /// What a paid "Featured" ad on [id] costs and how long it runs.
+  Future<({int feeNaira, int days, DateTime? featuredUntil, DateTime wouldRunUntil})> promotionQuote(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.get('/properties/$id/promotions/quote');
+      final data = response.data as Map<String, dynamic>;
+      return (
+        feeNaira: data['feeNaira'] as int,
+        days: data['days'] as int,
+        featuredUntil: data['featuredUntil'] != null ? DateTime.parse(data['featuredUntil'] as String) : null,
+        wouldRunUntil: DateTime.parse(data['wouldRunUntil'] as String),
+      );
+    });
+  }
+
+  /// Starts Paystack checkout for a featured ad; returns the page to pay on.
+  Future<String> startPromotion(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.post('/properties/$id/promotions');
+      return response.data['authorizationUrl'] as String;
+    });
+  }
+
   Future<void> remove(String id) {
     return _client.call(() async {
       await _client.dio.delete('/properties/$id');

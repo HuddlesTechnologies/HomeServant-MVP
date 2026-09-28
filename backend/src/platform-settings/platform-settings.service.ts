@@ -42,6 +42,9 @@ export class PlatformSettingsService {
       payUnverifiedLandlords?: boolean;
       maxListingImageChanges?: number;
       listingImageLockDays?: number;
+      featuredListingFeeNaira?: number;
+      featuredListingDays?: number;
+      promotedSlotEvery?: number;
     },
   ) {
     const before = await this.requireVerifiedLandlords();
@@ -107,6 +110,21 @@ export class PlatformSettingsService {
       select: { maxListingImageChanges: true, listingImageLockDays: true },
     });
     return { maxChanges: row?.maxListingImageChanges ?? 3, lockDays: row?.listingImageLockDays ?? 14 };
+  }
+
+  /// Fairness: one promoted listing in every N search results (min 2).
+  async promotedSlotEvery(): Promise<number> {
+    const row = await this.prisma.platformSettings.findUnique({ where: { id: 1 }, select: { promotedSlotEvery: true } });
+    return Math.max(2, row?.promotedSlotEvery ?? 3);
+  }
+
+  /// What a paid "Featured" ad costs (naira) and how many days it runs.
+  async featuredListingPrice(): Promise<{ feeNaira: number; days: number }> {
+    const row = await this.prisma.platformSettings.findUnique({
+      where: { id: 1 },
+      select: { featuredListingFeeNaira: true, featuredListingDays: true },
+    });
+    return { feeNaira: row?.featuredListingFeeNaira ?? 5000, days: row?.featuredListingDays ?? 7 };
   }
 
   async requireVerifiedLandlords(): Promise<boolean> {

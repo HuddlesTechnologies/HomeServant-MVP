@@ -876,8 +876,19 @@ class AdminProperty {
     this.landlordEmail,
     this.isOccupied = false,
     this.hiddenByLandlord = false,
+    this.featured = false,
+    this.adminBoost = 0,
+    this.adminBoostUntil,
     required this.createdAt,
   });
+
+  /// A paid "Featured" ad is running.
+  final bool featured;
+
+  /// Admin search ranking: 0 normal, 1 boosted, 2 top.
+  final int adminBoost;
+  final DateTime? adminBoostUntil;
+  bool get adminBoostActive => adminBoost > 0 && (adminBoostUntil == null || adminBoostUntil!.isAfter(DateTime.now()));
 
   final String id;
   final int listingNumber;
@@ -910,6 +921,9 @@ class AdminProperty {
       landlordEmail: landlord?['email'] as String?,
       isOccupied: json['isOccupied'] as bool? ?? false,
       hiddenByLandlord: json['hiddenByLandlordAt'] != null,
+      featured: json['featured'] as bool? ?? false,
+      adminBoost: json['adminBoost'] as int? ?? 0,
+      adminBoostUntil: json['adminBoostUntil'] != null ? DateTime.parse(json['adminBoostUntil'] as String) : null,
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }

@@ -14,6 +14,7 @@ import { AdminService } from './admin.service';
 import { ConfirmAdminDto } from './dto/confirm-admin.dto';
 import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
 import { DelistReasonDto } from './dto/delist-reason.dto';
+import { SetPropertyBoostDto } from './dto/set-property-boost.dto';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { RejectVendorDto } from './dto/reject-vendor.dto';
@@ -306,6 +307,13 @@ export class AdminController {
   @Get('properties/:id')
   findPropertyDetail(@Param('id') id: string) {
     return this.admin.findPropertyDetail(id);
+  }
+
+  /// Moderator+. Search ranking — see AdminService.setPropertyBoost.
+  @Patch('properties/:id/boost')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  setPropertyBoost(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: SetPropertyBoostDto) {
+    return this.admin.setPropertyBoost(id, dto.level, dto.days, dto.reason, actingAdmin.sub);
   }
 
   @Patch('properties/:id/relist')

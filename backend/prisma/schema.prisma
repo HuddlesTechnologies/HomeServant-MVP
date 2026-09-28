@@ -663,10 +663,18 @@ model Property {
   /// can't be booked, but otherwise untouched. Cleared when they show it
   /// again.
   hiddenByLandlordAt DateTime?
+  /// Admin search ranking: 0 = normal, 1 = boosted, 2 = top — set by a
+  /// moderator/super admin (e.g. for a popular shortlet), optionally until
+  /// [adminBoostUntil]. It only moves a listing up among *available*
+  /// listings, and only into the limited promoted slots — see
+  /// listing-ranking.ts for the fairness rules.
+  adminBoost         Int              @default(0)
+  adminBoostUntil    DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  bookings  Booking[]
+  bookings   Booking[]
+  promotions ListingPromotion[]
   favorites Favorite[]
   reviews   Review[]
   threads   Thread[]
@@ -674,6 +682,38 @@ model Property {
 
   @@index([landlordId])
   @@index([state, category])
+}
+
+enum PromotionStatus {
+  /// Checkout started, Paystack hasn't confirmed the charge yet.
+  PENDING_PAYMENT
+  /// Paid — featured from [ListingPromotion.startsAt] to [endsAt].
+  ACTIVE
+  /// The checkout was abandoned or superseded by a newer attempt.
+  FAILED
+}
+
+/// A landlord's paid "Featured" ad for one listing: they pay a fee (set in
+/// Platform Controls) through Paystack, and once it clears the listing is
+/// featured for a set number of days — labelled "Featured" to tenants and
+/// placed in the limited promoted search slots. Buying again while one is
+/// running extends it (the new period starts when the current one ends).
+/// HomeServant keeps the fee; there's no recipient or escrow.
+model ListingPromotion {
+  id                String          @id @default(uuid())
+  propertyId        String
+  property          Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  landlordId        String
+  days              Int
+  amountKobo        Int
+  paystackReference String          @unique
+  status            PromotionStatus @default(PENDING_PAYMENT)
+  paidAt            DateTime?
+  startsAt          DateTime?
+  endsAt            DateTime?
+  createdAt         DateTime        @default(now())
+
+  @@index([propertyId, status])
 }
 
 /// One review per tenant per property (the unique constraint), rather
@@ -1352,6 +1392,14 @@ model PlatformSettings {
   /// are locked for [listingImageLockDays] days (see Property.imageChangesUsed).
   maxListingImageChanges   Int      @default(3)
   listingImageLockDays     Int      @default(14)
+  /// Paid "Featured" ads: what a landlord pays (naira) to feature a listing
+  /// for [featuredListingDays] days. See PromotionsService.
+  featuredListingFeeNaira  Int      @default(5000)
+  featuredListingDays      Int      @default(7)
+  /// Fairness: at most one promoted (featured or admin-boosted) listing in
+  /// every [promotedSlotEvery] search results — the rest are ordinary
+  /// listings. See listing-ranking.ts.
+  promotedSlotEvery        Int      @default(3)
   updatedById              String?
   updatedBy                User?    @relation("PlatformSettingsEditor", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt                DateTime @updatedAt

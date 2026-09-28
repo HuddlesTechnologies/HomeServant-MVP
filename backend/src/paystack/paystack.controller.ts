@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Body,
   Controller,
+  forwardRef,
   Get,
+  Inject,
   HttpCode,
   HttpStatus,
   Post,
@@ -15,6 +17,7 @@ import {
 import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PaymentsService } from '../payments/payments.service';
+import { PromotionsService } from '../promotions/promotions.service';
 import { PaystackService } from './paystack.service';
 
 @Controller('paystack')
@@ -22,6 +25,7 @@ export class PaystackController {
   constructor(
     private readonly paystack: PaystackService,
     private readonly payments: PaymentsService,
+    @Inject(forwardRef(() => PromotionsService)) private readonly promotions: PromotionsService,
   ) {}
 
   @Get('banks')
@@ -59,7 +63,10 @@ export class PaystackController {
     }
 
     if (body.event === 'charge.success' && body.data?.reference) {
-      await this.payments.handleChargeSuccess(body.data.reference);
+      // A landlord's featured-ad checkout, or else rent/an order.
+      if (!(await this.promotions.handleChargeSuccess(body.data.reference))) {
+        await this.payments.handleChargeSuccess(body.data.reference);
+      }
     }
     // A payout Paystack accepted but the bank then failed or reversed: put
     // it back as owed (with the reason) so it shows on the admin Payouts
