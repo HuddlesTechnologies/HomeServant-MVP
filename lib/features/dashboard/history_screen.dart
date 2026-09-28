@@ -216,6 +216,35 @@ class _HistoryTileState extends State<_HistoryTile> {
     }
   }
 
+  /// Monthly plan: confirm, then open checkout for next month's rent. It
+  /// goes to the landlord once the payment clears.
+  Future<void> _payNextMonth() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final appState = context.read<AppState>();
+    final amount = booking.monthlyRent;
+    final confirmed = await showConfirmSheet(
+      context,
+      title: "Pay next month's rent?",
+      body: amount != null
+          ? 'You will pay ₦${formatWithThousandsSeparator(amount)} for the month from ${formatShortDate(booking.rentPaidThrough!)}.'
+          : "You'll pay next month's rent.",
+      actionLabel: amount != null ? 'Pay ₦${formatWithThousandsSeparator(amount)}' : 'Pay',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final payment = await appState.payNextMonth(booking.id);
+      final launched = await openPaymentPage(payment.authorizationUrl);
+      if (!launched && mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text("Couldn't open the payment page — try again.")));
+      }
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// Shows exactly what renewing costs (flagging a rent increase) before
   /// anything is charged, then opens Paystack for that amount. The server
   /// refuses if the landlord changed the terms in between, so the tenant
@@ -307,6 +336,32 @@ class _HistoryTileState extends State<_HistoryTile> {
             HiddenListingNotice(hasBooking: true, isShortlet: booking.isShortlet),
           ],
           TenantEvictionNotice(bookingId: booking.id, theme: theme),
+          // Monthly plan: what a month costs and how far it's paid.
+          // theme.foreground on the card's faint foreground wash.
+          if (booking.payingMonthly && booking.monthlyRent != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(
+                  booking.monthlyRentOverdue ? Icons.warning_amber_rounded : Icons.calendar_month_outlined,
+                  color: theme.foreground,
+                  size: 16,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Paying monthly · ₦${formatWithThousandsSeparator(booking.monthlyRent!)}/month'
+                    '${booking.rentPaidThrough != null && booking.status == BookingStatus.movedIn ? booking.monthlyRentOverdue ? ' · overdue since ${formatShortDate(booking.rentPaidThrough!)}' : booking.hasMonthsLeftToPay ? ' · paid until ${formatShortDate(booking.rentPaidThrough!)}' : ' · all months paid' : ''}',
+                    style: AppTextStyles.body(
+                      color: theme.foreground,
+                      size: 12.5,
+                      weight: booking.monthlyRentOverdue ? FontWeight.w800 : FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           if (booking.status == BookingStatus.movedIn) ...[
             const SizedBox(height: 12),
             InkWell(
@@ -368,7 +423,9 @@ class _HistoryTileState extends State<_HistoryTile> {
       return 'Inspection confirmed for ${formatShortDate(booking.requestedDate!)}';
     }
     if (booking.status == BookingStatus.paidAwaitingInspection) {
-      return 'Paid — book an inspection whenever you\'re ready';
+      return booking.payingMonthly
+          ? 'First month paid — book an inspection whenever you\'re ready'
+          : 'Paid — book an inspection whenever you\'re ready';
     }
     if (booking.leaseStartDate != null && booking.leaseEndDate != null) {
       return '${isShortlet ? 'Booked' : 'Leased'} ${formatShortDate(booking.leaseStartDate!)} – ${formatShortDate(booking.leaseEndDate!)}';
@@ -417,6 +474,12 @@ class _HistoryTileState extends State<_HistoryTile> {
           _ActionButton(label: 'Moved In', theme: theme, onTap: _markMovedIn),
         ];
       case BookingStatus.movedIn:
+        // Monthly plan with months still to pay: paying the next one comes
+        // first (renewing needs every month of this lease paid).
+        if (booking.hasMonthsLeftToPay) {
+          if (!booking.canPayNextMonth) return const [];
+          return [_ActionButton(label: 'Pay Next Month', theme: theme, onTap: _payNextMonth)];
+        }
         if (booking.isShortlet || !withinRenewalWindow) return const [];
         // An approved eviction ends the lease early; it can't be renewed.
         if (context.read<AppState>().evictionForBooking(booking.id)?.status == EvictionStatus.approved) return const [];

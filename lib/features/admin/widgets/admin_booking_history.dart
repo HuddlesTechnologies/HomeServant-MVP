@@ -267,6 +267,12 @@ class _BookingDetails extends StatelessWidget {
           _heading('This booking'),
           _row('Status', booking.outcome ?? _words(booking.status)),
           _row('Price charged', '${_naira(booking.price)}/${booking.priceUnit.toLowerCase()}'),
+          if (booking.payingMonthly)
+            _row(
+              'Payment plan',
+              'Monthly${booking.monthlyRent != null ? ' · ${_naira(booking.monthlyRent!)}/month' : ''}'
+                  '${booking.rentPaidThrough != null ? ' · paid until ${formatShortDate(booking.rentPaidThrough!.toLocal())}' : ''}',
+            ),
           if (booking.requestedDate != null)
             _row(booking.nights != null ? 'Check-in' : 'Inspection date', _stamp(booking.requestedDate!)),
           if (booking.nights != null) _row('Nights', '${booking.nights}'),

@@ -567,7 +567,15 @@ class AdminUserBooking {
     this.property,
     this.payments = const [],
     this.timeline = const [],
+    this.payingMonthly = false,
+    this.monthlyRent,
+    this.rentPaidThrough,
   });
+
+  /// Monthly plan: the agreed monthly rent (naira) and how far it's paid.
+  final bool payingMonthly;
+  final int? monthlyRent;
+  final DateTime? rentPaidThrough;
 
   final String id;
   final String propertyId;
@@ -605,6 +613,9 @@ class AdminUserBooking {
       nights: json['nights'] as int?,
       leaseStartDate: date('leaseStartDate'),
       leaseEndDate: date('leaseEndDate'),
+      payingMonthly: json['paymentPlan'] == 'MONTHLY',
+      monthlyRent: json['monthlyRent'] as int?,
+      rentPaidThrough: date('rentPaidThrough'),
       property: AdminBookingProperty.fromApi(json['property']),
       payments: (json['payments'] as List? ?? const [])
           .cast<Map<String, dynamic>>()

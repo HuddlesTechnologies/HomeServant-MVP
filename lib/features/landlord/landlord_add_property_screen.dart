@@ -59,6 +59,9 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   int _rentDurationMonths = 12;
   bool _messagingEnabled = true;
 
+  /// Non-Shortlet only: let tenants pay month by month.
+  bool _allowMonthlyPayment = false;
+
   bool get _isEditing => widget.initial != null;
 
   /// Editing a listing whose photo changes are used up: the photos can't be
@@ -112,6 +115,8 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   @override
   void initState() {
     super.initState();
+    // Keeps the monthly-payment card's "₦…/month" in step with the price.
+    _price.addListener(_onPriceChanged);
     final initial = widget.initial;
     if (initial == null) return;
     _title.text = initial.title;
@@ -126,6 +131,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     _state = initial.state;
     _rentDurationMonths = initial.rentDurationMonths ?? 12;
     _messagingEnabled = initial.messagingEnabled;
+    _allowMonthlyPayment = initial.allowMonthlyPayment;
     _images.addAll([
       PickedUpload(path: initial.image, fileName: 'cover', isImage: true),
       for (final url in initial.galleryImages) PickedUpload(path: url, fileName: 'photo', isImage: true),
@@ -134,8 +140,13 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     _videoFileName = initial.videoPath?.split('/').last;
   }
 
+  void _onPriceChanged() {
+    if (mounted && _category != 'Shortlet') setState(() {});
+  }
+
   @override
   void dispose() {
+    _price.removeListener(_onPriceChanged);
     _title.dispose();
     _location.dispose();
     _price.dispose();
@@ -250,6 +261,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
             videoPath: _videoPath,
             rentDurationMonths: isShortlet ? null : _rentDurationMonths,
             messagingEnabled: _messagingEnabled,
+            allowMonthlyPayment: !isShortlet && _allowMonthlyPayment,
             unitAddress: isShortlet ? _unitAddress.text.trim() : null,
             roomNumber: isShortlet ? _roomNumber.text.trim() : null,
           )) ??
@@ -271,6 +283,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
             videoPath: _videoPath,
             rentDurationMonths: isShortlet ? null : _rentDurationMonths,
             messagingEnabled: _messagingEnabled,
+            allowMonthlyPayment: !isShortlet && _allowMonthlyPayment,
             unitAddress: isShortlet ? _unitAddress.text.trim() : null,
             roomNumber: isShortlet ? _roomNumber.text.trim() : null,
           );
@@ -424,6 +437,14 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                 value: _messagingEnabled,
                 onChanged: (value) => setState(() => _messagingEnabled = value),
               ),
+              if (_category != 'Shortlet') ...[
+                const SizedBox(height: 12),
+                _MonthlyPaymentToggle(
+                  value: _allowMonthlyPayment,
+                  yearlyPrice: int.tryParse(_price.text.replaceAll(',', '')),
+                  onChanged: (value) => setState(() => _allowMonthlyPayment = value),
+                ),
+              ],
               const SizedBox(height: 26),
               PillButton(
                 label: _saving ? (_isEditing ? 'Saving…' : 'Adding…') : (_isEditing ? 'Save Changes' : 'Add Property'),
@@ -715,6 +736,48 @@ class _MessagingToggle extends StatelessWidget {
                 Text(
                   'Off means tenants pay rent directly — no messaging or inspection booking for this listing',
                   style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(value: value, onChanged: onChanged, activeColor: AppColors.navy),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Allow monthly payments" — white card, navy text (same as the messaging
+/// toggle above it). Shows what a month would cost at the price entered.
+class _MonthlyPaymentToggle extends StatelessWidget {
+  const _MonthlyPaymentToggle({required this.value, required this.yearlyPrice, required this.onChanged});
+
+  final bool value;
+  final int? yearlyPrice;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final perMonth = yearlyPrice != null && yearlyPrice! > 0 ? ' (₦${formatNaira((yearlyPrice! / 12).ceil())}/month)' : '';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(color: AppColors.white, borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_month_outlined, color: AppColors.navy, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Allow Monthly Payments',
+                  style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w600),
+                ),
+                Text(
+                  'Tenants can pay a twelfth of the yearly rent each month$perMonth: the first month up front, held '
+                  "until they move in, then each month as it's due. You're told if a month is missed.",
+                  style: AppTextStyles.body(color: const Color(0xFF5B6170), size: 11.5),
                 ),
               ],
             ),

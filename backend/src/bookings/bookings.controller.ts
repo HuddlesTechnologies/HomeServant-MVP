@@ -91,6 +91,14 @@ export class BookingsController {
     return this.bookings.renewalQuote(id, user.sub);
   }
 
+  /// A monthly tenant paying next month's rent — see
+  /// PaymentsService.payMonthlyRent. Returns the checkout to open.
+  @Post(':id/pay-month')
+  @Roles(UserRole.TENANT)
+  payMonth(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.payMonth(id, user.sub);
+  }
+
   @Post(':id/renew')
   @Roles(UserRole.TENANT)
   renew(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: RenewBookingDto) {

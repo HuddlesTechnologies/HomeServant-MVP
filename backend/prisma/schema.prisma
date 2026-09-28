@@ -647,6 +647,10 @@ model Property {
   /// starting a new thread from it — replaces the old device-local,
   /// unsynced AppState toggle of the same intent.
   messagingEnabled   Boolean          @default(true)
+  /// The landlord lets tenants pay this (non-Shortlet) rental monthly:
+  /// the first month up front (held in escrow like a full payment), then
+  /// each month as it comes due. See Booking.paymentPlan.
+  allowMonthlyPayment Boolean         @default(false)
   /// Shortlet-only — the unit's exact address/room within [location],
   /// since one shortlet listing is a single bookable unit.
   unitAddress        String?
@@ -918,6 +922,14 @@ model Message {
   @@index([threadId, createdAt])
 }
 
+/// How a tenant pays for a (non-Shortlet) rental: the whole period up front
+/// (FULL, the default), or month by month (MONTHLY — only where the
+/// landlord allows it, see Property.allowMonthlyPayment).
+enum PaymentPlan {
+  FULL
+  MONTHLY
+}
+
 model Booking {
   id                      String        @id @default(uuid())
   propertyId              String
@@ -962,6 +974,20 @@ model Booking {
   /// Bookings" feed. Only hides it there: it is NOT declined, still shows in
   /// the Bookings tab and still counts as a request waiting for an answer.
   landlordFeedClearedAt   DateTime?
+  /// MONTHLY: the first payment is one month's rent (held until move-in
+  /// like a full payment); after move-in each further month is paid as it
+  /// comes due (PaymentsService.payMonthlyRent) and released straight to
+  /// the landlord. [monthlyRent] is the agreed monthly amount in naira
+  /// (the yearly rent / 12, rounded up), snapshotted like [priceSnapshot].
+  /// [rentPaidThrough] is how far the rent is paid; the lease-lifecycle cron
+  /// reminds the tenant before it and flags a missed month to both sides
+  /// (de-duped by the two *For fields, which hold the rentPaidThrough they
+  /// were sent for).
+  paymentPlan               PaymentPlan @default(FULL)
+  monthlyRent               Int?
+  rentPaidThrough           DateTime?
+  monthlyReminderSentFor    DateTime?
+  monthlyOverdueNotifiedFor DateTime?
   message                 String?
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt

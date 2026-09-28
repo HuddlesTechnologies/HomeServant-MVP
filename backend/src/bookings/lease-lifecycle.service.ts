@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { BookingStatus, NotificationType } from '@prisma/client';
+import { BookingStatus, NotificationType, PaymentPlan } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -15,6 +15,9 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /// reminders would never fire — every lease would just get the 30-day
 /// reminder once and nothing after.)
 const REMINDER_THRESHOLDS_DAYS = [0, 15, 30] as const;
+
+/// Monthly-plan tenants are reminded this many days before a month is due.
+const MONTHLY_REMINDER_DAYS = 3;
 
 /// Runs once a day (mirrors AccountCleanupService's own @Cron pattern) and
 /// does two unrelated-but-adjacent things to every MOVED_IN lease:
@@ -46,6 +49,56 @@ export class LeaseLifecycleService {
   async run(): Promise<void> {
     await this.autoRelistExpiredLeases();
     await this.sendRentExpiryReminders();
+    await this.sendMonthlyRentReminders();
+  }
+
+  /// Monthly-plan tenants (Booking.paymentPlan MONTHLY) with months still
+  /// to pay on their current lease: a reminder [MONTHLY_REMINDER_DAYS]
+  /// days before the next month is due, and — once it's overdue — one
+  /// "missed payment" message to the tenant and one flag to the landlord.
+  /// Each is sent once per month due (de-duped against rentPaidThrough).
+  async sendMonthlyRentReminders(now = new Date()): Promise<void> {
+    const leases = await this.prisma.booking.findMany({
+      where: {
+        status: BookingStatus.MOVED_IN,
+        paymentPlan: PaymentPlan.MONTHLY,
+        rentPaidThrough: { not: null },
+        leaseEndDate: { gt: now },
+      },
+      include: {
+        property: { select: { title: true, landlord: { select: { id: true, email: true } } } },
+        tenant: { select: { id: true, email: true, fullName: true } },
+      },
+    });
+    let reminded = 0;
+    let flagged = 0;
+    for (const booking of leases) {
+      const due = booking.rentPaidThrough!;
+      if (!booking.leaseEndDate || due.getTime() >= booking.leaseEndDate.getTime()) continue;
+      const amount = booking.monthlyRent ? `₦${booking.monthlyRent.toLocaleString('en-US')}` : "this month's rent";
+      const dueText = due.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      const sameMonth = (sentFor: Date | null) => !!sentFor && sentFor.getTime() === due.getTime();
+
+      if (due.getTime() < now.getTime()) {
+        if (sameMonth(booking.monthlyOverdueNotifiedFor)) continue;
+        const tenantBody = `Your monthly rent of ${amount} for ${booking.property.title} was due on ${dueText} and hasn't been paid. Pay it from your bookings to stay up to date.`;
+        await this.notifications.create(booking.tenant.id, NotificationType.RENT_EXPIRY_REMINDER, 'Monthly rent overdue', tenantBody);
+        await this.mail.send(booking.tenant.email, 'Monthly rent overdue', `<p>${tenantBody}</p>`, tenantBody);
+        const name = booking.tenant.fullName?.trim() ? booking.tenant.fullName : 'Your tenant';
+        const landlordBody = `${name} missed the monthly rent (${amount}) for ${booking.property.title} that was due on ${dueText}. We've reminded them.`;
+        await this.notifications.create(booking.property.landlord.id, NotificationType.RENT_EXPIRY_REMINDER, 'Tenant missed a monthly payment', landlordBody);
+        await this.mail.send(booking.property.landlord.email, 'Tenant missed a monthly payment', `<p>${landlordBody}</p>`, landlordBody);
+        await this.prisma.booking.update({ where: { id: booking.id }, data: { monthlyOverdueNotifiedFor: due } });
+        flagged++;
+      } else if ((due.getTime() - now.getTime()) / MS_PER_DAY <= MONTHLY_REMINDER_DAYS && !sameMonth(booking.monthlyReminderSentFor)) {
+        const body = `Your monthly rent of ${amount} for ${booking.property.title} is due on ${dueText}. You can pay it now from your bookings.`;
+        await this.notifications.create(booking.tenant.id, NotificationType.RENT_EXPIRY_REMINDER, 'Monthly rent due soon', body);
+        await this.mail.send(booking.tenant.email, 'Monthly rent due soon', `<p>${body}</p>`, body);
+        await this.prisma.booking.update({ where: { id: booking.id }, data: { monthlyReminderSentFor: due } });
+        reminded++;
+      }
+    }
+    if (reminded + flagged > 0) this.logger.log(`Monthly rent: ${reminded} reminder(s), ${flagged} missed payment(s) flagged`);
   }
 
   private async autoRelistExpiredLeases(): Promise<void> {

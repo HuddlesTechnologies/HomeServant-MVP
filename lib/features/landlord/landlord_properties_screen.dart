@@ -563,6 +563,19 @@ class _PropertyTile extends StatelessWidget {
                         'Last paid ${formatShortDate(activeBooking!.lastPaidAt!)}',
                         style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
                       ),
+                    // Monthly plan: how far the rent is paid, flagged in red
+                    // (dark red on the white card) once a month is missed.
+                    if (activeBooking!.payingMonthly && activeBooking!.rentPaidThrough != null)
+                      Text(
+                        activeBooking!.monthlyRentOverdue
+                            ? 'Monthly rent overdue since ${formatShortDate(activeBooking!.rentPaidThrough!)}'
+                            : 'Pays monthly · paid until ${formatShortDate(activeBooking!.rentPaidThrough!)}',
+                        style: AppTextStyles.body(
+                          color: activeBooking!.monthlyRentOverdue ? const Color(0xFFB42318) : AppColors.navy,
+                          size: 11.5,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
                   ],
                 ],
               ),

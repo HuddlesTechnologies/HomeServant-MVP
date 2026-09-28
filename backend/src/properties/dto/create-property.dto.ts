@@ -68,6 +68,12 @@ export class CreatePropertyDto {
   @IsBoolean()
   messagingEnabled?: boolean;
 
+  /// Lets tenants pay this rental month by month (ignored for a Shortlet,
+  /// which is always paid per stay). See Property.allowMonthlyPayment.
+  @IsOptional()
+  @IsBoolean()
+  allowMonthlyPayment?: boolean;
+
   /// Shortlet-only (the app sends them only for a Shortlet listing): the
   /// exact unit address and room number, stored on Property.
   @IsOptional()

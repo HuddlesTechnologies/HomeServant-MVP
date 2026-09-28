@@ -96,6 +96,22 @@ class LandlordTenancyCard extends StatelessWidget {
             value: end == null ? '—' : formatShortDate(end),
             color: fg,
           ),
+          // Monthly plan: how far the rent is paid, and a flag once a month
+          // is missed (the same pill as an approved eviction).
+          if (_isCurrent && booking.payingMonthly && booking.rentPaidThrough != null)
+            _DateLine(
+              label: booking.hasMonthsLeftToPay ? 'Monthly rent paid until' : 'Monthly rent',
+              value: booking.hasMonthsLeftToPay ? formatShortDate(booking.rentPaidThrough!) : 'All months paid',
+              color: fg,
+            ),
+          if (_isCurrent && booking.monthlyRentOverdue) ...[
+            const SizedBox(height: 10),
+            _StatusPill(
+              label: 'Missed monthly rent due ${formatShortDate(booking.rentPaidThrough!)}',
+              color: _warningRed,
+              textColor: fg,
+            ),
+          ],
           if (eviction != null && eviction.status == EvictionStatus.approved) ...[
             const SizedBox(height: 10),
             _StatusPill(label: 'Ended by an approved eviction', color: _warningRed, textColor: fg),

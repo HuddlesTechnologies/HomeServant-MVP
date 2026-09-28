@@ -39,6 +39,7 @@ class Property {
     this.adminBoost = 0,
     this.adminBoostUntil,
     this.bookingsCount,
+    this.allowMonthlyPayment = false,
   });
 
   /// Builds a [Property] from a `GET /properties` / `GET /properties/:id`
@@ -93,6 +94,7 @@ class Property {
       adminBoost: json['adminBoost'] as int? ?? 0,
       adminBoostUntil: _parseDate(json['adminBoostUntil']),
       bookingsCount: (json['_count'] as Map<String, dynamic>?)?['bookings'] as int?,
+      allowMonthlyPayment: json['allowMonthlyPayment'] as bool? ?? false,
       shortletUnavailableUntil: _parseDate(json['availableAgainAt']) ??
           _parseDate(json['shortletUnavailableUntil']) ??
           _parseDate(json['unavailableUntil']),
@@ -123,6 +125,7 @@ class Property {
       if (roomNumber != null) 'roomNumber': roomNumber,
     } else ...{
       if (rentDurationMonths != null) 'rentDurationMonths': rentDurationMonths,
+      'allowMonthlyPayment': allowMonthlyPayment,
     },
   };
 
@@ -146,6 +149,7 @@ class Property {
     String? videoPath,
     int? rentDurationMonths,
     bool? messagingEnabled,
+    bool? allowMonthlyPayment,
     String? unitAddress,
     String? roomNumber,
   }) => Property(
@@ -185,6 +189,7 @@ class Property {
     adminBoost: adminBoost,
     adminBoostUntil: adminBoostUntil,
     bookingsCount: bookingsCount,
+    allowMonthlyPayment: allowMonthlyPayment ?? this.allowMonthlyPayment,
   );
 
   static String _categoryFromApi(String value) => switch (value) {
@@ -241,6 +246,13 @@ class Property {
 
   /// Admin console only: how many bookings this listing has had.
   final int? bookingsCount;
+
+  /// The landlord lets tenants pay this (non-Shortlet) rental monthly.
+  final bool allowMonthlyPayment;
+
+  /// A month's rent on the monthly plan: a twelfth of the yearly price,
+  /// rounded up (matches the server).
+  int get monthlyPrice => (price / 12).ceil();
 
   bool get adminBoostActive => adminBoost > 0 && (adminBoostUntil == null || adminBoostUntil!.isAfter(DateTime.now()));
 

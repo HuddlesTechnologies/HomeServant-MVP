@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingStatus, NotificationType, PropertyCategory, VerificationStatus } from '@prisma/client';
+import { BookingStatus, NotificationType, PropertyCategory, VerificationStatus, PaymentPlan } from '@prisma/client';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -66,6 +66,10 @@ export class BookingsService {
     if (isShortlet && (!dto.nights || !dto.requestedDate)) {
       throw new BadRequestException('requestedDate and nights are required when booking a Shortlet');
     }
+    const monthly = dto.paymentPlan === PaymentPlan.MONTHLY;
+    if (monthly && (isShortlet || !property.allowMonthlyPayment)) {
+      throw new BadRequestException("The landlord doesn't allow monthly payments for this property");
+    }
 
     const booking = await this.prisma.booking.create({
       data: {
@@ -74,6 +78,8 @@ export class BookingsService {
         requestedDate: isShortlet ? new Date(dto.requestedDate!) : undefined,
         nights: isShortlet ? dto.nights : undefined,
         message: dto.message,
+        // Monthly: a month's rent is a twelfth of the yearly price, rounded up.
+        ...(monthly ? { paymentPlan: PaymentPlan.MONTHLY, monthlyRent: Math.ceil(property.price / 12) } : {}),
       },
       include: { property: true },
     });
@@ -360,6 +366,11 @@ export class BookingsService {
 
   /// `POST /bookings/:id/renew` — charges again for another lease term;
   /// releases instantly (no hold) once the webhook confirms it.
+  /// See PaymentsService.payMonthlyRent.
+  payMonth(bookingId: string, tenantId: string) {
+    return this.payments.payMonthlyRent(bookingId, tenantId);
+  }
+
   renew(id: string, tenantId: string, expected?: { amount?: number; leaseMonths?: number }) {
     return this.payments.renewBooking(id, tenantId, expected);
   }

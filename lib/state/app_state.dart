@@ -985,8 +985,18 @@ class AppState extends ChangeNotifier {
   /// immediately starts its Paystack charge — [BookingCreationResult.payment]
   /// is set in that case; open its `authorizationUrl` right away. [nights]
   /// is required only when [isShortlet].
-  Future<BookingCreationResult> recordRentalOrBooking(String propertyId, {required bool isShortlet, int? nights}) async {
-    final result = await _bookingsRepo.create(propertyId: propertyId, isShortlet: isShortlet, nights: isShortlet ? nights : null);
+  Future<BookingCreationResult> recordRentalOrBooking(
+    String propertyId, {
+    required bool isShortlet,
+    int? nights,
+    bool payMonthly = false,
+  }) async {
+    final result = await _bookingsRepo.create(
+      propertyId: propertyId,
+      isShortlet: isShortlet,
+      nights: isShortlet ? nights : null,
+      payMonthly: payMonthly,
+    );
     myBookings = [result.booking, ...myBookings];
     notifyListeners();
     return result;
@@ -1010,6 +1020,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<RenewalQuote> renewalQuote(String bookingId) => _bookingsRepo.renewalQuote(bookingId);
+
+  /// Monthly plan: pay next month's rent (opens checkout).
+  Future<PaymentInitiation> payNextMonth(String bookingId) => _bookingsRepo.payNextMonth(bookingId);
 
   /// Starts the renewal payment for the amount in [quote]; the lease is
   /// extended once Paystack confirms it (the bookings list refreshes then).

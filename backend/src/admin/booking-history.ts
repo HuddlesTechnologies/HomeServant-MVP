@@ -15,6 +15,9 @@ export const adminBookingHistorySelect = {
   leaseStartDate: true,
   leaseEndDate: true,
   message: true,
+  paymentPlan: true,
+  monthlyRent: true,
+  rentPaidThrough: true,
   createdAt: true,
   updatedAt: true,
   property: {
@@ -89,7 +92,10 @@ function naira(kobo: number): string {
 /// The one-line outcome shown on a booking in the admin console: whether
 /// it succeeded, is still pending, failed, or was refunded (and who
 /// started the refund).
-export function bookingOutcome(booking: Pick<HistoryBooking, 'status'> & { payments: HistoryPayment[] }): {
+export function bookingOutcome(
+  booking: Pick<HistoryBooking, 'status'> &
+    Partial<Pick<HistoryBooking, 'paymentPlan' | 'rentPaidThrough' | 'leaseEndDate'>> & { payments: HistoryPayment[] },
+): {
   label: string;
   tone: HistoryTone;
 } {
@@ -105,8 +111,16 @@ export function bookingOutcome(booking: Pick<HistoryBooking, 'status'> & { payme
     case BookingStatus.DECLINED:
       return { label: refunded ? 'Declined by landlord · refunded' : 'Declined by landlord', tone: 'warning' };
     case BookingStatus.MOVED_IN:
-    case BookingStatus.PAID:
-      return { label: 'Successful', tone: 'success' };
+    case BookingStatus.PAID: {
+      const monthlyOverdue =
+        booking.paymentPlan === 'MONTHLY' &&
+        !!booking.rentPaidThrough &&
+        !!booking.leaseEndDate &&
+        booking.rentPaidThrough < booking.leaseEndDate &&
+        booking.rentPaidThrough.getTime() < Date.now();
+      if (monthlyOverdue) return { label: 'Successful · monthly rent overdue', tone: 'danger' };
+      return { label: booking.paymentPlan === 'MONTHLY' ? 'Successful · paying monthly' : 'Successful', tone: 'success' };
+    }
   }
   if (latest?.status === PaymentStatus.PAID_HELD && latest.refundLastAttemptAt) {
     return latest.refundLastError
@@ -133,7 +147,16 @@ export function bookingTimeline(booking: HistoryBooking): BookingTimelineEvent[]
     { at: booking.createdAt, label: 'Booking requested', tone: 'info', detail: booking.message ?? undefined },
   ];
   booking.payments.forEach((payment, index) => {
-    const which = booking.payments.length > 1 ? (index === 0 ? ' (first payment)' : ' (renewal)') : '';
+    const monthly = booking.paymentPlan === 'MONTHLY';
+    const which = monthly
+      ? index === 0
+        ? ' (first month)'
+        : ' (monthly rent)'
+      : booking.payments.length > 1
+        ? index === 0
+          ? ' (first payment)'
+          : ' (renewal)'
+        : '';
     events.push({ at: payment.createdAt, label: `Payment started${which}`, tone: 'info', detail: naira(payment.amount) });
     if (payment.status === PaymentStatus.FAILED) {
       events.push({ at: payment.updatedAt, label: `Payment failed${which}`, tone: 'danger', detail: naira(payment.amount) });
@@ -228,6 +251,9 @@ export function toAdminBookingHistory(booking: HistoryBooking) {
     outcomeTone: outcome.tone,
     requestedDate: booking.requestedDate,
     nights: booking.nights,
+    paymentPlan: booking.paymentPlan,
+    monthlyRent: booking.monthlyRent,
+    rentPaidThrough: booking.rentPaidThrough,
     leaseStartDate: booking.leaseStartDate,
     leaseEndDate: booking.leaseEndDate,
     createdAt: booking.createdAt,
