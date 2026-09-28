@@ -46,6 +46,15 @@ services:
         sync: false
       - key: ADMIN_BOOTSTRAP_SECRET
         generateValue: true
+      # ID checks against the issuing authority (see IdCheckModule).
+      # "console" checks nothing and every submission waits for a
+      # moderator; "prembly" needs PREMBLY_X_API_KEY filled in on the
+      # dashboard first (the current API authenticates on the key alone —
+      # PREMBLY_APP_ID is only for their retired legacy hosts).
+      - key: ID_CHECK_PROVIDER
+        value: console
+      - key: PREMBLY_X_API_KEY
+        sync: false
       - key: CORS_ORIGINS
         value: https://homeservant.online,https://homeservant.vercel.app
       - key: PORT

@@ -1195,6 +1195,30 @@ enum VerificationStatus {
   REJECTED
 }
 
+/// The outcome of checking an ID number against the issuing authority
+/// (NIMC, FRSC, INEC, Immigration) through the configured ID check
+/// provider — see IdCheckProvider / PremblyIdCheckProvider.
+enum IdCheckStatus {
+  /// No check has been made: no provider is configured, or nothing has
+  /// been submitted yet.
+  NOT_RUN
+  /// The authority holds this ID number and the name on it matches the
+  /// name on the account. The only outcome that can verify an account
+  /// without a moderator.
+  MATCH
+  /// The authority holds this ID number, but under a different name.
+  MISMATCH
+  /// The authority has no record of this ID number.
+  NOT_FOUND
+  /// The provider doesn't check this kind of ID (or none is configured),
+  /// so a moderator has to look at it by hand.
+  UNSUPPORTED
+  /// The provider couldn't be reached, rejected the request, or answered
+  /// with something unusable. Never blocks a submission — it just leaves
+  /// it for a moderator, and can be retried.
+  ERROR
+}
+
 /// The identity documents a tenant or landlord gives at signup: means of
 /// ID + number for everyone, and for landlords a certificate of ownership
 /// and a supporting document. Files live in the PRIVATE storage bucket
@@ -1206,6 +1230,21 @@ model IdentityVerification {
   user            User               @relation("VerificationSubject", fields: [userId], references: [id], onDelete: Cascade)
   idType          IdType?
   idNumber        String?
+  /// What the ID check provider said about [idNumber] — the basis for
+  /// verifying a tenant without a moderator (see VerificationService).
+  idCheckStatus   IdCheckStatus      @default(NOT_RUN)
+  /// Which provider answered ("prembly", "console"), and its own
+  /// reference for the check, for tracing a decision back to them.
+  idCheckProvider String?
+  idCheckReference String?
+  /// The name the issuing authority holds against this ID number, as the
+  /// provider returned it. Kept so a reviewer can see why a check
+  /// matched or didn't — never any of the photo/signature data the
+  /// provider also returns.
+  idCheckName     String?
+  /// The provider's own message about the check, shown to reviewers.
+  idCheckDetail   String?
+  idCheckedAt     DateTime?
   certificatePath String?
   documentPath    String?
   status          VerificationStatus @default(INCOMPLETE)
@@ -1214,6 +1253,11 @@ model IdentityVerification {
   reviewedBy      User?              @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewNote      String?
   reviewedAt      DateTime?
+  /// True when [status] went APPROVED off a clean ID check instead of a
+  /// moderator's decision — [reviewedById] is null in that case, so
+  /// without this flag an auto-approval is indistinguishable from a
+  /// review by an admin whose account was since deleted.
+  autoApproved    Boolean            @default(false)
   createdAt       DateTime           @default(now())
   updatedAt       DateTime           @updatedAt
 

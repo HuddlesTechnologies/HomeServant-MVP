@@ -81,7 +81,9 @@ class _VerificationSubmitScreenState extends State<VerificationSubmitScreen> {
         certificatePath = await appState.uploads.uploadPrivateDocument(_certificate!);
         documentPath = await appState.uploads.uploadPrivateDocument(_document!);
       }
-      await appState.verification.update(
+      // The server checks the ID number with the body that issued it, so
+      // this can come back already verified rather than pending.
+      final status = await appState.verification.update(
         idType: id.selectedType,
         idNumber: id.number,
         certificatePath: certificatePath,
@@ -89,7 +91,15 @@ class _VerificationSubmitScreenState extends State<VerificationSubmitScreen> {
       );
       await appState.refreshProfile();
       navigator.pop();
-      messenger.showSnackBar(const SnackBar(content: Text("Documents sent. We'll let you know once you're verified.")));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            status == VerificationStatus.approved
+                ? "You're verified — we confirmed your ID with the body that issued it."
+                : "Documents sent. We'll let you know once you're verified.",
+          ),
+        ),
+      );
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -125,8 +135,11 @@ class _VerificationSubmitScreenState extends State<VerificationSubmitScreen> {
                 Text(
                   landlord
                       ? 'Give your means of ID and upload your certificate of ownership and a supporting document (a photo or a PDF). '
-                            'They are stored privately and only HomeServant reviewers can see them.'
-                      : 'Give your means of ID. It is stored privately and only HomeServant reviewers can see it.',
+                            'They are stored privately and only HomeServant reviewers can see them. Your ID number is checked '
+                            'with the body that issued it; your ownership documents are then reviewed by a person.'
+                      : 'Give your means of ID. It is stored privately and only HomeServant reviewers can see it. We check the '
+                            'number with the body that issued it, so this is usually instant — make sure the name on your '
+                            'profile matches the name on your ID.',
                   style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.8), size: 13.5),
                 ),
                 const SizedBox(height: 18),

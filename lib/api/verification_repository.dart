@@ -12,14 +12,21 @@ class VerificationRepository {
 
   /// Any subset: signup sends the landlord certificate on step 1 and the ID
   /// (plus landlord document) on step 2.
-  Future<void> update({IdDocumentType? idType, String? idNumber, String? certificatePath, String? documentPath}) =>
+  ///
+  /// Returns the status the submission ended up at. Submitting an ID also
+  /// has the server check the number with the body that issued it, so a
+  /// tenant can come straight back [VerificationStatus.approved] instead
+  /// of waiting for a moderator — the caller shouldn't assume "pending".
+  Future<VerificationStatus?> update({IdDocumentType? idType, String? idNumber, String? certificatePath, String? documentPath}) =>
       _client.call(() async {
-        await _client.dio.patch('/verification/me', data: {
+        final response = await _client.dio.patch('/verification/me', data: {
           if (idType != null) 'idType': idType.apiValue,
           if (idNumber != null) 'idNumber': idNumber,
           if (certificatePath != null) 'certificatePath': certificatePath,
           if (documentPath != null) 'documentPath': documentPath,
         });
+        final data = response.data;
+        return data is Map<String, dynamic> ? VerificationStatus.fromApi(data['status'] as String?) : null;
       });
 
   // --- Admin (moderator and above) ------------------------------------------
@@ -36,6 +43,14 @@ class VerificationRepository {
 
   Future<VerificationDetail> detail(String userId) => _client.call(() async {
     final response = await _client.dio.get('/admin/verifications/user/$userId');
+    return VerificationDetail.fromApi(response.data as Map<String, dynamic>);
+  });
+
+  /// Runs the ID number past the issuing body again — for a check that
+  /// errored, or a submission made before checks existed. Costs a real
+  /// lookup per call, and can verify a tenant on its own.
+  Future<VerificationDetail> recheck(String userId) => _client.call(() async {
+    final response = await _client.dio.post('/admin/verifications/user/$userId/recheck');
     return VerificationDetail.fromApi(response.data as Map<String, dynamic>);
   });
 
