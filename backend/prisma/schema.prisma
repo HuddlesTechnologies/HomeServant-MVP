@@ -566,6 +566,8 @@ model PendingAdmin {
   id               String     @id @default(uuid())
   email            String     @unique
   fullName         String
+  firstName        String?
+  lastName         String?
   level            AdminLevel
   tempPasswordHash String
   /// The super admin who sent the invite (see User.createdByAdminId).

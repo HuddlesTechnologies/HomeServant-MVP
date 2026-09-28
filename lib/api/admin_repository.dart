@@ -277,11 +277,18 @@ class AdminRepository {
   /// Step 1 of the invite flow — sends a confirmation code and one-time
   /// temporary password to [email] in a single email. Call [confirmAdmin]
   /// with that code to actually create the account.
-  Future<void> requestAdmin({required String email, required String fullName, required AdminLevel level}) {
+  /// First and last name are sent separately — customers are only ever
+  /// shown an admin's first name.
+  Future<void> requestAdmin({
+    required String email,
+    required String firstName,
+    required String lastName,
+    required AdminLevel level,
+  }) {
     return _client.call(() async {
       await _client.dio.post(
         '/admin/admins/request',
-        data: {'email': email, 'fullName': fullName, 'level': level.apiValue},
+        data: {'email': email, 'firstName': firstName, 'lastName': lastName, 'level': level.apiValue},
       );
     });
   }

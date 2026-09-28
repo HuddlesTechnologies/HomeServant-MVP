@@ -11,6 +11,7 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OtpService } from '../otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { joinName } from '../common/admin-display-name';
 import { ConfirmAdminDto } from './dto/confirm-admin.dto';
 import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -33,10 +34,28 @@ const RANK: Record<AdminLevel, number> = {
   SUPER_ADMIN: 2,
 };
 
+/// First, last and full name for a new admin account. The console sends
+/// first and last name; a bare full name (older console builds, the
+/// bootstrap script) is split on its first space.
+function splitAdminName(dto: { firstName?: string; lastName?: string; fullName?: string }) {
+  let firstName = dto.firstName?.trim() || null;
+  let lastName = dto.lastName?.trim() || null;
+  if (!firstName && !lastName && dto.fullName?.trim()) {
+    const [first, ...rest] = dto.fullName.trim().split(/\s+/);
+    firstName = first;
+    lastName = rest.join(' ') || null;
+  }
+  const fullName = joinName(firstName, lastName, dto.fullName);
+  if (!fullName) throw new BadRequestException("Enter the admin's first and last name");
+  return { firstName, lastName, fullName };
+}
+
 const adminSelect = {
   id: true,
   email: true,
   fullName: true,
+  firstName: true,
+  lastName: true,
   role: true,
   adminLevel: true,
   twoFactorEnabled: true,
@@ -84,7 +103,7 @@ export class AdminService {
         passwordHash,
         role: 'ADMIN',
         adminLevel: level,
-        fullName: dto.fullName,
+        ...splitAdminName(dto),
         emailVerifiedAt: new Date(),
       },
       select: adminSelect,
@@ -105,10 +124,11 @@ export class AdminService {
     const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
     const code = await this.otp.generate(dto.email, OtpPurpose.ADMIN_CREATE);
 
+    const names = splitAdminName(dto);
     await this.prisma.pendingAdmin.upsert({
       where: { email: dto.email },
-      create: { email: dto.email, fullName: dto.fullName, level: dto.level, tempPasswordHash, invitedById },
-      update: { fullName: dto.fullName, level: dto.level, tempPasswordHash, invitedById },
+      create: { email: dto.email, ...names, level: dto.level, tempPasswordHash, invitedById },
+      update: { ...names, level: dto.level, tempPasswordHash, invitedById },
     });
 
     await this.mail.send(
@@ -149,6 +169,8 @@ export class AdminService {
         role: 'ADMIN',
         adminLevel: pending.level,
         fullName: pending.fullName,
+        firstName: pending.firstName,
+        lastName: pending.lastName,
         emailVerifiedAt: new Date(),
         mustChangePassword: true,
         createdByAdminId: pending.invitedById ?? confirmingAdminId,

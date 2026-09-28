@@ -17,14 +17,22 @@ import 'widgets/admin_filter_chip.dart';
 /// forcing the admin to start over. Never holds the OTP itself: that's only
 /// ever emailed, never returned to the client (see AdminService.confirmAdminOtp).
 class _AdminCreateDraft {
-  _AdminCreateDraft({required this.step, required this.email, required this.fullName, required this.level, this.savedAt});
+  _AdminCreateDraft({
+    required this.step,
+    required this.email,
+    required this.firstName,
+    required this.lastName,
+    required this.level,
+    this.savedAt,
+  });
 
   /// 'request' — still filling the first form, nothing sent yet.
   /// 'confirm' — requestAdmin succeeded; a code/temp password is already
   /// sitting in that email's inbox and the server has a pending invite.
   final String step;
   final String email;
-  final String fullName;
+  final String firstName;
+  final String lastName;
   final AdminLevel level;
 
   /// When a 'confirm' draft was saved — the emailed code only lives
@@ -38,7 +46,8 @@ class _AdminCreateDraft {
   Map<String, dynamic> toJson() => {
     'step': step,
     'email': email,
-    'fullName': fullName,
+    'firstName': firstName,
+    'lastName': lastName,
     'level': level.apiValue,
     if (savedAt != null) 'savedAt': savedAt!.toIso8601String(),
   };
@@ -46,10 +55,14 @@ class _AdminCreateDraft {
   static _AdminCreateDraft? tryParse(String raw) {
     try {
       final json = jsonDecode(raw) as Map<String, dynamic>;
+      // Drafts saved before first/last name were separate hold one fullName.
+      final legacy = (json['fullName'] as String? ?? '').trim();
+      final space = legacy.indexOf(' ');
       return _AdminCreateDraft(
         step: json['step'] as String,
         email: json['email'] as String,
-        fullName: json['fullName'] as String,
+        firstName: json['firstName'] as String? ?? (space < 0 ? legacy : legacy.substring(0, space)),
+        lastName: json['lastName'] as String? ?? (space < 0 ? '' : legacy.substring(space + 1).trim()),
         level: AdminLevel.fromApi(json['level'] as String),
         savedAt: json['savedAt'] != null ? DateTime.tryParse(json['savedAt'] as String) : null,
       );
@@ -294,7 +307,8 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
     if (!mounted) return;
 
     String? prefillEmail;
-    String? prefillName;
+    String? prefillFirstName;
+    String? prefillLastName;
     AdminLevel? prefillLevel;
 
     // An invite that has since been completed (e.g. from another device)
@@ -316,7 +330,12 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
         final action = await _showResumeAdminDialog(existingDraft.email);
         if (!mounted) return;
         if (action == _DraftAction.resume) {
-          await _confirmAdmin(existingDraft.email, fullName: existingDraft.fullName, level: existingDraft.level);
+          await _confirmAdmin(
+            existingDraft.email,
+            firstName: existingDraft.firstName,
+            lastName: existingDraft.lastName,
+            level: existingDraft.level,
+          );
           return;
         } else if (action == _DraftAction.startOver) {
           await _clearAdminDraft();
@@ -327,13 +346,15 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
         }
       } else {
         prefillEmail = existingDraft.email;
-        prefillName = existingDraft.fullName;
+        prefillFirstName = existingDraft.firstName;
+        prefillLastName = existingDraft.lastName;
         prefillLevel = existingDraft.level;
       }
     }
 
     final emailController = TextEditingController(text: prefillEmail ?? '');
-    final nameController = TextEditingController(text: prefillName ?? '');
+    final firstNameController = TextEditingController(text: prefillFirstName ?? '');
+    final lastNameController = TextEditingController(text: prefillLastName ?? '');
     var level = prefillLevel ?? AdminLevel.support;
 
     final requested = await showModalBottomSheet<bool>(
@@ -355,13 +376,37 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                 style: AppTextStyles.body(color: AppColors.hintGrey, size: 12.5),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                style: AppTextStyles.body(color: AppColors.navy, size: 14),
-                decoration: InputDecoration(
-                  labelText: 'Full name',
-                  labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: firstNameController,
+                      textCapitalization: TextCapitalization.words,
+                      style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                      decoration: InputDecoration(
+                        labelText: 'First name',
+                        labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: lastNameController,
+                      textCapitalization: TextCapitalization.words,
+                      style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                      decoration: InputDecoration(
+                        labelText: 'Last name',
+                        labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Customers only see the first name when this admin replies.',
+                style: AppTextStyles.body(color: AppColors.hintGrey, size: 12),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -427,36 +472,66 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
       // Dismissed (back/swipe) rather than cancelled — save so it can be
       // resumed later instead of losing what was typed.
       if (!mounted) return;
-      final name = nameController.text.trim();
+      final firstName = firstNameController.text.trim();
+      final lastName = lastNameController.text.trim();
       final email = emailController.text.trim();
-      if (name.isNotEmpty || email.isNotEmpty) {
-        await _saveAdminDraft(_AdminCreateDraft(step: 'request', email: email, fullName: name, level: level));
+      if (firstName.isNotEmpty || lastName.isNotEmpty || email.isNotEmpty) {
+        await _saveAdminDraft(
+          _AdminCreateDraft(step: 'request', email: email, firstName: firstName, lastName: lastName, level: level),
+        );
       }
       return;
     }
     if (!mounted) return;
 
     final email = emailController.text.trim();
-    final fullName = nameController.text.trim();
+    final firstName = firstNameController.text.trim();
+    final lastName = lastNameController.text.trim();
     final messenger = ScaffoldMessenger.of(context);
+    if (firstName.isEmpty || lastName.isEmpty) {
+      messenger.showSnackBar(const SnackBar(content: Text("Enter the admin's first and last name")));
+      await _saveAdminDraft(
+        _AdminCreateDraft(step: 'request', email: email, firstName: firstName, lastName: lastName, level: level),
+      );
+      return;
+    }
     try {
-      await context.read<AppState>().admin.requestAdmin(email: email, fullName: fullName, level: level);
+      await context.read<AppState>().admin.requestAdmin(
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        level: level,
+      );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
       // Nothing was sent yet, so this is still resumable from the top.
-      await _saveAdminDraft(_AdminCreateDraft(step: 'request', email: email, fullName: fullName, level: level));
+      await _saveAdminDraft(
+        _AdminCreateDraft(step: 'request', email: email, firstName: firstName, lastName: lastName, level: level),
+      );
       return;
     }
     if (!mounted) return;
     // The server now has a pending invite regardless of what happens to this
     // screen next, so persist enough to resume straight into the confirm step.
     await _saveAdminDraft(
-      _AdminCreateDraft(step: 'confirm', email: email, fullName: fullName, level: level, savedAt: DateTime.now()),
+      _AdminCreateDraft(
+        step: 'confirm',
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        level: level,
+        savedAt: DateTime.now(),
+      ),
     );
-    await _confirmAdmin(email, fullName: fullName, level: level);
+    await _confirmAdmin(email, firstName: firstName, lastName: lastName, level: level);
   }
 
-  Future<void> _confirmAdmin(String email, {required String fullName, required AdminLevel level}) async {
+  Future<void> _confirmAdmin(
+    String email, {
+    required String firstName,
+    required String lastName,
+    required AdminLevel level,
+  }) async {
     var code = '';
     var resending = false;
     final confirmed = await showModalBottomSheet<bool>(
@@ -492,13 +567,19 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                           setSheetState(() => resending = true);
                           final messenger = ScaffoldMessenger.of(context);
                           try {
-                            await context.read<AppState>().admin.requestAdmin(email: email, fullName: fullName, level: level);
+                            await context.read<AppState>().admin.requestAdmin(
+                              email: email,
+                              firstName: firstName,
+                              lastName: lastName,
+                              level: level,
+                            );
                             // A fresh code restarts the resume window.
                             await _saveAdminDraft(
                               _AdminCreateDraft(
                                 step: 'confirm',
                                 email: email,
-                                fullName: fullName,
+                                firstName: firstName,
+                                lastName: lastName,
                                 level: level,
                                 savedAt: DateTime.now(),
                               ),

@@ -2,16 +2,20 @@ import 'admin_models.dart' show AdminLevel;
 
 /// What a support conversation is about (backend SupportTopic).
 enum SupportTopic {
-  payments('PAYMENTS', 'Payments'),
-  booking('BOOKING', 'Booking'),
-  account('ACCOUNT', 'Account'),
-  listing('LISTING', 'Listing'),
-  marketplace('MARKETPLACE', 'Marketplace'),
-  other('OTHER', 'Other');
+  payments('PAYMENTS', 'Payments', 'Charges, refunds, payouts'),
+  booking('BOOKING', 'Booking', 'Requests, inspections, moving in'),
+  account('ACCOUNT', 'Account', 'Signing in, profile, verification'),
+  listing('LISTING', 'Listing', 'A property listing'),
+  marketplace('MARKETPLACE', 'Marketplace', 'Orders and vendors'),
+  other('OTHER', 'Other', 'Something else');
 
-  const SupportTopic(this.apiValue, this.label);
+  const SupportTopic(this.apiValue, this.label, this.hint);
   final String apiValue;
   final String label;
+
+  /// What the topic covers — shown under it in the customer's picker and
+  /// to the admin handling the conversation.
+  final String hint;
 
   static SupportTopic? fromApi(Object? value) {
     for (final topic in values) {

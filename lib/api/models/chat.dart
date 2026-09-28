@@ -342,7 +342,10 @@ class ThreadSummary {
   }
 }
 
-enum HandoffKind { claim, transfer, reassign }
+/// [autoAssign]: the system handed a waiting conversation to an on-duty
+/// admin (backend AUTO_ASSIGN) — nobody made the move, so there's no
+/// "from" or "by".
+enum HandoffKind { claim, transfer, reassign, autoAssign }
 
 /// One step in a support conversation's handling history.
 class ThreadHandoff {
@@ -361,6 +364,7 @@ class ThreadHandoff {
     kind: switch (json['kind']) {
       'CLAIM' => HandoffKind.claim,
       'REASSIGN' => HandoffKind.reassign,
+      'AUTO_ASSIGN' => HandoffKind.autoAssign,
       _ => HandoffKind.transfer,
     },
     at: DateTime.parse(json['at'] as String),
@@ -378,8 +382,8 @@ class ThreadHandlingHistory {
   final List<ThreadHandoff> entries;
   final ThreadPersonRef? currentAdmin;
 
-  /// The most recent transfer or reassignment, if the conversation has
-  /// changed hands at all.
+  /// The most recent transfer, reassignment or automatic assignment, if
+  /// the conversation was handed to anyone rather than taken up by them.
   ThreadHandoff? get lastHandoff {
     for (final entry in entries.reversed) {
       if (entry.kind != HandoffKind.claim) return entry;

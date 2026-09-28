@@ -246,7 +246,7 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
       online.add(admin.id);
       expect(await chat.assignWaitingQueue()).toBe(1);
       expect((await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } })).assignedAdminId).toBe(admin.id);
-      expect(await prisma.notification.count({ where: { userId: admin.id, title: 'A waiting conversation was assigned to you' } })).toBe(1);
+      expect(await prisma.notification.count({ where: { userId: admin.id, title: 'Auto assigned to you by system admin' } })).toBe(1);
     });
 
     it('emails every super admin once when a chat has been unclaimed for 15 minutes', async () => {
