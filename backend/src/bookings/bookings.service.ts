@@ -45,9 +45,10 @@ export class BookingsService {
   async create(tenantId: string, dto: CreateBookingDto) {
     const property = await this.prisma.property.findUnique({
       where: { id: dto.propertyId },
-      include: { landlord: { select: { identityVerification: { select: { status: true } } } } },
+      include: { landlord: { select: { bannedAt: true, identityVerification: { select: { status: true } } } } },
     });
     if (!property) throw new NotFoundException('Property not found');
+    if (property.landlord.bannedAt) throw new ForbiddenException("This listing isn't available any more");
     // Platform Controls: unverified landlords' listings are hidden from
     // browsing, and a direct link can't be used to book one either.
     if (

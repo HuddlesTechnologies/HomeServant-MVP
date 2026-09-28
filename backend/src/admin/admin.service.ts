@@ -516,6 +516,7 @@ export class AdminService {
       ...(query.role === 'VENDOR' ? { vendorProfile: { isNot: null } } : {}),
       ...(query.role === 'ADMIN' ? { id: { in: [] } } : {}),
       ...(query.deactivatedOnly ? { deactivatedAt: { not: null } } : {}),
+      ...(query.bannedOnly ? { bannedAt: { not: null } } : {}),
       ...(query.search
         ? {
             OR: [
@@ -539,6 +540,7 @@ export class AdminService {
           profilePhotoUrl: true,
           emailVerifiedAt: true,
           deactivatedAt: true,
+          bannedAt: true,
           createdAt: true,
           // Lets the console badge a non-vendor role (typically TENANT)
           // that's *also* running a shop — see the role=='VENDOR' filter
@@ -667,6 +669,68 @@ export class AdminService {
     await this.requireUser(id);
     await this.activityLog.log(ActivityLogType.ADMIN_USER_DELETED, { actorId, targetId: id, reason });
     await this.auth.deleteAccount(id, reason);
+  }
+
+  /// Moderator+. A permanent ban — for someone posting suspicious
+  /// listings, for example. Unlike deactivation it can't be undone by
+  /// logging back in and the account is never auto-deleted: every session
+  /// is signed out at once (live sessions are told over the socket, and
+  /// sign-in/refresh refuse with the reason — see assertNotBanned), their
+  /// listings leave browse/search and can't be booked, and a vendor shop
+  /// is taken off the marketplace. They're told by email and notification,
+  /// with the reason. Only a super admin can lift it ([unbanUser]).
+  async banUser(id: string, reason: string, actorId: string): Promise<void> {
+    const user = await this.requireUser(id);
+    if (user.bannedAt) throw new BadRequestException('This account is already banned');
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id }, data: { bannedAt: now, banReason: reason.trim(), bannedById: actorId } }),
+      this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: now } }),
+    ]);
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_BANNED, { actorId, targetId: id, reason: reason.trim() });
+    await this.notifications.create(
+      id,
+      NotificationType.ACCOUNT_BANNED,
+      'Your account has been permanently banned',
+      `HomeServant has permanently banned your account. Reason: ${reason.trim()}. If you believe this is a mistake, contact HomeServant support.`,
+    );
+    // Any open app or browser tab signs out straight away.
+    this.chatGateway.emitToUser(id, 'account:banned', { reason: reason.trim() });
+    const text =
+      `Your HomeServant account has been permanently banned.\n\nReason: ${reason.trim()}\n\n` +
+      "You can no longer sign in, and your listings (if any) are no longer shown. If you believe this is a mistake, contact HomeServant support and we'll review it.";
+    await this.mail.send(
+      user.email,
+      'Your HomeServant account has been permanently banned',
+      `<p>Hi${user.fullName ? ` ${escapeHtml(user.fullName)}` : ''},</p>` +
+        `<p>Your HomeServant account has been <strong>permanently banned</strong>.</p>` +
+        `<p>Reason: ${escapeHtml(reason.trim())}</p>` +
+        `<p>You can no longer sign in, and your listings (if any) are no longer shown. If you believe this is a mistake, contact HomeServant support and we'll review it.</p>`,
+      text,
+    );
+  }
+
+  /// Super admin only. Lifts a permanent ban: they can sign in again and
+  /// their listings/shop return. They're told by email and notification.
+  async unbanUser(id: string, reason: string, actorId: string): Promise<void> {
+    const actor = await this.prisma.user.findUnique({ where: { id: actorId }, select: { adminLevel: true } });
+    if (actor?.adminLevel !== AdminLevel.SUPER_ADMIN) throw new ForbiddenException('Only a super admin can lift a ban');
+    const user = await this.requireUser(id);
+    if (!user.bannedAt) throw new BadRequestException("This account isn't banned");
+    await this.prisma.user.update({ where: { id }, data: { bannedAt: null, banReason: null, bannedById: null } });
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_UNBANNED, { actorId, targetId: id, reason: reason.trim() });
+    await this.notifications.create(
+      id,
+      NotificationType.ACCOUNT_UNBANNED,
+      'Your account ban has been lifted',
+      'HomeServant has lifted the ban on your account. You can sign in and use HomeServant again.',
+    );
+    await this.mail.send(
+      user.email,
+      'Your HomeServant account ban has been lifted',
+      `<p>Hi${user.fullName ? ` ${escapeHtml(user.fullName)}` : ''},</p><p>HomeServant has lifted the ban on your account. You can sign in and use HomeServant again.</p>`,
+      'HomeServant has lifted the ban on your account. You can sign in and use HomeServant again.',
+    );
   }
 
   private async requireUser(id: string) {
@@ -1156,4 +1220,8 @@ export class AdminService {
   pendingAdminInvitesCount(): Promise<number> {
     return this.prisma.pendingAdmin.count();
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

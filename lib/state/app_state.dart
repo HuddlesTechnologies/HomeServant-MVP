@@ -83,6 +83,13 @@ class AppState extends ChangeNotifier {
     // reconnects under the hood across login/logout, so this stays valid
     // the same way NotificationBannerOverlay's own subscription does.
     _chatSocket.onNotification.listen(_handleRealtimeNotification);
+    _chatSocket.onAccountBanned.listen(
+      (reason) => _handleSessionExpired(
+        'This account has been permanently banned from HomeServant.'
+        '${reason?.trim().isNotEmpty == true ? ' Reason: ${reason!.trim()}' : ''} '
+        'If you believe this is a mistake, contact HomeServant support.',
+      ),
+    );
     _chatRepo.onLocalChange = _chatSocket.notifyThreadsChanged;
     _chatRepo.onThreadRead = _markThreadNotificationsReadLocally;
     // Notifications created while the socket was down never arrived live.
@@ -150,13 +157,20 @@ class AppState extends ChangeNotifier {
   /// deliberate [logout] — only by [_handleSessionExpired].
   bool sessionExpired = false;
 
+  /// Set together with [sessionExpired] when the session ended because the
+  /// account was permanently banned: the server's explanation, with the
+  /// reason. SessionExpiredGate shows it instead of "session expired".
+  String? bannedMessage;
+
   void acknowledgeSessionExpired() {
     sessionExpired = false;
+    bannedMessage = null;
     notifyListeners();
   }
 
-  void _handleSessionExpired() {
+  void _handleSessionExpired([String? banned]) {
     sessionExpired = true;
+    bannedMessage = banned;
     // Unlike deactivateAccount()/deleteAccount(), this used to leave the
     // now-dead refresh token sitting in secure storage until the next cold
     // start's load() happened to clear it — harmless in practice (the

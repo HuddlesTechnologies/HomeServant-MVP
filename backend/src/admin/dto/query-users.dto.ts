@@ -19,6 +19,13 @@ export class QueryUsersDto {
   @IsBoolean()
   deactivatedOnly?: boolean;
 
+  /// True to show only permanently banned accounts (the Users tab's
+  /// "Banned" filter, where a super admin lifts bans).
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  bannedOnly?: boolean;
+
   @IsOptional()
   @Type(() => Number)
   @IsInt()

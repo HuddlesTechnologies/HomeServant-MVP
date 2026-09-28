@@ -92,14 +92,15 @@ export class PropertiesService {
       // A deactivated landlord's listings are hidden rather than deleted —
       // see AuthService.deactivate and the "reactivate any time by
       // logging back in" promise on the Settings screen.
-      landlord: { deactivatedAt: null },
+      // Banned landlords' listings are hidden too (AdminService.banUser).
+      landlord: { deactivatedAt: null, bannedAt: null },
     };
     // Platform Controls: only verified landlords' listings in general
     // browsing. A landlord fetching their own listings (landlordId) still
     // sees them all.
     const requireVerified = await this.platform.requireVerifiedLandlords();
     if (!query.landlordId && requireVerified) {
-      where.landlord = { deactivatedAt: null, ...PlatformSettingsService.verifiedLandlordFilter() };
+      where.landlord = { deactivatedAt: null, bannedAt: null, ...PlatformSettingsService.verifiedLandlordFilter() };
     }
 
     const page = query.page ?? 1;

@@ -334,6 +334,51 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     }
   }
 
+  /// Moderator+. A permanent ban (e.g. for suspicious listings): they're
+  /// signed out everywhere, can't sign in again, their listings/shop are
+  /// hidden, and they're emailed and notified with the reason. Only a
+  /// super admin can lift it.
+  Future<void> _ban(AdminUserDetail user) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Permanently ban ${user.email}?',
+      body:
+          "They'll be signed out everywhere and can't sign in again. Their listings and shop are hidden and can't be "
+          'booked or bought from. They are emailed and notified with the reason you give. Only a super admin can lift a ban.',
+      actionLabel: 'Ban permanently',
+      hint: 'Reason (sent to them and recorded in the activity log)',
+    );
+    if (reason == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.banUser(user.id, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text('${user.email} has been permanently banned')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Super admin only.
+  Future<void> _unban(AdminUserDetail user) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Lift the ban on ${user.email}?',
+      body: 'They can sign in again and their listings and shop return. They are emailed and notified.',
+      actionLabel: 'Lift ban',
+      hint: 'Why (recorded in the activity log)',
+    );
+    if (reason == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.unbanUser(user.id, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text('Ban lifted for ${user.email}')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _delete(AdminUserDetail user) async {
     final reason = await showAdminReasonSheet(
       context,
@@ -437,10 +482,27 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                                 if (user.role != UserRole.vendor && user.vendorBusinessName != null)
                                   const AdminBadge(text: 'Also a Vendor', color: Colors.teal),
                                 if (user.isDeactivated) const AdminBadge(text: 'Deactivated', color: Colors.redAccent),
+                                if (user.isBanned) const AdminBadge(text: 'Banned', color: Color(0xFFB42318)),
                               ],
                             ),
                           ],
                         ),
+                        if (user.isBanned) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFB42318).withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'Permanently banned ${formatShortDate(user.bannedAt!.toLocal())}'
+                              '${user.banReason?.isNotEmpty == true ? ' · Reason: ${user.banReason}' : ''}',
+                              style: AppTextStyles.body(color: const Color(0xFF912018), size: 12.5, weight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         LabeledValueRow('Email', user.email),
                         LabeledValueRow('Phone Number', user.phoneNumber ?? '—'),
@@ -702,6 +764,32 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                       ),
                       child: Text('Deactivate Account', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
                     ),
+                  if (context.canModerate && !user.isBanned) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => _ban(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: Color(0xFFB42318)),
+                        foregroundColor: const Color(0xFFB42318),
+                      ),
+                      icon: const Icon(Icons.block_rounded, color: Color(0xFFB42318), size: 20),
+                      label: Text('Ban Permanently', style: AppTextStyles.button(color: const Color(0xFFB42318), size: 14)),
+                    ),
+                  ],
+                  if (context.isSuperAdmin && user.isBanned) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => _unban(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.navy),
+                        foregroundColor: AppColors.navy,
+                      ),
+                      icon: const Icon(Icons.lock_open_rounded, color: AppColors.navy, size: 20),
+                      label: Text('Lift Ban', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
+                    ),
+                  ],
                   if (context.canModerate) ...[
                     const SizedBox(height: 10),
                     OutlinedButton(

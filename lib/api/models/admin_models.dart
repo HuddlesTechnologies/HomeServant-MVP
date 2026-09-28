@@ -147,10 +147,15 @@ class AdminUser {
     this.profilePhotoUrl,
     this.emailVerifiedAt,
     this.deactivatedAt,
+    this.bannedAt,
     required this.createdAt,
     this.isVendor = false,
     this.verificationStatus,
   });
+
+  /// Permanently banned (see AdminRepository.banUser).
+  final DateTime? bannedAt;
+  bool get isBanned => bannedAt != null;
 
   final String id;
   final String email;
@@ -182,6 +187,7 @@ class AdminUser {
     profilePhotoUrl: json['profilePhotoUrl'] as String?,
     emailVerifiedAt: json['emailVerifiedAt'] != null ? DateTime.parse(json['emailVerifiedAt'] as String) : null,
     deactivatedAt: json['deactivatedAt'] != null ? DateTime.parse(json['deactivatedAt'] as String) : null,
+    bannedAt: json['bannedAt'] != null ? DateTime.parse(json['bannedAt'] as String) : null,
     createdAt: DateTime.parse(json['createdAt'] as String),
     isVendor: json['vendorProfile'] != null,
     verificationStatus: VerificationStatus.fromApi((json['identityVerification'] as Map<String, dynamic>?)?['status'] as String?),
@@ -204,6 +210,8 @@ class AdminUserDetail {
     this.twoFactorEnabled = false,
     this.emailVerifiedAt,
     this.deactivatedAt,
+    this.bannedAt,
+    this.banReason,
     this.bankCode,
     this.bankName,
     this.accountNumber,
@@ -239,6 +247,11 @@ class AdminUserDetail {
   final bool twoFactorEnabled;
   final DateTime? emailVerifiedAt;
   final DateTime? deactivatedAt;
+
+  /// Permanently banned, and why (see AdminRepository.banUser).
+  final DateTime? bannedAt;
+  final String? banReason;
+  bool get isBanned => bannedAt != null;
   final String? bankCode;
   final String? bankName;
   final String? accountNumber;
@@ -312,6 +325,8 @@ class AdminUserDetail {
       twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
       emailVerifiedAt: json['emailVerifiedAt'] != null ? DateTime.parse(json['emailVerifiedAt'] as String) : null,
       deactivatedAt: json['deactivatedAt'] != null ? DateTime.parse(json['deactivatedAt'] as String) : null,
+      bannedAt: json['bannedAt'] != null ? DateTime.parse(json['bannedAt'] as String) : null,
+      banReason: json['banReason'] as String?,
       bankCode: json['bankCode'] as String?,
       bankName: json['bankName'] as String?,
       accountNumber: json['accountNumber'] as String?,

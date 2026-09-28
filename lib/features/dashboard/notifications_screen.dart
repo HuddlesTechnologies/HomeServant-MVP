@@ -28,6 +28,8 @@ IconData _iconForType(NotificationType type) => switch (type) {
   NotificationType.rentExpiryReminder => Icons.event_busy_rounded,
   NotificationType.newListingMessage => Icons.chat_bubble_outline_rounded,
   NotificationType.supportThreadResolved => Icons.check_circle_outline_rounded,
+  NotificationType.accountBanned => Icons.block_rounded,
+  NotificationType.accountUnbanned => Icons.lock_open_rounded,
 };
 
 /// The types a vendor cares about — see [NotificationsScreen.vendorOnly].

@@ -194,6 +194,21 @@ export class AdminController {
     await this.admin.deactivateUser(id, dto.reason, actingAdmin.sub);
   }
 
+  /// Moderator+. Permanent ban with a reason (emailed to them). See
+  /// AdminService.banUser.
+  @Patch('users/:id/ban')
+  @MinAdminLevel(AdminLevel.MODERATOR)
+  async banUser(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: DelistReasonDto): Promise<void> {
+    await this.admin.banUser(id, dto.reason, actingAdmin.sub);
+  }
+
+  /// Super admin only — lifts a permanent ban.
+  @Patch('users/:id/unban')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  async unbanUser(@CurrentUser() actingAdmin: AuthenticatedUser, @Param('id') id: string, @Body() dto: DelistReasonDto): Promise<void> {
+    await this.admin.unbanUser(id, dto.reason, actingAdmin.sub);
+  }
+
   @Delete('users/:id')
   @MinAdminLevel(AdminLevel.MODERATOR)
   async deleteUser(

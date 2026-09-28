@@ -274,6 +274,15 @@ model User {
   /// in successfully (see AuthService.login/googleAuth), matching the
   /// "reactivate any time by logging back in" promise on that screen.
   deactivatedAt        DateTime?
+  /// Permanently banned by a moderator/super admin (e.g. for posting
+  /// suspicious listings) — see AdminService.banUser. Unlike [deactivatedAt]
+  /// it can't be undone by logging back in and is never auto-deleted: the
+  /// account can't sign in, its listings and shop are hidden, and only a
+  /// super admin can lift it (AdminService.unbanUser). [banReason] is shown
+  /// to the person when they try to sign in.
+  bannedAt             DateTime?
+  banReason            String?
+  bannedById           String?
   /// Updated on every successful login (every role, not just ADMIN — see
   /// AuthService.login/verifyLoginOtp/googleAuth) and again the moment a
   /// user's last open socket disconnects (see PresenceService/ChatGateway)
@@ -358,6 +367,7 @@ model User {
   adminsCreated          User[]                 @relation("AdminsCreated")
 
   @@index([role])
+  @@index([bannedAt])
 }
 
 enum ActivityLogType {
@@ -507,6 +517,10 @@ enum NotificationType {
   /// An admin marked a "Contact Support" thread resolved — see
   /// ChatService.resolveSupportThread.
   SUPPORT_THREAD_RESOLVED
+  /// The account was permanently banned, or the ban was lifted — see
+  /// AdminService.banUser/unbanUser.
+  ACCOUNT_BANNED
+  ACCOUNT_UNBANNED
 }
 
 /// A user-facing notification — modelled generically so

@@ -25,7 +25,13 @@ class AdminRepository {
     });
   }
 
-  Future<AdminPage<AdminUser>> findUsers({String? role, String? search, int page = 1, bool deactivatedOnly = false}) {
+  Future<AdminPage<AdminUser>> findUsers({
+    String? role,
+    String? search,
+    int page = 1,
+    bool deactivatedOnly = false,
+    bool bannedOnly = false,
+  }) {
     return _client.call(() async {
       final response = await _client.dio.get(
         '/admin/users',
@@ -33,6 +39,7 @@ class AdminRepository {
           if (role != null) 'role': role,
           if (search != null && search.isNotEmpty) 'search': search,
           if (deactivatedOnly) 'deactivatedOnly': true,
+          if (bannedOnly) 'bannedOnly': true,
           'page': page,
         },
       );
@@ -72,6 +79,20 @@ class AdminRepository {
   }
 
   /// [reason] is required — it's written to the admin activity log.
+  /// Moderator+. Permanent ban — [reason] is emailed to them and logged.
+  Future<void> banUser(String id, {required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/users/$id/ban', data: {'reason': reason});
+    });
+  }
+
+  /// Super admin only. Lifts a permanent ban.
+  Future<void> unbanUser(String id, {required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/users/$id/unban', data: {'reason': reason});
+    });
+  }
+
   Future<void> deactivateUser(String id, {required String reason}) {
     return _client.call(() async {
       await _client.dio.patch('/admin/users/$id/deactivate', data: {'reason': reason});
