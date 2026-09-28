@@ -375,6 +375,165 @@ class AdminUserProperty {
 /// One entry in a tenant's rental history — GET /admin/users/:id's
 /// `bookings`. No per-booking payment ledger exists in the schema, so
 /// price/priceUnit reflect the property's listed rent, not an amount paid.
+/// How a booking outcome or timeline event should read: it went through,
+/// is waiting on someone, was reversed, or failed.
+enum HistoryTone {
+  success,
+  pending,
+  warning,
+  danger,
+  info;
+
+  static HistoryTone fromApi(Object? value) => switch (value) {
+    'success' => HistoryTone.success,
+    'pending' => HistoryTone.pending,
+    'warning' => HistoryTone.warning,
+    'danger' => HistoryTone.danger,
+    _ => HistoryTone.info,
+  };
+}
+
+/// One dated step in a booking's life (requested, paid, refunded…) — see
+/// backend bookingTimeline.
+class BookingTimelineEvent {
+  const BookingTimelineEvent({required this.at, required this.label, required this.tone, this.detail});
+
+  final DateTime at;
+  final String label;
+  final HistoryTone tone;
+  final String? detail;
+
+  factory BookingTimelineEvent.fromApi(Map<String, dynamic> json) => BookingTimelineEvent(
+    at: DateTime.parse(json['at'] as String),
+    label: json['label'] as String,
+    tone: HistoryTone.fromApi(json['tone']),
+    detail: json['detail'] as String?,
+  );
+}
+
+/// The property a booking was for, with every detail and image.
+class AdminBookingProperty {
+  const AdminBookingProperty({
+    required this.id,
+    required this.listingNumber,
+    required this.title,
+    required this.location,
+    required this.state,
+    required this.category,
+    required this.price,
+    required this.priceUnit,
+    required this.bedrooms,
+    required this.bathrooms,
+    required this.description,
+    required this.images,
+    required this.isOccupied,
+    this.unitAddress,
+    this.roomNumber,
+    this.rentDurationMonths,
+    this.landlordId,
+    this.landlordName,
+    this.landlordEmail,
+    this.landlordPhone,
+  });
+
+  final String id;
+  final int listingNumber;
+  final String title;
+  final String location;
+  final String state;
+  final String category;
+  final int price;
+  final String priceUnit;
+  final int bedrooms;
+  final int bathrooms;
+  final String description;
+  final List<String> images;
+  final bool isOccupied;
+  final String? unitAddress;
+  final String? roomNumber;
+  final int? rentDurationMonths;
+  final String? landlordId;
+  final String? landlordName;
+  final String? landlordEmail;
+  final String? landlordPhone;
+
+  static AdminBookingProperty? fromApi(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    final landlord = json['landlord'] as Map<String, dynamic>?;
+    return AdminBookingProperty(
+      id: json['id'] as String,
+      listingNumber: json['listingNumber'] as int? ?? 0,
+      title: json['title'] as String,
+      location: json['location'] as String? ?? '',
+      state: json['state'] as String? ?? '',
+      category: json['category'] as String? ?? '',
+      price: json['price'] as int? ?? 0,
+      priceUnit: json['priceUnit'] as String? ?? 'YEAR',
+      bedrooms: json['bedrooms'] as int? ?? 0,
+      bathrooms: json['bathrooms'] as int? ?? 0,
+      description: json['description'] as String? ?? '',
+      images: (json['images'] as List? ?? const []).cast<String>(),
+      isOccupied: json['isOccupied'] as bool? ?? false,
+      unitAddress: json['unitAddress'] as String?,
+      roomNumber: json['roomNumber'] as String?,
+      rentDurationMonths: json['rentDurationMonths'] as int?,
+      landlordId: landlord?['id'] as String?,
+      landlordName: landlord?['fullName'] as String?,
+      landlordEmail: landlord?['email'] as String?,
+      landlordPhone: landlord?['phoneNumber'] as String?,
+    );
+  }
+}
+
+/// One charge for a booking (a renewal charges again). [amount] is in kobo.
+class AdminBookingPayment {
+  const AdminBookingPayment({
+    required this.id,
+    required this.amount,
+    required this.platformFeeAmount,
+    required this.status,
+    required this.reference,
+    required this.createdAt,
+    this.paidAt,
+    this.releasedAt,
+    this.refundedAt,
+    this.refundRequestedBy,
+    this.refundLastError,
+  });
+
+  final String id;
+  final int amount;
+  final int platformFeeAmount;
+  final String status;
+  final String reference;
+  final DateTime createdAt;
+  final DateTime? paidAt;
+  final DateTime? releasedAt;
+  final DateTime? refundedAt;
+  final String? refundRequestedBy;
+  final String? refundLastError;
+
+  factory AdminBookingPayment.fromApi(Map<String, dynamic> json) {
+    DateTime? date(String key) => json[key] != null ? DateTime.parse(json[key] as String) : null;
+    return AdminBookingPayment(
+      id: json['id'] as String,
+      amount: json['amount'] as int,
+      platformFeeAmount: json['platformFeeAmount'] as int? ?? 0,
+      status: json['status'] as String,
+      reference: json['reference'] as String? ?? '',
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      paidAt: date('paidAt'),
+      releasedAt: date('releasedAt'),
+      refundedAt: date('refundedAt'),
+      refundRequestedBy: json['refundRequestedBy'] as String?,
+      refundLastError: json['refundLastError'] as String?,
+    );
+  }
+}
+
+/// One booking in a tenant's history, as the admin console sees it: where
+/// it stands ([outcome]), the property in full, every payment, and a dated
+/// [timeline] of everything that happened to it.
 class AdminUserBooking {
   const AdminUserBooking({
     required this.id,
@@ -385,6 +544,14 @@ class AdminUserBooking {
     required this.status,
     this.requestedDate,
     required this.createdAt,
+    this.outcome,
+    this.outcomeTone = HistoryTone.info,
+    this.nights,
+    this.leaseStartDate,
+    this.leaseEndDate,
+    this.property,
+    this.payments = const [],
+    this.timeline = const [],
   });
 
   final String id;
@@ -396,16 +563,44 @@ class AdminUserBooking {
   final DateTime? requestedDate;
   final DateTime createdAt;
 
-  factory AdminUserBooking.fromApi(Map<String, dynamic> json) => AdminUserBooking(
-    id: json['id'] as String,
-    propertyId: json['propertyId'] as String,
-    propertyTitle: json['propertyTitle'] as String,
-    price: json['price'] as int,
-    priceUnit: json['priceUnit'] as String,
-    status: json['status'] as String,
-    requestedDate: json['requestedDate'] != null ? DateTime.parse(json['requestedDate'] as String) : null,
-    createdAt: DateTime.parse(json['createdAt'] as String),
-  );
+  /// "Successful", "Refunded (tenant asked)", "Payment failed",
+  /// "Pending · paid, awaiting move-in"… (null from an older API).
+  final String? outcome;
+  final HistoryTone outcomeTone;
+  final int? nights;
+  final DateTime? leaseStartDate;
+  final DateTime? leaseEndDate;
+  final AdminBookingProperty? property;
+  final List<AdminBookingPayment> payments;
+  final List<BookingTimelineEvent> timeline;
+
+  factory AdminUserBooking.fromApi(Map<String, dynamic> json) {
+    DateTime? date(String key) => json[key] != null ? DateTime.parse(json[key] as String) : null;
+    return AdminUserBooking(
+      id: json['id'] as String,
+      propertyId: json['propertyId'] as String,
+      propertyTitle: json['propertyTitle'] as String,
+      price: json['price'] as int,
+      priceUnit: json['priceUnit'] as String,
+      status: json['status'] as String,
+      requestedDate: date('requestedDate'),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      outcome: json['outcome'] as String?,
+      outcomeTone: HistoryTone.fromApi(json['outcomeTone']),
+      nights: json['nights'] as int?,
+      leaseStartDate: date('leaseStartDate'),
+      leaseEndDate: date('leaseEndDate'),
+      property: AdminBookingProperty.fromApi(json['property']),
+      payments: (json['payments'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(AdminBookingPayment.fromApi)
+          .toList(),
+      timeline: (json['timeline'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()
+          .map(BookingTimelineEvent.fromApi)
+          .toList(),
+    );
+  }
 }
 
 /// One line item within a marketplace purchase — nested inside

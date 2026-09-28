@@ -12,6 +12,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { OtpService } from '../otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { joinName } from '../common/admin-display-name';
+import { adminBookingHistorySelect, toAdminBookingHistory } from './booking-history';
 import { ConfirmAdminDto } from './dto/confirm-admin.dto';
 import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -574,17 +575,9 @@ export class AdminService {
           select: { id: true, listingNumber: true, title: true, price: true, priceUnit: true, isOccupied: true, imageUrl: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         },
-        bookings: {
-          select: {
-            id: true,
-            propertyId: true,
-            status: true,
-            requestedDate: true,
-            createdAt: true,
-            property: { select: { title: true, price: true, priceUnit: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
+        // Newest first — the console always shows the latest three and
+        // folds the rest away.
+        bookings: { select: adminBookingHistorySelect, orderBy: { createdAt: 'desc' } },
         marketplaceOrders: {
           select: {
             id: true,
@@ -612,16 +605,7 @@ export class AdminService {
       ...rest,
       isOnline: this.presence.isOnline(user.id),
       properties: user.role === 'LANDLORD' ? properties : [],
-      bookings: bookings.map((b) => ({
-        id: b.id,
-        propertyId: b.propertyId,
-        propertyTitle: b.property.title,
-        price: b.property.price,
-        priceUnit: b.property.priceUnit,
-        status: b.status,
-        requestedDate: b.requestedDate,
-        createdAt: b.createdAt,
-      })),
+      bookings: bookings.map(toAdminBookingHistory),
       marketplaceOrders: marketplaceOrders.map((o) => ({
         id: o.id,
         createdAt: o.createdAt,

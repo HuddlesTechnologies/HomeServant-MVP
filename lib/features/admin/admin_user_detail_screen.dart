@@ -18,6 +18,7 @@ import 'widgets/admin_badge.dart';
 import '../../widgets/verified_badge.dart';
 import '../../api/models/verification.dart';
 import 'widgets/admin_verification_card.dart';
+import 'widgets/admin_booking_history.dart';
 
 /// Full account detail for a single user — reached by tapping a row in
 /// AdminUsersTab. Shows every field the backend will hand back (see
@@ -589,45 +590,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                   ],
                   if (user.bookings.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Booking History', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
-                          const SizedBox(height: 10),
-                          ...user.bookings.map(
-                            (booking) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(booking.propertyTitle, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 13)),
-                                        Text(
-                                          booking.requestedDate != null
-                                              ? 'Requested ${formatShortDate(booking.requestedDate!)} · ${booking.status}'
-                                              : booking.status,
-                                          style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Text(
-                                    '₦${formatWithThousandsSeparator(booking.price)}/${booking.priceUnit.toLowerCase()}',
-                                    style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    AdminBookingHistoryCard(bookings: user.bookings),
                   ],
                   if (user.marketplaceOrders.isNotEmpty) ...[
                     const SizedBox(height: 12),
