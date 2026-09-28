@@ -97,6 +97,8 @@ class Booking {
     this.tenantProfilePhotoUrl,
     this.tenantGender,
     this.tenantOccupation,
+    this.tenantBio,
+    this.tenantHobbies = const [],
     this.tenantMaritalStatus,
     this.tenantDateOfBirth,
     this.requestedDate,
@@ -136,6 +138,11 @@ class Booking {
   final String? tenantProfilePhotoUrl;
   final TenantGender? tenantGender;
   final String? tenantOccupation;
+
+  /// The tenant's booking profile — a little background and their hobbies
+  /// (landlord's view of a booking only).
+  final String? tenantBio;
+  final List<String> tenantHobbies;
   final TenantMaritalStatus? tenantMaritalStatus;
   final DateTime? tenantDateOfBirth;
 
@@ -205,6 +212,8 @@ class Booking {
       tenantProfilePhotoUrl: tenant?['profilePhotoUrl'] as String?,
       tenantGender: _genderFromApi(tenant?['gender'] as String?),
       tenantOccupation: tenant?['occupation'] as String?,
+      tenantBio: tenant?['bio'] as String?,
+      tenantHobbies: (tenant?['hobbies'] as List?)?.cast<String>() ?? const [],
       tenantMaritalStatus: _maritalStatusFromApi(tenant?['maritalStatus'] as String?),
       tenantDateOfBirth: _parseDate(tenant?['dateOfBirth']),
       requestedDate: _parseDate(json['requestedDate']),

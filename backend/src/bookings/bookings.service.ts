@@ -164,6 +164,9 @@ export class BookingsService {
             occupation: true,
             maritalStatus: true,
             dateOfBirth: true,
+            // Their booking profile — read alongside the request.
+            bio: true,
+            hobbies: true,
             identityVerification: { select: { status: true } },
           },
         },

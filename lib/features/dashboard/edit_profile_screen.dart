@@ -30,6 +30,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _gender;
   late final TextEditingController _occupation;
   late final TextEditingController _maritalStatus;
+
+  /// Booking profile: background and hobbies landlords read with a request.
+  late final TextEditingController _bio;
+  final _hobbyInput = TextEditingController();
+  late List<String> _hobbies;
   final _fullNameFocus = FocusNode();
   final _addressFocus = FocusNode();
   final _phoneFocus = FocusNode();
@@ -71,6 +76,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _occupation = TextEditingController(text: appState.occupation ?? '');
     _maritalStatusValue = appState.maritalStatus;
     _maritalStatus = TextEditingController(text: _maritalStatusValue?.label ?? '');
+    _bio = TextEditingController(text: appState.bio ?? '');
+    _hobbies = [...appState.hobbies];
+  }
+
+  static const _maxHobbies = 10;
+
+  void _addHobby() {
+    final hobby = _hobbyInput.text.trim();
+    if (hobby.isEmpty) return;
+    if (_hobbies.length >= _maxHobbies) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('You can add up to $_maxHobbies hobbies')));
+      return;
+    }
+    setState(() {
+      if (!_hobbies.any((h) => h.toLowerCase() == hobby.toLowerCase())) _hobbies.add(hobby);
+      _hobbyInput.clear();
+    });
   }
 
   @override
@@ -82,6 +104,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _gender.dispose();
     _occupation.dispose();
     _maritalStatus.dispose();
+    _bio.dispose();
+    _hobbyInput.dispose();
     _fullNameFocus.dispose();
     _addressFocus.dispose();
     _phoneFocus.dispose();
@@ -203,6 +227,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         gender: _genderValue,
         occupation: _occupation.text.trim(),
         maritalStatus: _maritalStatusValue,
+        bio: _bio.text.trim(),
+        hobbies: _hobbies,
       );
       if (!mounted) return;
       messenger.showSnackBar(const SnackBar(content: Text('Profile updated')));
@@ -411,6 +437,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   onToggleEdit: () => setState(() => _maritalStatusEditable = !_maritalStatusEditable),
                 ),
+                const SizedBox(height: 30),
+                _BookingProfileSection(
+                  theme: theme,
+                  bio: _bio,
+                  hobbyInput: _hobbyInput,
+                  hobbies: _hobbies,
+                  onAddHobby: _addHobby,
+                  onRemoveHobby: (hobby) => setState(() => _hobbies.remove(hobby)),
+                ),
                 const SizedBox(height: 32),
                 PillButton(
                   label: _saving ? 'Saving…' : 'Save Changes',
@@ -511,6 +546,109 @@ class _EditableField extends StatelessWidget {
                   color: editable ? theme.onAccent : theme.accent,
                   size: 20,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// "Booking profile": a short background and hobbies that landlords (and
+/// shortlet owners) read alongside a booking request, next to the profile
+/// photo above. Headings use theme.foreground on theme.background; the
+/// fields are white with navy text; hobby chips use the fixed
+/// surface/onSurface pair (see CLAUDE.md).
+class _BookingProfileSection extends StatelessWidget {
+  const _BookingProfileSection({
+    required this.theme,
+    required this.bio,
+    required this.hobbyInput,
+    required this.hobbies,
+    required this.onAddHobby,
+    required this.onRemoveHobby,
+  });
+
+  final DashboardTheme theme;
+  final TextEditingController bio;
+  final TextEditingController hobbyInput;
+  final List<String> hobbies;
+  final VoidCallback onAddHobby;
+  final ValueChanged<String> onRemoveHobby;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Booking profile', style: AppTextStyles.heading(color: theme.foreground, size: 17)),
+        const SizedBox(height: 4),
+        Text(
+          'Landlords see your photo, this and your hobbies when your booking request comes in — a quick way '
+          'to get to know you.',
+          style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.75), size: 13),
+        ),
+        const SizedBox(height: 14),
+        Text('About me', style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        PillTextField(
+          hint: 'A little about you: work, who you live with, what you are looking for…',
+          controller: bio,
+          minLines: 3,
+          maxLines: 6,
+          borderRadius: 20,
+          fillColor: AppColors.white,
+          textColor: AppColors.navy,
+          validator: (value) => (value?.trim().length ?? 0) > 600 ? 'Keep it under 600 characters' : null,
+        ),
+        const SizedBox(height: 16),
+        Text('Hobbies', style: AppTextStyles.body(color: theme.foreground, weight: FontWeight.w600)),
+        const SizedBox(height: 8),
+        if (hobbies.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final hobby in hobbies)
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+                  decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(18)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(hobby, style: AppTextStyles.body(color: theme.onSurface, size: 13, weight: FontWeight.w600)),
+                      const SizedBox(width: 4),
+                      InkWell(
+                        onTap: () => onRemoveHobby(hobby),
+                        customBorder: const CircleBorder(),
+                        child: Icon(Icons.close_rounded, size: 16, color: theme.onSurface),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ],
+        Row(
+          children: [
+            Expanded(
+              child: PillTextField(
+                hint: 'Add a hobby (e.g. cooking, football)',
+                controller: hobbyInput,
+                fillColor: AppColors.white,
+                textColor: AppColors.navy,
+              ),
+            ),
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: onAddHobby,
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
+                child: Icon(Icons.add_rounded, color: theme.onAccent, size: 22),
               ),
             ),
           ],

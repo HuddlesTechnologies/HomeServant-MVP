@@ -10,6 +10,7 @@ import '../../state/app_state.dart';
 import '../../widgets/eviction_widgets.dart';
 import '../landlord/landlord_add_property_screen.dart';
 import 'chat_thread_screen.dart';
+import 'edit_profile_screen.dart';
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
@@ -521,6 +522,34 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                             : 'Rent Now',
                                         style: AppTextStyles.button(color: theme.onAccent),
                                       ),
+                              ),
+                            ),
+                          // Tenants who haven't told landlords anything about
+                          // themselves yet: a nudge to fill in their booking
+                          // profile (theme.foreground on theme.background).
+                          if (!property.hiddenByLandlord &&
+                              (context.watch<AppState>().bio?.trim().isEmpty ?? true) &&
+                              context.watch<AppState>().hobbies.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: InkWell(
+                                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfileScreen())),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.person_pin_outlined, color: theme.foreground, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Tip: add a little about yourself and your hobbies so the landlord gets to know you. Edit profile',
+                                          style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.85), size: 12.5)
+                                              .copyWith(decoration: TextDecoration.underline, decorationColor: theme.foreground),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           const SizedBox(height: 12),

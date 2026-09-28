@@ -22,6 +22,8 @@ const profileSelect = {
   gender: true,
   occupation: true,
   maritalStatus: true,
+  bio: true,
+  hobbies: true,
   twoFactorEnabled: true,
   mustChangePassword: true,
   profileCompletedAt: true,
@@ -121,6 +123,14 @@ export class UsersService {
         phoneNumber: dto.phoneNumber !== undefined ? (dto.phoneNumber.trim() === '' ? null : dto.phoneNumber) : undefined,
         houseAddress: dto.houseAddress !== undefined ? (dto.houseAddress.trim() === '' ? null : dto.houseAddress) : undefined,
         occupation: dto.occupation !== undefined ? (dto.occupation.trim() === '' ? null : dto.occupation) : undefined,
+        bio: dto.bio !== undefined ? (dto.bio.trim() === '' ? null : dto.bio.trim()) : undefined,
+        // Trimmed, blanks and repeats dropped (case-insensitively).
+        hobbies:
+          dto.hobbies !== undefined
+            ? dto.hobbies
+                .map((h) => h.trim())
+                .filter((h, i, all) => h && all.findIndex((o) => o.toLowerCase() === h.toLowerCase()) === i)
+            : undefined,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
         referredById,
       },

@@ -243,6 +243,12 @@ model User {
   gender               Gender?
   occupation           String?
   maritalStatus        MaritalStatus?
+  /// The tenant's booking profile, shown to a landlord (and shortlet owner)
+  /// alongside their booking request — a little background about them
+  /// and their hobbies, with [profilePhotoUrl]. Only exposed to a landlord
+  /// the tenant has booked with (BookingsService.findForLandlord).
+  bio                  String?
+  hobbies              String[]       @default([])
   emailVerifiedAt      DateTime?
   /// One-way latch: set the first time this account's profile holds every
   /// field the signup wizard requires (see UsersService.updateProfile) and

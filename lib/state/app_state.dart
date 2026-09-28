@@ -189,6 +189,10 @@ class AppState extends ChangeNotifier {
   DateTime? dateOfBirth;
   Gender? gender;
   String? occupation;
+
+  /// Booking profile (see AuthUser.bio/hobbies).
+  String? bio;
+  List<String> hobbies = const [];
   MaritalStatus? maritalStatus;
 
   /// True for an admin still signed in with the one-time temp password
@@ -385,8 +389,12 @@ class AppState extends ChangeNotifier {
     Gender? gender,
     String? occupation,
     MaritalStatus? maritalStatus,
+    String? bio,
+    List<String>? hobbies,
   }) async {
     final user = await _usersRepo.updateProfile(
+      bio: bio,
+      hobbies: hobbies,
       fullName: fullName,
       phoneNumber: phoneNumber,
       houseAddress: houseAddress,
@@ -482,6 +490,8 @@ class AppState extends ChangeNotifier {
     if (user.gender != null || user.hasFullProfile) gender = user.gender;
     if (user.occupation != null || user.hasFullProfile) occupation = user.occupation;
     if (user.maritalStatus != null || user.hasFullProfile) maritalStatus = user.maritalStatus;
+    if (user.bio != null || user.hasFullProfile) bio = user.bio;
+    if (user.hobbies.isNotEmpty || user.hasFullProfile) hobbies = user.hobbies;
     twoFactorEnabled = user.twoFactorEnabled;
     mustChangePassword = user.mustChangePassword;
     profileCompleted = user.profileCompleted;
@@ -514,6 +524,8 @@ class AppState extends ChangeNotifier {
     gender = null;
     occupation = null;
     maritalStatus = null;
+    bio = null;
+    hobbies = const [];
     profilePhotoPath = null;
     twoFactorEnabled = false;
     mustChangePassword = false;
