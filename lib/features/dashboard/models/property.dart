@@ -67,6 +67,7 @@ class Property {
       landlordId: (json['landlord'] as Map<String, dynamic>?)?['id'] as String? ?? json['landlordId'] as String?,
       listingNumber: json['listingNumber'] as int?,
       galleryImages: ((json['galleryUrls'] as List?)?.cast<String>()) ?? const [],
+      videoPath: json['videoUrl'] as String?,
       isOccupied: json['isOccupied'] as bool? ?? false,
       rentDurationMonths: json['rentDurationMonths'] as int?,
       messagingEnabled: json['messagingEnabled'] as bool? ?? true,
@@ -119,6 +120,9 @@ class Property {
     'description': description,
     if (!image.startsWith('assets/')) 'imageUrl': image,
     if (galleryImages.isNotEmpty) 'galleryUrls': galleryImages,
+    // Only an uploaded video (a local pick is uploaded first, see
+    // LandlordAddPropertyScreen).
+    if (videoPath != null && videoPath!.startsWith('http')) 'videoUrl': videoPath,
     'messagingEnabled': messagingEnabled,
     if (category == 'Shortlet') ...{
       if (unitAddress != null) 'unitAddress': unitAddress,
@@ -132,9 +136,13 @@ class Property {
   /// Body for `PATCH /properties/:id` — same shape as [toCreateJson] since
   /// there's no narrower UpdatePropertyDto documented; the backend is
   /// expected to accept a partial version of the same fields.
-  Map<String, dynamic> toUpdateJson() => toCreateJson();
+  /// An empty videoUrl removes a video the landlord took off the listing.
+  Map<String, dynamic> toUpdateJson() => {...toCreateJson(), if (videoPath == null) 'videoUrl': ''};
 
+  /// [clearVideo] removes the walkthrough video ([videoPath] null alone
+  /// means "leave it as it is").
   Property copyWith({
+    bool clearVideo = false,
     String? title,
     String? location,
     String? state,
@@ -167,7 +175,7 @@ class Property {
     bathrooms: bathrooms ?? this.bathrooms,
     description: description ?? this.description,
     landlordName: landlordName,
-    videoPath: videoPath ?? this.videoPath,
+    videoPath: clearVideo ? null : videoPath ?? this.videoPath,
     landlordId: landlordId,
     reviewCount: reviewCount,
     isOccupied: isOccupied,

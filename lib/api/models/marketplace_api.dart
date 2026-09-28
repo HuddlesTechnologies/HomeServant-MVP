@@ -162,7 +162,15 @@ class MarketplaceOrderItemApi {
     this.order,
     this.paymentProgressLabel,
     this.paymentProgress,
+    this.trackingNumber,
+    this.shippedAt,
   });
+
+  /// Delivery items only: set once the vendor handed it to the courier
+  /// ("Ship with courier" on the vendor's order page).
+  final String? trackingNumber;
+  final DateTime? shippedAt;
+  bool get isShipped => shippedAt != null;
 
   final String id;
   final String orderId;
@@ -250,6 +258,8 @@ class MarketplaceOrderItemApi {
       paymentProgress: OrderItemPaymentProgress.fromApi(
         payment?['status'] as String? ?? json['paymentProgress'] as String? ?? json['escrowStatus'] as String? ?? json['paymentStatus'] as String?,
       ),
+      trackingNumber: json['trackingNumber'] as String?,
+      shippedAt: json['shippedAt'] != null ? DateTime.parse(json['shippedAt'] as String) : null,
     );
   }
 }

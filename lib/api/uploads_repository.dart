@@ -84,9 +84,13 @@ class UploadsRepository {
     'image/heic': '.heic',
     'image/heif': '.heif',
     'application/pdf': '.pdf',
+    'video/mp4': '.mp4',
+    'video/quicktime': '.mov',
+    'video/x-m4v': '.m4v',
+    'video/webm': '.webm',
   };
 
-  static final _hasImageExtension = RegExp(r'\.(jpe?g|png|webp|heic|heif|gif|pdf)$', caseSensitive: false);
+  static final _hasImageExtension = RegExp(r'\.(jpe?g|png|webp|heic|heif|gif|pdf|mp4|mov|m4v|webm)$', caseSensitive: false);
 
   String _withExtension(String fileName, String contentType) {
     if (_hasImageExtension.hasMatch(fileName)) return fileName;

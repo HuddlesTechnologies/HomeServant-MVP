@@ -1,8 +1,8 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
-import { CreateSignedUploadUrlDto } from './dto/create-signed-upload-url.dto';
+import { CreateSignedUploadUrlDto, extensionFitsFolder } from './dto/create-signed-upload-url.dto';
 import { StorageService } from './storage.service';
 
 @Controller('uploads')
@@ -15,6 +15,11 @@ export class StorageController {
   /// the file itself.
   @Post('sign')
   signUploadUrl(@Body() dto: CreateSignedUploadUrlDto, @CurrentUser() user: AuthenticatedUser) {
+    if (!extensionFitsFolder(dto.fileName, dto.folder)) {
+      throw new BadRequestException(
+        dto.folder === 'property-videos' ? 'Upload an mp4, mov, m4v or webm video' : 'Upload a jpg, png, webp, heic or gif image',
+      );
+    }
     return this.storage.createSignedUploadUrl(user.sub, dto.fileName, dto.folder);
   }
 }

@@ -70,9 +70,10 @@ export class PropertiesService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  private async verifyImages(dto: { imageUrl?: string; galleryUrls?: string[] }): Promise<void> {
+  private async verifyImages(dto: { imageUrl?: string; galleryUrls?: string[]; videoUrl?: string }): Promise<void> {
     if (dto.imageUrl) await this.storage.assertIsOwnImage(dto.imageUrl);
     if (dto.galleryUrls) await this.storage.assertAreOwnImages(dto.galleryUrls);
+    if (dto.videoUrl) await this.storage.assertIsOwnVideo(dto.videoUrl);
   }
 
   /// [viewerId]: the signed-in caller, if any — a landlord listing their
@@ -303,6 +304,8 @@ export class PropertiesService {
     });
     const { isHidden, ...fields } = dto;
     const now = new Date();
+    // An empty string removes the walkthrough video.
+    if (fields.videoUrl === '') (fields as { videoUrl?: string | null }).videoUrl = null;
 
     const imagesChanging =
       (fields.imageUrl !== undefined && fields.imageUrl !== before.imageUrl) ||

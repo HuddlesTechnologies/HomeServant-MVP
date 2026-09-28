@@ -22,6 +22,7 @@ import '../api/evictions_repository.dart';
 import '../api/models/eviction.dart';
 import '../api/push_repository.dart';
 import '../api/verification_repository.dart';
+import '../api/reports_repository.dart';
 import '../api/models/verification.dart';
 import '../services/browser_notifications.dart';
 import '../api/support_tools_repository.dart';
@@ -65,6 +66,7 @@ class AppState extends ChangeNotifier {
     _pushRepo = PushRepository(_apiClient);
     _evictionsRepo = EvictionsRepository(_apiClient);
     _verificationRepo = VerificationRepository(_apiClient);
+    _reportsRepo = ReportsRepository(_apiClient);
     _uploadsRepo = UploadsRepository(_apiClient);
     _vendorsRepo = VendorsRepository(_apiClient);
     _marketplaceProductsRepo = MarketplaceProductsRepository(_apiClient);
@@ -113,6 +115,7 @@ class AppState extends ChangeNotifier {
   late final PushRepository _pushRepo;
   late final EvictionsRepository _evictionsRepo;
   late final VerificationRepository _verificationRepo;
+  late final ReportsRepository _reportsRepo;
   late final UploadsRepository _uploadsRepo;
   late final VendorsRepository _vendorsRepo;
   late final MarketplaceProductsRepository _marketplaceProductsRepo;
@@ -134,6 +137,9 @@ class AppState extends ChangeNotifier {
   AdminRepository get admin => _adminRepo;
   EvictionsRepository get evictionsRepo => _evictionsRepo;
   VerificationRepository get verification => _verificationRepo;
+
+  /// Reporting a listing or marketplace item, and the user's own reports.
+  ReportsRepository get reports => _reportsRepo;
 
   /// Listing calls not covered by the cached lists (e.g. featured ads).
   PropertiesRepository get listings => _propertiesRepo;

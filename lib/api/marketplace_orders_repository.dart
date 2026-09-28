@@ -55,6 +55,21 @@ class MarketplaceOrdersRepository {
     });
   }
 
+  /// Vendor: hand a delivery item to the courier. [pickupAddress] defaults
+  /// server-side to the shop's name and state.
+  Future<MarketplaceOrderItemApi> shipItem(String itemId, {String? pickupAddress, double? weightKg}) {
+    return _client.call(() async {
+      final response = await _client.dio.patch(
+        '/marketplace/orders/items/$itemId/ship',
+        data: {
+          if (pickupAddress != null && pickupAddress.isNotEmpty) 'pickupAddress': pickupAddress,
+          if (weightKg != null) 'weightKg': weightKg,
+        },
+      );
+      return MarketplaceOrderItemApi.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
   Future<void> markItemRead(String itemId) {
     return _client.call(() async {
       await _client.dio.patch('/marketplace/orders/items/$itemId/read');

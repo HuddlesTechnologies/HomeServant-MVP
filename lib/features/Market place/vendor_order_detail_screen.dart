@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/marketplace_api.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
 import '../../models/dashboard_theme.dart';
@@ -30,6 +31,97 @@ class VendorOrderDetailScreen extends StatefulWidget {
 class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
   late OrderItemStatus _status = widget.item.status;
   bool _updating = false;
+
+  /// Delivery items: set once handed to the courier.
+  late String? _trackingNumber = widget.item.trackingNumber;
+  late DateTime? _shippedAt = widget.item.shippedAt;
+
+  /// Books the courier for a delivery item: asks for the pickup address
+  /// (defaults to the shop's) and optional weight, then shows the tracking
+  /// number. The buyer is notified with it.
+  Future<void> _ship() async {
+    final theme = widget.theme;
+    final address = TextEditingController();
+    final weight = TextEditingController();
+    final go = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      // theme.surface/onSurface: fixed light-surface/navy-text pair; the
+      // fields are white with navy text (see CLAUDE.md).
+      builder: (sheetContext) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(sheetContext).viewInsets.bottom),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Ship with courier', style: AppTextStyles.heading(color: theme.onSurface, size: 18)),
+              const SizedBox(height: 6),
+              Text(
+                "We'll book the pickup and send the customer the tracking number.",
+                style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.7), size: 13),
+              ),
+              const SizedBox(height: 14),
+              for (final (controller, hint, keyboard) in [
+                (address, 'Pickup address (leave empty to use your shop address)', TextInputType.streetAddress),
+                (weight, 'Weight in kg (optional)', const TextInputType.numberWithOptions(decimal: true)),
+              ]) ...[
+                TextField(
+                  controller: controller,
+                  keyboardType: keyboard,
+                  style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                  cursorColor: AppColors.navy,
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    hintStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13.5),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(sheetContext).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.accent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  ),
+                  child: Text('Book pickup', style: AppTextStyles.button(color: theme.onAccent, size: 14)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    final pickup = address.text.trim();
+    final kg = double.tryParse(weight.text.trim());
+    address.dispose();
+    weight.dispose();
+    if (go != true || !mounted) return;
+    setState(() => _updating = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final updated = await context.read<AppState>().marketplaceOrders.shipItem(widget.item.id, pickupAddress: pickup, weightKg: kg);
+      if (!mounted) return;
+      setState(() {
+        _trackingNumber = updated.trackingNumber;
+        _shippedAt = updated.shippedAt ?? DateTime.now();
+      });
+      messenger.showSnackBar(SnackBar(content: Text('Shipped${updated.trackingNumber != null ? ' · tracking ${updated.trackingNumber}' : ''}')));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
+  }
 
   Future<void> _setStatus(OrderItemStatus status) async {
     setState(() => _updating = true);
@@ -160,6 +252,30 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                   ] else
                     _DetailRow(theme: theme, label: 'Fulfillment', value: 'Customer will pick up', showDivider: false),
                 ],
+              ),
+            ],
+            if (isDelivery && _shippedAt != null) ...[
+              const SizedBox(height: 16),
+              _DetailCard(
+                theme: theme,
+                title: 'Shipping',
+                rows: [
+                  _DetailRow(theme: theme, label: 'Shipped', value: _formatDate(_shippedAt!)),
+                  _DetailRow(theme: theme, label: 'Tracking number', value: _trackingNumber ?? '—', showDivider: false),
+                ],
+              ),
+            ] else if (isDelivery && _status == OrderItemStatus.pending) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _updating ? null : _ship,
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: theme.accent, width: 1.2),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  minimumSize: const Size.fromHeight(0),
+                ),
+                icon: Icon(Icons.local_shipping_outlined, color: theme.accent, size: 18),
+                label: Text('Ship with courier', style: AppTextStyles.body(color: theme.accent, weight: FontWeight.w700, size: 14)),
               ),
             ],
             if (!isDelivery) ...[

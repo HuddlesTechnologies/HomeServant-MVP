@@ -243,10 +243,20 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
           imageUrls.add(await appState.uploads.upload(file: image, folder: 'properties'));
         }
       }
+      // A newly picked walkthrough video is uploaded like the photos; an
+      // unchanged one is already a hosted URL.
+      String? videoUrl = _videoPath;
+      if (videoUrl != null && !videoUrl.startsWith('http')) {
+        videoUrl = await appState.uploads.upload(
+          file: PickedUpload(path: videoUrl, fileName: _videoFileName ?? videoUrl.split('/').last, isImage: false),
+          folder: 'property-videos',
+        );
+      }
       final isShortlet = _category == 'Shortlet';
       final basis = widget.initial;
       final property =
           (basis?.copyWith(
+            clearVideo: videoUrl == null,
             title: _title.text.trim(),
             location: _location.text.trim(),
             state: _state!,
@@ -258,7 +268,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
             bedrooms: int.tryParse(_bedrooms.text) ?? 0,
             bathrooms: int.tryParse(_bathrooms.text) ?? 0,
             description: _description.text.trim(),
-            videoPath: _videoPath,
+            videoPath: videoUrl,
             rentDurationMonths: isShortlet ? null : _rentDurationMonths,
             messagingEnabled: _messagingEnabled,
             allowMonthlyPayment: !isShortlet && _allowMonthlyPayment,
@@ -280,7 +290,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
             bathrooms: int.tryParse(_bathrooms.text) ?? 0,
             description: _description.text.trim(),
             landlordName: landlordName,
-            videoPath: _videoPath,
+            videoPath: videoUrl,
             rentDurationMonths: isShortlet ? null : _rentDurationMonths,
             messagingEnabled: _messagingEnabled,
             allowMonthlyPayment: !isShortlet && _allowMonthlyPayment,

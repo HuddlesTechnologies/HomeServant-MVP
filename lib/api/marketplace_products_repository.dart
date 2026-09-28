@@ -80,6 +80,13 @@ class MarketplaceProductsRepository {
     });
   }
 
+  /// Puts a removed product back on sale (removing is a soft delete).
+  Future<void> restore(String id) {
+    return _client.call(() async {
+      await _client.dio.patch('/marketplace/products/$id', data: {'isAvailable': true});
+    });
+  }
+
   Future<void> remove(String id) {
     return _client.call(() async {
       await _client.dio.delete('/marketplace/products/$id');

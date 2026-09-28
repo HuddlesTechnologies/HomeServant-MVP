@@ -169,6 +169,27 @@ export class StorageService implements OnModuleInit {
     }
   }
 
+  /// A listing's walkthrough video: same checks as [assertIsOwnImage] (our
+  /// own bucket, and what's stored really is the right kind of file), for
+  /// video content in the property-videos folder.
+  async assertIsOwnVideo(url: string): Promise<void> {
+    if (!url.startsWith(this.publicUrlPrefix) || !url.includes('/property-videos/')) {
+      throw new BadRequestException('Video URL must point to a video uploaded through this app');
+    }
+    let contentType: string | null;
+    try {
+      const response = await fetch(url, { method: 'HEAD' });
+      if (!response.ok) throw new BadRequestException('Uploaded video could not be verified');
+      contentType = response.headers.get('content-type');
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Uploaded video could not be verified');
+    }
+    if (!contentType?.startsWith('video/')) {
+      throw new BadRequestException('The uploaded file is not a valid video');
+    }
+  }
+
   /// Verifies every URL in [urls] via [assertIsOwnImage] — used for the
   /// gallery/multi-photo fields (property galleryUrls, product imageUrls).
   async assertAreOwnImages(urls: string[]): Promise<void> {

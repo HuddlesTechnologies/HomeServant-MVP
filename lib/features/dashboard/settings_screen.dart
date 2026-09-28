@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'my_reports_screen.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/responsive.dart';
@@ -153,6 +154,12 @@ class SettingsScreen extends StatelessWidget {
                     icon: Icons.support_agent_rounded,
                     label: 'Help & Support',
                     onTap: () => showSupportOptionsSheet(context, theme: theme),
+                  ),
+                  _NavRow(
+                    theme: theme,
+                    icon: Icons.flag_outlined,
+                    label: 'My Reports',
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => MyReportsScreen(theme: theme))),
                   ),
                   _NavRow(
                     theme: theme,

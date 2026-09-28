@@ -630,6 +630,10 @@ model Property {
   description        String
   imageUrl           String?
   galleryUrls        String[]         @default([])
+  /// The landlord's walkthrough video (property-videos folder), shown as
+  /// the "Property Tour" on the listing. Checked to be a real video of ours
+  /// before it's saved (StorageService.assertIsOwnVideo).
+  videoUrl           String?
   /// True once a tenant has moved into an accepted, paid lease on this
   /// property (see BookingsService.confirmMovedIn) — hides it from public
   /// search. Never set for a SHORTLET booking (see [category]); those

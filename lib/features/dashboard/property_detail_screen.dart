@@ -17,6 +17,7 @@ import 'widgets/property_image.dart';
 import 'widgets/property_video_player.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/hidden_listing_notice.dart';
+import '../../widgets/report_sheet.dart';
 import 'widgets/shortlet_unavailable_countdown.dart';
 
 /// Every [BookingStatus] from the moment a tenant's payment clears onward —
@@ -652,6 +653,26 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.5), size: 12.5),
                               ),
                             ),
+                          // Something wrong with the listing (a scam, misleading
+                          // photos, a request to pay off-platform) goes to
+                          // HomeServant's team. theme.foreground on background.
+                          const SizedBox(height: 8),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: () => showReportSheet(
+                                context,
+                                theme: theme,
+                                target: ReportTarget.property,
+                                targetId: property.id,
+                                targetName: property.title,
+                              ),
+                              icon: Icon(Icons.flag_outlined, color: theme.foreground.withValues(alpha: 0.8), size: 18),
+                              label: Text(
+                                'Report this listing',
+                                style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.8), size: 13, weight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
                           ],
                         ],
                       ),
