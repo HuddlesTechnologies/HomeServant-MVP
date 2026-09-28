@@ -55,7 +55,11 @@
   <tr><td>Edit a user's name, phone number or address</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
   <tr><td>Work reports (change status, transfer to another admin)</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
   <tr><td>Message a user directly from their profile</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Call a customer from a chat (reason required, logged with the chat)</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
   <tr><td>Deactivate or permanently delete a user (reason required)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Permanently ban a user (reason required)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Lift a ban</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Set a listing's search ranking (Boosted / Top)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
   <tr><td>Change a user's email, send them a password reset, or set their password</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
   <tr><td>Turn off a user's two-factor authentication</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>Approve, reject, suspend or unsuspend vendors</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
@@ -66,7 +70,7 @@
   <tr><td>Clear the Activity Log</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>See ID documents and verify or reject them (ID Verifications)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
   <tr><td>Approve or reject eviction requests</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
-  <tr><td>Change Platform Controls (only verified landlords; pay unverified landlords)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Change Platform Controls (only verified landlords; pay unverified landlords; photo-change limits; featured ad price and length; promoted-slot spacing)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>Retry payouts and refunds, or refund a tenant (Payouts &amp; Refunds)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>Chat Log (all support conversations from the last 30 days)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
 </table>
@@ -81,15 +85,16 @@
 <p>Other conversations (tenant&ndash;landlord chats about a property, marketplace order chats, and direct admin-to-user chats) can only be seen by the people in them.</p>
 
 <h1>4. A tour of the console</h1>
-<p><strong>On a computer or tablet</strong>, every page is in the sidebar on the left, grouped as <em>Overview</em> (Dashboard, Activity Log), <em>People</em> (Users, Vendors, Admins, ID Verifications), <em>Listings &amp; marketplace</em> (Properties, Marketplace, Reports), <em>Money</em> (Payouts &amp; Refunds, Eviction Requests), <em>Support</em> (Messages, Support Insights, Chat Log) and <em>Platform</em> (Platform Controls). On a tablet it shows icons only (hover for the name); the arrow button at its foot expands or collapses it. <strong>On a phone</strong>, the bottom bar has four main tabs plus <strong>More</strong>, which lists the rest and scrolls if needed. Either way you only see the pages your level can open, and red number badges show items that need attention. Where this guide says <em>More &rarr; X</em>, on a computer that's simply <em>X</em> in the sidebar.</p>
+<p><strong>On a computer or tablet</strong>, every page is in the sidebar on the left, and it stays there while you work: chats, user and listing details and notifications open beside it, so you can jump to any other page in one tap. The page you're on is marked with a navy bar on its left edge and a highlight (hover a collapsed sidebar icon to see <em>(current page)</em>). Picking any page closes whatever was opened on top. The sidebar is grouped as <em>Overview</em> (Dashboard, Activity Log), <em>People</em> (Users, Vendors, Admins, ID Verifications), <em>Listings &amp; marketplace</em> (Properties, Marketplace, Reports), <em>Money</em> (Payouts &amp; Refunds, Eviction Requests), <em>Support</em> (Messages, Support Insights, Chat Log) and <em>Platform</em> (Platform Controls). On a tablet it shows icons only (hover for the name); the arrow button at its foot expands or collapses it. <strong>On a phone</strong>, the bottom bar has four main tabs plus <strong>More</strong>, which lists the rest and scrolls if needed. Either way you only see the pages your level can open, and red number badges show items that need attention. Where this guide says <em>More &rarr; X</em>, on a computer that's simply <em>X</em> in the sidebar.</p>
 <h2>Dashboard</h2>
 <p>Headline numbers (total users, tenants, landlords, vendors, properties, bookings, marketplace orders, pending vendor reviews, deactivated accounts) and a live activity feed. Tapping a card or a feed item jumps to the relevant list.</p>
 <h2>Users</h2>
-<p>Everyone who uses the app, filterable by <em>All, Tenants, Landlords, Vendors, Deactivated</em>. Admin accounts are never listed here (and can't be opened or edited from here); they're managed on the Admins screen. Tap a user to open their detail page:</p>
+<p>Everyone who uses the app, filterable by <em>All, Tenants, Landlords, Vendors, Deactivated, Banned</em>. Admin accounts are never listed here (and can't be opened or edited from here); they're managed on the Admins screen. Tap a user to open their detail page:</p>
 <ul>
   <li>Profile details, which every admin can edit.</li>
-  <li>Their listings, with photos, and their bookings.</li>
-  <li>Actions, depending on your level: message them, change email, send a password reset, set a password, disable 2FA, deactivate, delete permanently.</li>
+  <li>Their listings, with photos.</li>
+  <li><strong>Booking history</strong> (tenants): the newest three bookings are always at the top, newest first; <em>Show N older bookings</em> unfolds the rest. Each booking shows its outcome at a glance &mdash; <em>Successful</em>, <em>Pending</em>, <em>Payment failed</em>, <em>Refund requested</em>/<em>Refund failed</em>, <em>Refunded (tenant asked)</em>, <em>Refunded by landlord</em>, <em>Refunded by HomeServant</em>, or for a monthly plan <em>paying monthly</em>/<em>monthly rent overdue</em>. Tap it for the property's full details and photos (tap a photo for the gallery), every payment, and a timeline of every step with its date and time.</li>
+  <li>Actions, depending on your level: message them, change email, send a password reset, set a password, disable 2FA, deactivate, ban permanently, lift a ban (super admin), delete permanently.</li>
 </ul>
 <p>Deactivating or deleting needs a written reason of at least 10 characters. It's emailed to the user and recorded in the Activity Log.</p>
 <h2>Vendors</h2>
@@ -98,11 +103,11 @@
 <p>Problems users have reported about a property or a marketplace item, filterable by <em>Open, In Progress, Resolved</em>. Open a report to read it, move it through those statuses, or transfer it to another admin.</p>
 <h2>More</h2>
 <ul>
-  <li><strong>Properties:</strong> every listing. Moderators and above can remove one (with a reason) or re-list it. On a property's page, <em>View profile</em> next to the landlord's name opens the landlord's full profile in a pop-up, with the same details and buttons as on <em>Users</em> (edit, message, password reset, change email, deactivate, delete and so on). Each button shows only for the admin levels allowed to use it, exactly as on the Users screen.</li>
+  <li><strong>Properties:</strong> every listing, with badges for <em>Featured (paid)</em>, <em>Ranked</em> and <em>Hidden by landlord</em>. Moderators and above can remove one (with a reason) or re-list it, and set its <strong>search ranking</strong> (see section 8). A listing's page also shows how many photo changes its landlord has left. On a property's page, <em>View profile</em> next to the landlord's name opens the landlord's full profile in a pop-up, with the same details and buttons as on <em>Users</em> (edit, message, password reset, change email, deactivate, delete and so on). Each button shows only for the admin levels allowed to use it, exactly as on the Users screen.</li>
   <li><strong>Marketplace:</strong> products and orders. Moderators and above can remove a product (with a reason). Everyone can open an order's details.</li>
   <li><strong>Messages:</strong> your <em>Inbox</em> (conversations you're in) and the shared <em>Support Queue</em> (support chats nobody has taken yet). See section 5.</li>
   <li><strong>Admins</strong> (Moderator and above): the admin list. Super admins also invite, promote or demote, remove, and toggle 2FA here. See section 7.</li>
-  <li><strong>Activity Log</strong> (Moderator and above): a record of sensitive actions, such as admin sign-ins, account deactivations and deletions, password and email changes, chat claims and transfers. Only a super admin can clear it.</li>
+  <li><strong>Activity Log</strong> (Moderator and above): a record of sensitive actions, such as admin sign-ins, account deactivations, bans and deletions, password and email changes, chat claims and transfers, calls to customers and ranking changes &mdash; with the reason the admin gave. Only a super admin can clear it.</li>
   <li><strong>Chat Log</strong> (Super Admin): every support conversation from the last 30 days, with who handled it and every transfer. Filter by <em>Unattended, Opened, Resolved</em>.</li>
 </ul>
 <h2>Top bar</h2>
@@ -118,12 +123,14 @@
   <li><strong>Ended by the customer:</strong> the customer can also tap <em>End chat</em>. It ends the same way as a resolve: a notice appears in the chat, you're notified if you were handling it, and nobody can send more messages there. If they need help again, a fresh conversation starts. It counts as resolved on Support Insights, which also shows how many were ended by customers. Customers are asked to rate a conversation only if an admin replied.</li>
 </ol>
 <h2>Tools inside a support chat</h2>
-<p>The admin handling a chat, and any super admin, get these at the top of the chat (on a phone they're under the headset icon):</p>
+<p>At the top of a support chat you'll see <strong>what the customer is contacting support about</strong> &mdash; the topic they picked when they opened it (if they pick a different topic later, it's updated). The topic is also in the <em>New support conversation</em> alert. The admin handling a chat, and any super admin, get these tools at the top of the chat (on a phone they're under the headset icon):</p>
 <ul>
   <li><strong>Customer details</strong>: who they are, their recent bookings (or bookings on their listings), recent payments, reports, and their other support chats.</li>
   <li><strong>Internal notes</strong>: notes for other admins, never shown to the customer. Useful before a transfer.</li>
   <li><strong>Topic &amp; priority</strong>: set what it's about and how urgent it is (Low, Normal, High, Urgent). The queue shows the most urgent first, and the inbox and queue show both as badges.</li>
-  <li><strong>Handling history</strong>: who took it up and every hand-off.</li>
+  <li><strong>Handling history</strong>: who took it up and every hand-off. A chat the system handed you reads <em>Auto Assigned to you by system admin</em>.</li>
+  <li><strong>Call customer</strong>: give a reason first (at least 10 characters). The call, with your name, the time, the number and the reason, is saved with the chat and in the Activity Log, then your phone's dialler opens; on a computer the number is shown with a Copy button. The same sheet lists earlier calls from the chat, and super admins can see them from the Chat Log.</li>
+  <li><strong>Edit customer details</strong>: their full profile over the chat, with exactly the edits your level allows (the same as on <em>Users</em>).</li>
   <li><strong>Saved replies</strong> (the lightning icon by the message box): shared ready-made answers. Tap one to drop it into your reply and adjust it before sending. Anyone can add one; the author, moderators and super admins can edit or delete it.</li>
 </ul>
 <p>Your sent messages show <em>Sending&hellip;</em> until they arrive, and <em>Not sent &middot; Tap to retry</em> if they fail.</p>
@@ -169,6 +176,7 @@
   <li><strong>Pay unverified landlords</strong> (a separate switch, ON by default): <em>ON</em> &mdash; landlords are paid as normal on move-in, shortlet payment and renewal, verified or not. <em>OFF</em> &mdash; landlords must be verified before they are paid: payouts to unverified landlords are held by HomeServant and each landlord is told to get verified. The tenant's side (moving in, the stay, the renewal) is never held up. Held money is sent automatically when the landlord is verified, or to everyone when you switch it back ON. The card shows how much is held right now. Verified landlords are always paid.</li>
   <li>Existing tenancies, bookings and payments are not affected. Tenants who already booked or saved a hidden listing still see it, with a note: <em>"This listing has been hidden because the landlord is unverified"</em> (on the History card, the property page and saved listings), and that their booking carries on.</li>
 </ul>
+<p>Platform Controls also sets: <strong>listing photo changes</strong> (how many times a landlord can change a listing's photos &mdash; 3 by default &mdash; and how many days they're locked afterwards &mdash; 14 by default); <strong>featured ads</strong> (price and number of days); and <strong>promoted-slot spacing</strong> (one promoted listing in every N results).</p>
 <h2>Payouts &amp; Refunds (Super Admin)</h2>
 <p><em>More &rarr; Payouts &amp; Refunds</em> lists rent money that didn't go through (the badge counts them): payouts to landlords (held for verification, no bank account, or a transfer that failed or was reversed by the bank) and refunds to tenants that failed. Each row shows the amount, property, landlord (bank ending), tenant, how long it's been waiting and the last error.</p>
 <ul>
@@ -222,7 +230,7 @@
 <p>Moderators and super admins can open the <em>Admins</em> page. Search by name or email, and filter by level (Super Admins, Moderators, Support). It shows a headcount at the top (all admins, then super admins, moderators and support), and each admin's account creation date in the list. Tap any admin to see which super admin invited them. Only super admins can invite, remove or change an admin's level. Admins created before this was recorded, the very first admin, and admins promoted directly in the database show "Not recorded".</p>
 <h2>Inviting a new admin (Super Admin)</h2>
 <ol>
-  <li>Tap <strong>New Admin</strong> and enter their full name, email and level, then <strong>Send Code</strong>.</li>
+  <li>Tap <strong>New Admin</strong> and enter their first name, last name, email and level, then <strong>Send Code</strong>. Customers only ever see an admin's first name.</li>
   <li>They receive one email with a 4-digit confirmation code and a temporary password.</li>
   <li>Ask them for the code and enter it in the console within 10 minutes. Their account is created.</li>
   <li>They sign in with the temporary password and must set their own straight away.</li>
@@ -253,6 +261,12 @@
 <p>Open it under <em>Reports</em> and set it to <em>In Progress</em> while you look into it. Transfer it if someone else should handle it, then set it to <em>Resolved</em>. While a report about a marketplace item is open, that sale's payment is held and not automatically released to the vendor.</p>
 <h3>Someone needs to be removed</h3>
 <p><em>Deactivate</em> hides the account and signs it out; the user can come back by signing in again within 30 days. <em>Delete permanently</em> cannot be undone. Both need a reason, which is emailed to the user.</p>
+<h3>Someone is posting suspicious listings: ban them</h3>
+<p>From the user's page (or a listing's <em>View profile</em>), a Moderator or Super Admin can <strong>Ban Permanently</strong> with a reason. They're signed out everywhere at once (an open app shows <em>Account Banned</em> with the reason), can't sign in again, their listings leave search and can't be booked, and any shop is taken off the marketplace. They're emailed and notified with the reason. A ban never expires and the account isn't deleted. Only a Super Admin can <strong>Lift Ban</strong> (find them with the <em>Banned</em> filter on Users); that restores everything and tells them.</p>
+<h3>Ranking listings (for example a popular shortlet)</h3>
+<p>On a listing's page, <em>Search ranking &rarr; Change</em> sets it to <em>Normal</em>, <em>Boosted</em> or <em>Top</em>, for 7, 30 or 90 days or until changed, with a reason for the Activity Log. It's fair to other listings by design: ranked and paid-featured listings share one promoted spot in every few results (3 by default, set in Platform Controls) and the rest are ordinary listings, newest first; equally ranked listings rotate daily; and a listing that can't be booked right now (for example a booked-out shortlet) always shows <em>after</em> every available listing, however it's ranked.</p>
+<h3>Featured ads</h3>
+<p>Landlords can pay to feature a listing (price and length set in Platform Controls; ₦5,000 for 7 days by default). Featured listings are labelled <em>Featured</em> for tenants and use the same promoted spots as ranking. The listing's page shows until when it's featured.</p>
 
 <h1>9. Emergency: the console has been taken over</h1>
 <div class="warn"><strong>Use this if an admin account has been stolen, an unknown admin appears, or you're locked out of every super admin account.</strong> You'll need access to the two services the platform runs on: <strong>Render</strong> (where the server runs) and <strong>Supabase</strong> (where the database is). Those two logins are the real master keys to HomeServant. Keep them with the owners only, protected by 2FA.</div>
