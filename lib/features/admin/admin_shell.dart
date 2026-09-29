@@ -131,11 +131,11 @@ class _AdminShellState extends State<AdminShell> {
       context.read<AppState>().verification.pendingCount().then((c) {
         if (mounted) setState(() => _pendingVerificationsCount = c);
       }).catchError((_) {});
-    }
-    if (context.read<AppState>().adminLevel?.isSuperAdmin ?? false) {
       context.read<AppState>().verification.stuckPaymentCount().then((c) {
         if (mounted) setState(() => _stuckPaymentsCount = c);
       }).catchError((_) {});
+    }
+    if (context.read<AppState>().adminLevel?.isSuperAdmin ?? false) {
       context.read<AppState>().evictionsRepo.adminPendingCount().then((c) {
         if (mounted) setState(() => _pendingEvictionsCount = c);
       }).catchError((_) {});
@@ -487,6 +487,8 @@ class _AdminShellState extends State<AdminShell> {
       _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', count: _pendingAdminInvitesCount, builder: AdminAdminsTab.new),
       const _MoreItem(icon: Icons.history_rounded, label: 'Activity Log', builder: AdminActivityLogScreen.new),
       _MoreItem(icon: Icons.verified_user_outlined, label: 'ID Verifications', count: _pendingVerificationsCount, builder: AdminVerificationsTab.new),
+      // Moderators can retry failed payouts and refunds and refund a tenant.
+      _MoreItem(icon: Icons.payments_outlined, label: 'Payouts & Refunds', count: _stuckPaymentsCount, builder: AdminPayoutsScreen.new),
     ],
     // Every other admin's chat history across the last 30 days — kept
     // SUPER_ADMIN-only (the server independently re-checks this too, see
@@ -499,8 +501,6 @@ class _AdminShellState extends State<AdminShell> {
       _MoreItem(icon: Icons.gavel_rounded, label: 'Eviction Requests', count: _pendingEvictionsCount, builder: AdminEvictionsTab.new),
     if (isSuperAdmin)
       const _MoreItem(icon: Icons.tune_rounded, label: 'Platform Controls', builder: AdminPlatformControlsScreen.new),
-    if (isSuperAdmin)
-      _MoreItem(icon: Icons.payments_outlined, label: 'Payouts & Refunds', count: _stuckPaymentsCount, builder: AdminPayoutsScreen.new),
   ];
 
   int _moreAttentionTotal(bool canSeeAdmins, bool isSuperAdmin) =>

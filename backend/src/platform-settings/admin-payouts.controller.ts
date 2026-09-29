@@ -18,13 +18,16 @@ class RefundTenantDto {
   reason!: string;
 }
 
-/// Payouts needing attention (admin console) — SUPER_ADMIN only, since
-/// Retry moves money. Retry uses the same double-payment-safe release as
-/// every automatic payout (see PaymentsService.releasePaymentToRecipient).
+/// Payouts and refunds needing attention (admin console) — moderators and
+/// super admins. Every action goes through the same double-payment-safe
+/// release/refund as the automatic ones (see
+/// PaymentsService.releasePaymentToRecipient / retryRefund /
+/// adminRefundBooking), and a full refund needs a written reason both
+/// sides see.
 @Controller('admin/payouts')
 @UseGuards(JwtAuthGuard, RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
 @Roles(UserRole.ADMIN)
-@MinAdminLevel(AdminLevel.SUPER_ADMIN)
+@MinAdminLevel(AdminLevel.MODERATOR)
 export class AdminPayoutsController {
   constructor(private readonly payments: PaymentsService) {}
 

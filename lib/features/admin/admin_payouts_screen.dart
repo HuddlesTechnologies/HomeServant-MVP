@@ -15,7 +15,7 @@ import 'widgets/admin_confirm_sheet.dart';
 const _red = Color(0xFFB42318);
 const _amber = Color(0xFF8A5A0B);
 
-/// Super admins: rent money that needs attention — payouts to landlords
+/// Moderators and super admins: rent money that needs attention — payouts to landlords
 /// that haven't gone out, and refunds to tenants that failed. Every action
 /// goes through the same safeguards as automatic payments (one money action
 /// at a time; Paystack is asked first whether it already happened), so
