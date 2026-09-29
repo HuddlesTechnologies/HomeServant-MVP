@@ -38,27 +38,6 @@ class VerifiedBadge extends StatelessWidget {
   }
 }
 
-/// A solid white pill with navy text — for drawing over photos, where the
-/// background is unknown.
-class VerifiedPill extends StatelessWidget {
-  const VerifiedPill({super.key, this.label = 'Verified'});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(6, 4, 9, 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 6)],
-      ),
-      child: VerifiedBadge(textColor: AppColors.navy, label: label, size: 11),
-    );
-  }
-}
-
 /// A user's own verification state on their profile: Verified, awaiting
 /// review, or rejected with what to fix. White card, navy text.
 class VerificationStatusCard extends StatelessWidget {
