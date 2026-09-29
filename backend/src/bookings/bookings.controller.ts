@@ -11,6 +11,7 @@ import { ProposeInspectionDto } from './dto/propose-inspection.dto';
 import { RespondBookingDto } from './dto/respond-booking.dto';
 import { FeedClearDto } from './dto/feed-clear.dto';
 import { RenewBookingDto } from './dto/renew-booking.dto';
+import { ConfirmPaymentDto } from './dto/confirm-payment.dto';
 
 @Controller('bookings')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -21,6 +22,14 @@ export class BookingsController {
   @Roles(UserRole.TENANT)
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateBookingDto) {
     return this.bookings.create(user.sub, dto);
+  }
+
+  /// The app calls this when Paystack sends the tenant back, so the
+  /// booking shows as paid right away rather than when the webhook lands.
+  @Post('confirm-payment')
+  @Roles(UserRole.TENANT)
+  confirmPayment(@CurrentUser() user: AuthenticatedUser, @Body() dto: ConfirmPaymentDto) {
+    return this.bookings.confirmPayment(dto.reference, user.sub);
   }
 
   @Get('mine')

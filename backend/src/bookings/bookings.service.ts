@@ -91,6 +91,51 @@ export class BookingsService {
       throw new BadRequestException("The landlord doesn't allow monthly payments for this property");
     }
 
+    const planFields = monthly
+      ? // Monthly: a month's rent is a twelfth of the yearly price, rounded up.
+        { paymentPlan: PaymentPlan.MONTHLY, monthlyRent: Math.ceil(property.price / 12) }
+      : { paymentPlan: PaymentPlan.FULL, monthlyRent: null };
+
+    // One live booking per tenant per property. Rent Now used to create a
+    // fresh booking every time it was pressed, so a tenant who had already
+    // paid could pay again, and History showed the property twice (the
+    // extra copy stuck on "Pending").
+    const existing = await this.prisma.booking.findMany({
+      where: { tenantId, propertyId: dto.propertyId, status: { notIn: [BookingStatus.DECLINED, BookingStatus.REFUNDED] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const now = Date.now();
+    const live = existing.filter(
+      (b) =>
+        !((b.status === BookingStatus.MOVED_IN || b.status === BookingStatus.PAID) && b.leaseEndDate && b.leaseEndDate.getTime() <= now),
+    );
+    if (isShortlet) {
+      if (live.some((b) => b.status === BookingStatus.PENDING || b.status === BookingStatus.ACCEPTED)) {
+        throw new BadRequestException('You already have a booking request for this property — see your Booking History.');
+      }
+    } else {
+      if (live.some((b) => b.status === BookingStatus.MOVED_IN)) {
+        throw new BadRequestException("You're already renting this property — see your Booking History.");
+      }
+      if (live.some((b) => PAID_STATUSES.has(b.status))) {
+        throw new BadRequestException("You've already paid for this property — see your Booking History.");
+      }
+      // An unfinished checkout (Rent Now pressed, never paid): carry on with
+      // it instead of starting another booking. If it was actually paid and
+      // the webhook just hasn't landed, the charge call confirms it and
+      // refuses to charge again.
+      const unfinished = live.find((b) => b.status === BookingStatus.PENDING);
+      if (unfinished) {
+        const reused = await this.prisma.booking.update({
+          where: { id: unfinished.id },
+          data: { message: dto.message ?? unfinished.message, ...planFields },
+          include: { property: true },
+        });
+        const charge = await this.payments.initiateBookingCharge(reused.id, tenantId);
+        return { ...reused, ...charge };
+      }
+    }
+
     const booking = await this.prisma.booking.create({
       data: {
         propertyId: dto.propertyId,
@@ -98,8 +143,7 @@ export class BookingsService {
         requestedDate: isShortlet ? new Date(dto.requestedDate!) : undefined,
         nights: isShortlet ? dto.nights : undefined,
         message: dto.message,
-        // Monthly: a month's rent is a twelfth of the yearly price, rounded up.
-        ...(monthly ? { paymentPlan: PaymentPlan.MONTHLY, monthlyRent: Math.ceil(property.price / 12) } : {}),
+        ...(monthly ? planFields : {}),
       },
       include: { property: true },
     });
@@ -139,15 +183,34 @@ export class BookingsService {
           property: { include: PlatformSettingsService.landlordStatusInclude },
           tenancyAgreement: true,
           payments: { where: { status: 'REFUNDED' }, select: { refundedById: true }, take: 1 },
+          _count: { select: { payments: { where: { status: 'RELEASED' } } } },
         },
         orderBy: { createdAt: 'desc' },
       }),
       this.platform.requireVerifiedLandlords(),
     ]);
+    // An unpaid non-Shortlet booking is just an unfinished checkout. Older
+    // app versions created a new one on every Rent Now tap, so drop any
+    // that's shadowed by another booking for the same property (a paid
+    // one, or a newer attempt) — otherwise History shows it twice.
+    const shown = bookings.filter(
+      (b) =>
+        b.status !== BookingStatus.PENDING ||
+        b.property.category === PropertyCategory.SHORTLET ||
+        !bookings.some(
+          (other) =>
+            other.id !== b.id &&
+            other.propertyId === b.propertyId &&
+            (PAID_STATUSES.has(other.status) || other.createdAt > b.createdAt),
+        ),
+    );
     // Flags let History explain a booked listing that Platform Controls now
     // hides from browsing; the booking itself carries on unaffected.
-    return bookings.map(({ property: { landlord, ...property }, payments, ...booking }) => ({
+    return shown.map(({ property: { landlord, ...property }, payments, _count, ...booking }) => ({
       ...booking,
+      // Rating a property is only allowed once the landlord has actually
+      // been paid for it (see ReviewsService.upsert).
+      landlordPaid: _count.payments > 0,
       // An admin refund is always in full (the tenant's own keeps 0.2%).
       refundedByHomeServant: payments.some((p) => !!p.refundedById),
       property: { ...property, ...PlatformSettingsService.listingFlags(landlord.identityVerification?.status, requireVerified) },
@@ -302,6 +365,10 @@ export class BookingsService {
   /// tenant closed the app before finishing checkout the first time.
   pay(id: string, tenantId: string) {
     return this.payments.initiateBookingCharge(id, tenantId);
+  }
+
+  confirmPayment(reference: string, tenantId: string) {
+    return this.payments.confirmBookingCharge(reference, tenantId);
   }
 
   /// `POST /bookings/:id/inspection` — tenant proposes (or re-proposes,

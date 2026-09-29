@@ -295,6 +295,46 @@ export class PaymentsService {
     return this.chargeBooking(booking, booking.tenant.email);
   }
 
+  /// Asks Paystack about every still-open (INITIATED) charge on this
+  /// booking and processes any that actually succeeded, exactly as the
+  /// webhook would (it's idempotent, so a webhook arriving later is a
+  /// no-op). True if one had been paid.
+  private async settleOpenBookingCharges(bookingId: string): Promise<boolean> {
+    const open = await this.prisma.payment.findMany({
+      where: { bookingId, status: PaymentStatus.INITIATED },
+      select: { paystackReference: true },
+    });
+    let paid = false;
+    for (const { paystackReference } of open) {
+      if ((await this.paystack.verifyCharge(paystackReference)) === 'success') {
+        await this.handleChargeSuccess(paystackReference);
+        paid = true;
+      }
+    }
+    return paid;
+  }
+
+  /// `POST /bookings/confirm-payment` — called by the app when Paystack
+  /// sends the payer back (with `?reference=` on the URL), so the booking
+  /// shows as paid straight away instead of whenever the webhook arrives.
+  /// Only the payer can confirm their own charge; anything not yet
+  /// successful at Paystack is left alone.
+  async confirmBookingCharge(reference: string, payerId: string): Promise<{ paid: boolean }> {
+    const payment = await this.prisma.payment.findUnique({
+      where: { paystackReference: reference },
+      select: { payerId: true, status: true, purpose: true },
+    });
+    if (!payment || payment.payerId !== payerId || payment.purpose !== PaymentPurpose.RENTAL_BOOKING) {
+      throw new NotFoundException('Payment not found');
+    }
+    if (payment.status !== PaymentStatus.INITIATED) {
+      return { paid: payment.status !== PaymentStatus.FAILED };
+    }
+    if ((await this.paystack.verifyCharge(reference)) !== 'success') return { paid: false };
+    await this.handleChargeSuccess(reference);
+    return { paid: true };
+  }
+
   /// `POST /bookings/:id/renew` — tenant-only, only for an active
   /// (MOVED_IN) non-Shortlet lease, within RENEWAL_WINDOW_DAYS of its
   /// current leaseEndDate. Charges again exactly like the first payment;
@@ -396,6 +436,12 @@ export class PaymentsService {
     tenantEmail: string,
     { renewal = false, installment = false }: { renewal?: boolean; installment?: boolean } = {},
   ) {
+    // The tenant may already have paid an earlier checkout whose webhook
+    // hasn't landed yet. Starting a new charge marks that one FAILED, so its
+    // webhook would then be ignored and they'd be asked to pay twice.
+    if (await this.settleOpenBookingCharges(booking.id)) {
+      throw new BadRequestException("You've already paid for this — see your Booking History.");
+    }
     await this.prisma.payment.updateMany({
       where: { bookingId: booking.id, status: PaymentStatus.INITIATED },
       data: { status: PaymentStatus.FAILED },

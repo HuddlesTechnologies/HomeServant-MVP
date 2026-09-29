@@ -28,6 +28,7 @@ import '../services/browser_notifications.dart';
 import '../api/support_tools_repository.dart';
 import '../api/reviews_repository.dart';
 import '../api/token_storage.dart';
+import '../core/payment_return_stub.dart' if (dart.library.html) '../core/payment_return_web.dart';
 import '../api/web_session_storage_stub.dart' if (dart.library.html) '../api/web_session_storage_web.dart' as web_storage;
 import '../api/uploads_repository.dart';
 import '../api/users_repository.dart';
@@ -1030,7 +1031,9 @@ class AppState extends ChangeNotifier {
       nights: isShortlet ? nights : null,
       payMonthly: payMonthly,
     );
-    myBookings = [result.booking, ...myBookings];
+    // The server continues an unfinished checkout rather than creating a
+    // second booking, so the same id can come back.
+    myBookings = [result.booking, ...myBookings.where((b) => b.id != result.booking.id)];
     notifyListeners();
     return result;
   }
@@ -1283,18 +1286,48 @@ class AppState extends ChangeNotifier {
 
     final accessToken = await _tokens.readAccessToken();
     if (accessToken != null) {
+      restoringSession = true;
+      super.notifyListeners();
       try {
         final user = await _usersRepo.me();
         _applyUser(user);
-        await _loadInitialData();
+        // The admin console reads its level once on open, so have it first.
+        if (role == UserRole.admin) await _loadInitialData();
       } catch (_) {
         await _tokens.clear();
       }
     }
 
+    // Routing only needs to know who's signed in. This used to wait for
+    // every list (bookings, favorites, notifications...) as well, and the
+    // router ignores the session until isLoaded — so on a slow start (e.g.
+    // coming back from Paystack) the tenant sat on the Get Started page,
+    // and then tapping Log In jumped straight to the dashboard without a
+    // password once loading finished behind it.
     isLoaded = true;
+    restoringSession = false;
     super.notifyListeners(); // restored data, not a change to persist again
+
+    if (isAuthenticated && role != UserRole.admin) {
+      final paymentReference = takePaymentReturnReference();
+      if (paymentReference != null && role == UserRole.tenant) {
+        try {
+          await _bookingsRepo.confirmPayment(paymentReference);
+        } catch (_) {
+          // The webhook still marks it paid; History refreshes when it does.
+        }
+      }
+      try {
+        await _loadInitialData();
+      } catch (_) {
+        // Each screen shows its own empty/error state and reloads later.
+      }
+    }
   }
+
+  /// A saved session is being checked on startup — the landing page shows a
+  /// loader instead of Get Started / Log In meanwhile.
+  bool restoringSession = false;
 }
 
 class _ReviewSummary {

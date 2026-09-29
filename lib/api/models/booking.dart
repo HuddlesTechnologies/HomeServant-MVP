@@ -93,6 +93,7 @@ class Booking {
     this.tenantPhone,
     this.tenantVerified = false,
     this.refundedByHomeServant = false,
+    this.landlordPaid = false,
     this.landlordFeedClearedAt,
     this.tenantProfilePhotoUrl,
     this.tenantGender,
@@ -159,6 +160,11 @@ class Booking {
 
   /// Refunded in full by a HomeServant admin (not the tenant's own refund).
   final bool refundedByHomeServant;
+
+  /// The landlord has actually been paid for this booking (move-in
+  /// confirmed, or a Shortlet's payout sent) — only then can the tenant
+  /// rate the property. Tenant's own view only.
+  final bool landlordPaid;
 
   /// The landlord cleared this request from their home feed. It isn't
   /// declined: it still shows in Bookings and counts as waiting.
@@ -247,6 +253,7 @@ class Booking {
       tenantPhone: tenant?['phoneNumber'] as String?,
       tenantVerified: (tenant?['identityVerification'] as Map<String, dynamic>?)?['status'] == 'APPROVED',
       refundedByHomeServant: json['refundedByHomeServant'] as bool? ?? false,
+      landlordPaid: json['landlordPaid'] as bool? ?? false,
       landlordFeedClearedAt: _parseDate(json['landlordFeedClearedAt']),
       tenantProfilePhotoUrl: tenant?['profilePhotoUrl'] as String?,
       tenantGender: _genderFromApi(tenant?['gender'] as String?),

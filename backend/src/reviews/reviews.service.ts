@@ -23,17 +23,23 @@ export class ReviewsService {
 
   /// One review per (property, author) — resubmitting updates the existing
   /// review rather than erroring, so a tenant can revise their rating
-  /// without a separate edit endpoint. Requires the author to actually
-  /// have a non-declined/non-refunded booking on this property first —
-  /// same trust-boundary check ReportsService.create already makes for
-  /// reporting a property, just checked here rather than left to the
-  /// reviewer's own honesty (an arbitrary tenant could otherwise post a
-  /// public rating on any listing they've never set foot in).
+  /// without a separate edit endpoint. Requires the author to have a
+  /// booking on this property whose payment has actually been released to
+  /// the landlord (move-in confirmed for a rental; a Shortlet's payout
+  /// sent) — not merely paid into escrow, since a tenant can still refund
+  /// before then and never have stayed there at all.
   async upsert(authorId: string, dto: CreateReviewDto) {
     const rented = await this.prisma.booking.findFirst({
-      where: { tenantId: authorId, propertyId: dto.propertyId, status: { notIn: ['PENDING', 'DECLINED', 'REFUNDED'] } },
+      where: {
+        tenantId: authorId,
+        propertyId: dto.propertyId,
+        status: { notIn: ['PENDING', 'DECLINED', 'REFUNDED'] },
+        payments: { some: { status: 'RELEASED' } },
+      },
     });
-    if (!rented) throw new ForbiddenException('You can only review a property you have rented');
+    if (!rented) {
+      throw new ForbiddenException('You can rate this property once your payment has been completed and released to the landlord');
+    }
 
     return this.prisma.review.upsert({
       where: { propertyId_authorId: { propertyId: dto.propertyId, authorId } },

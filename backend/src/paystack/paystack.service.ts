@@ -196,6 +196,25 @@ export class PaystackService {
     return body.data.status.toLowerCase();
   }
 
+  /// Paystack's status for the charge with [reference] (`success`,
+  /// `abandoned`, `failed`, `ongoing`, ...), or `'not_found'` if checkout
+  /// was never started with it. Lets a charge be confirmed straight away
+  /// when the payer returns to the app, rather than waiting on the webhook,
+  /// and stops a second charge being started for something already paid.
+  /// Throws if Paystack can't be asked.
+  async verifyCharge(reference: string): Promise<'not_found' | string> {
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${this.secretKey}` },
+    });
+    const body = (await response.json().catch(() => ({}))) as { status?: boolean; message?: string; data?: { status?: string } };
+    if (response.status === 404 || (body.status === false && /not found/i.test(body.message ?? ''))) return 'not_found';
+    if (!response.ok || !body.status || !body.data?.status) {
+      this.logger.error(`verifyCharge failed for ${reference}: ${body.message ?? response.status}`);
+      throw new InternalServerErrorException("Couldn't check this payment with Paystack right now. Try again shortly.");
+    }
+    return body.data.status.toLowerCase();
+  }
+
   /// How much of the charge with [reference] has already been refunded (or
   /// is being refunded), in kobo — failed refunds don't count. Asked before
   /// every refund so a charge is never refunded twice. Throws if Paystack
