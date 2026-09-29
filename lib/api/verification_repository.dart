@@ -85,7 +85,7 @@ class VerificationRepository {
     return PlatformSettings.fromApi(response.data as Map<String, dynamic>);
   });
 
-  // --- Payouts & refunds needing attention (super admin) -----------------------
+  // --- Payouts & refunds needing attention (moderator+) -----------------------
 
   Future<List<StuckPayment>> stuckPayments() => _client.call(() async {
     final response = await _client.dio.get('/admin/payouts');

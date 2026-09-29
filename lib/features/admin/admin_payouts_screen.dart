@@ -15,7 +15,7 @@ import 'widgets/admin_confirm_sheet.dart';
 const _red = Color(0xFFB42318);
 const _amber = Color(0xFF8A5A0B);
 
-/// Super admins: rent money that needs attention — payouts to landlords
+/// Moderators and super admins: rent money that needs attention — payouts to landlords
 /// that haven't gone out, and refunds to tenants that failed. Every action
 /// goes through the same safeguards as automatic payments (one money action
 /// at a time; Paystack is asked first whether it already happened), so
@@ -236,7 +236,10 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
               children: [
                 if (p.canRetry) _button('Retry payout', filled: true, onTap: () => _retryPayout(p)),
                 if (p.canRetryRefund) _button('Retry refund', filled: true, onTap: () => _retryRefund(p)),
-                if (p.canRefundTenant) _button('Refund tenant', onTap: () => _refundTenant(p)),
+                // Retrying is for moderators too; a full refund is a new
+                // money decision, so the server keeps it super-admin-only.
+                if (p.canRefundTenant && (context.read<AppState>().adminLevel?.isSuperAdmin ?? false))
+                  _button('Refund tenant', onTap: () => _refundTenant(p)),
                 _button('View landlord', onTap: () async {
                   await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminUserDetailScreen(userId: p.landlordId)));
                   if (mounted) _load();

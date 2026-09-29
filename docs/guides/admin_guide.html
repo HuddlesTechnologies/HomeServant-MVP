@@ -71,7 +71,8 @@
   <tr><td>See ID documents and verify or reject them (ID Verifications)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
   <tr><td>Approve or reject eviction requests</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>Change Platform Controls (only verified landlords; pay unverified landlords; photo-change limits; featured ad price and length; promoted-slot spacing)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
-  <tr><td>Retry payouts and refunds, or refund a tenant (Payouts &amp; Refunds)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
+  <tr><td>Retry payouts and refunds (Payouts &amp; Refunds)</td><td class="no">No</td><td class="yes">Yes</td><td class="yes">Yes</td></tr>
+  <tr><td>Refund a tenant in full (Payouts &amp; Refunds)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
   <tr><td>Chat Log (all support conversations from the last 30 days)</td><td class="no">No</td><td class="no">No</td><td class="yes">Yes</td></tr>
 </table>
 
@@ -177,10 +178,10 @@
   <li>Existing tenancies, bookings and payments are not affected. Tenants who already booked or saved a hidden listing still see it, with a note: <em>"This listing has been hidden because the landlord is unverified"</em> (on the History card, the property page and saved listings), and that their booking carries on.</li>
 </ul>
 <p>Platform Controls also sets: <strong>listing photo changes</strong> (how many times a landlord can change a listing's photos &mdash; 3 by default &mdash; and how many days they're locked afterwards &mdash; 14 by default); <strong>featured ads</strong> (price and number of days); and <strong>promoted-slot spacing</strong> (one promoted listing in every N results).</p>
-<h2>Payouts &amp; Refunds (Super Admin)</h2>
+<h2>Payouts &amp; Refunds (Moderator and above)</h2>
 <p><em>More &rarr; Payouts &amp; Refunds</em> lists rent money that didn't go through (the badge counts them): payouts to landlords (held for verification, no bank account, or a transfer that failed or was reversed by the bank) and refunds to tenants that failed. Each row shows the amount, property, landlord (bank ending), tenant, how long it's been waiting and the last error.</p>
 <ul>
-  <li><strong>Retry payout</strong> / <strong>Retry refund</strong> try again. <strong>Refund tenant</strong> refunds the tenant in full (with a reason both sides see) when the money is still held and they haven't moved in, or their shortlet stay hasn't started; the booking ends as Refunded.</li>
+  <li><strong>Retry payout</strong> / <strong>Retry refund</strong> try again (moderators and super admins). <strong>Refund tenant</strong> (super admins only) refunds the tenant in full (with a reason both sides see) when the money is still held and they haven't moved in, or their shortlet stay hasn't started; the booking ends as Refunded.</li>
   <li><strong>Safe to press twice:</strong> Paystack is asked first whether the payout or refund already happened (if so it's just recorded), and only one money action can run for a payment at a time. Nobody can be paid or refunded twice, a payment can never be both paid out and refunded, and once refunded the tenant can't request a refund again.</li>
   <li>Payouts waiting for verification can't be retried here; they're paid automatically when the landlord is verified (or if <em>Pay unverified landlords</em> is turned on). After a tenant has moved in, no one can refund them from here.</li>
   <li>If a payout fails, the tenant's side still goes ahead (move-in, stay, renewal) and the landlord is told their payout is delayed.</li>
@@ -351,7 +352,8 @@ WHERE "email" = 'suspicious@example.com';</code></pre>
   <tr><td>Verify someone's ID</td><td>More &rarr; ID Verifications &rarr; user &rarr; Identity Verification</td><td>Moderator</td></tr>
   <tr><td>Decide an eviction request</td><td>More &rarr; Eviction Requests</td><td>Super Admin</td></tr>
   <tr><td>Hide unverified landlords' listings, or hold their payouts</td><td>More &rarr; Platform Controls</td><td>Super Admin</td></tr>
-  <tr><td>Fix a payout or refund that didn't go through</td><td>More &rarr; Payouts &amp; Refunds</td><td>Super Admin</td></tr>
+  <tr><td>Retry a payout or refund that didn't go through</td><td>More &rarr; Payouts &amp; Refunds</td><td>Moderator</td></tr>
+  <tr><td>Refund a tenant in full</td><td>More &rarr; Payouts &amp; Refunds</td><td>Super Admin</td></tr>
   <tr><td>Turn my alert sounds or pop-ups on or off</td><td>Gear icon &rarr; Account Settings</td><td>Any</td></tr>
   <tr><td>Recover a hijacked console</td><td>Render + Supabase (section 9)</td><td>Owner</td></tr>
 </table>
