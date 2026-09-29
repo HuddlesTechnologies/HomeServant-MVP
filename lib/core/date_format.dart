@@ -46,3 +46,10 @@ String formatRelativeTime(DateTime dt) {
   if (diff.inDays < 7) return '${diff.inDays}d ago';
   return formatShortDate(dt);
 }
+
+/// "24 Oct 2026, 14:05" in the device's local time — for money and audit
+/// screens where the time of day matters, not just the date.
+String formatDateTime(DateTime dt) {
+  final local = dt.toLocal();
+  return '${formatShortDate(local)}, ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+}

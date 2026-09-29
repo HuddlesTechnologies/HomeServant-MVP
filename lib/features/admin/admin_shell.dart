@@ -21,6 +21,7 @@ import 'admin_evictions_tab.dart';
 import 'admin_payouts_screen.dart';
 import 'admin_platform_controls_screen.dart';
 import 'admin_support_insights_tab.dart';
+import 'admin_transactions_screen.dart';
 import 'admin_verifications_tab.dart';
 import 'admin_chat_log_screen.dart';
 import 'admin_dashboard_tab.dart';
@@ -488,6 +489,9 @@ class _AdminShellState extends State<AdminShell> {
       builder: AdminMarketplaceTab.new,
     ),
     _MoreItem(icon: Icons.forum_outlined, label: 'Messages', count: _messagesAttentionCount, builder: AdminMessagesTab.new),
+    // Every admin tier: support staff look payments up all day. Read-only;
+    // money actions stay on Payouts & Refunds (moderator+).
+    const _MoreItem(icon: Icons.receipt_long_outlined, label: 'Transactions', builder: AdminTransactionsScreen.new),
     if (canSeeAdmins) ...[
       _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', count: _pendingAdminInvitesCount, builder: AdminAdminsTab.new),
       const _MoreItem(icon: Icons.history_rounded, label: 'Activity Log', builder: AdminActivityLogScreen.new),
@@ -665,7 +669,7 @@ class _AdminShellState extends State<AdminShell> {
         page('ID Verifications'),
       ]),
       _NavSection('Listings & marketplace', [page('Properties'), page('Marketplace'), tab(3, Icons.flag_outlined, 'Reports', _openReportsCount)]),
-      _NavSection('Money', [page('Payouts & Refunds'), page('Eviction Requests')]),
+      _NavSection('Money', [page('Transactions'), page('Payouts & Refunds'), page('Eviction Requests')]),
       _NavSection('Support', [page('Messages'), page('Support Insights'), page('Chat Log')]),
       _NavSection('Platform', [page('Platform Controls')]),
     ];

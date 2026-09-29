@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'models/admin_models.dart';
+import 'models/admin_transaction.dart';
 import 'models/chat_log.dart';
 import '../features/dashboard/models/property.dart';
 
@@ -249,6 +250,23 @@ class AdminRepository {
     return _client.call(() async {
       final response = await _client.dio.get('/admin/marketplace/orders', queryParameters: {'page': page});
       return AdminPage<AdminOrder>.fromApi(response.data as Map<String, dynamic>, AdminOrder.fromApi);
+    });
+  }
+
+  /// Every successful rent payment, newest first — see backend
+  /// AdminTransactionsService. [status] is 'credited', 'held' or
+  /// 'refunded'; null lists them all.
+  Future<AdminPage<AdminTransaction>> findTransactions({String? search, String? status, int page = 1}) {
+    return _client.call(() async {
+      final response = await _client.dio.get(
+        '/admin/transactions',
+        queryParameters: {
+          if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+          if (status != null) 'status': status,
+          'page': page,
+        },
+      );
+      return AdminPage<AdminTransaction>.fromApi(response.data as Map<String, dynamic>, AdminTransaction.fromApi);
     });
   }
 
