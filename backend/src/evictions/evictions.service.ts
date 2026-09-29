@@ -3,6 +3,7 @@ import { AdminLevel, BookingStatus, EvictionStatus, NotificationType, Prisma, Us
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeHtml } from '../common/escape-html';
 
 const include = {
   booking: {
@@ -192,6 +193,3 @@ export class EvictionsService {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

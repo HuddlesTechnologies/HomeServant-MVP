@@ -8,6 +8,7 @@ import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UpdateVerificationDto } from './dto/verification.dto';
+import { escapeHtml } from '../common/escape-html';
 
 /// Private-bucket folder for every identity document.
 export const VERIFICATION_FOLDER = 'verification';
@@ -359,6 +360,3 @@ export class VerificationService {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

@@ -20,6 +20,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SignupDto } from './dto/signup.dto';
 import { SignInPortal } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { escapeHtml } from '../common/escape-html';
 
 /// What comes back to the client after signup/login — never the password
 /// hash. Mirrors the fields the Flutter app's AppState already tracks.
@@ -412,8 +413,8 @@ export class AuthService {
     await this.mail.send(
       user.email,
       'Your HomeServant account has been deactivated',
-      `<p>Hi${user.fullName ? ` ${user.fullName}` : ''},</p>
-       <p>Your HomeServant account has been deactivated${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Your listings (if any) are hidden and you've been signed out everywhere.</p>
+      `<p>Hi${user.fullName ? ` ${escapeHtml(user.fullName)}` : ''},</p>
+       <p>Your HomeServant account has been deactivated${byAdmin ? ' by an admin.' : ', as requested.'}${escapeHtml(reasonLine)} Your listings (if any) are hidden and you've been signed out everywhere.</p>
        <p>You can reactivate any time within the next 30 days simply by logging back in — after that, your account and its data will be permanently deleted.</p>
        <p>${byAdmin ? 'If you believe this was a mistake, contact HomeServant support.' : "If you didn't request this, please log in and reactivate your account, then change your password."}</p>`,
       `Your HomeServant account has been deactivated${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Your listings (if any) are hidden and you've been signed out everywhere.\n\nYou can reactivate any time within the next 30 days simply by logging back in — after that, your account and its data will be permanently deleted.\n\n${byAdmin ? 'If you believe this was a mistake, contact HomeServant support.' : "If you didn't request this, please log in and reactivate your account, then change your password."}`,
@@ -428,7 +429,7 @@ export class AuthService {
     await this.mail.send(
       user.email,
       'Your HomeServant account has been reactivated',
-      `<p>Hi${user.fullName ? ` ${user.fullName}` : ''},</p>
+      `<p>Hi${user.fullName ? ` ${escapeHtml(user.fullName)}` : ''},</p>
        <p>Welcome back — your HomeServant account has been reactivated and your listings (if any) are visible again.</p>
        <p>If you didn't do this, please secure your account by changing your password right away.</p>`,
       `Welcome back — your HomeServant account has been reactivated and your listings (if any) are visible again.\n\nIf you didn't do this, please secure your account by changing your password right away.`,
@@ -454,8 +455,8 @@ export class AuthService {
       await this.mail.send(
         user.email,
         'Your HomeServant account has been deleted',
-        `<p>Hi${user.fullName ? ` ${user.fullName}` : ''},</p>
-         <p>Your HomeServant account has been permanently deleted${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Everything tied to it — listings, bookings, orders, and messages — has been removed, and this can't be undone.</p>
+        `<p>Hi${user.fullName ? ` ${escapeHtml(user.fullName)}` : ''},</p>
+         <p>Your HomeServant account has been permanently deleted${byAdmin ? ' by an admin.' : ', as requested.'}${escapeHtml(reasonLine)} Everything tied to it — listings, bookings, orders, and messages — has been removed, and this can't be undone.</p>
          ${byAdmin ? '<p>If you believe this was a mistake, contact HomeServant support.</p>' : ''}`,
         `Your HomeServant account has been permanently deleted${byAdmin ? ' by an admin.' : ', as requested.'}${reasonLine} Everything tied to it — listings, bookings, orders, and messages — has been removed, and this can't be undone.${byAdmin ? '\n\nIf you believe this was a mistake, contact HomeServant support.' : ''}`,
       );

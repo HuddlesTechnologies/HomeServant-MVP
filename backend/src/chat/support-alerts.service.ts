@@ -6,6 +6,7 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatService } from './chat.service';
+import { escapeHtml } from '../common/escape-html';
 
 /// Follow-up alerts so a support conversation can't quietly go unanswered:
 ///
@@ -146,7 +147,7 @@ export class SupportAlertsService {
       const body = `${customer} has waited over ${this.unclaimedEscalationMinutes} minutes and no admin has picked up their conversation. Open the Support Queue, or put an admin on duty.`;
       for (const admin of superAdmins) {
         await this.notifications.create(admin.id, NotificationType.NEW_MESSAGE, title, body, thread.id);
-        await this.mail.send(admin.email, `HomeServant: ${title}`, `<p>${body}</p>`, body).catch((error) => {
+        await this.mail.send(admin.email, `HomeServant: ${title}`, `<p>${escapeHtml(body)}</p>`, body).catch((error) => {
           this.logger.warn(`Escalation email to ${admin.email} failed: ${error}`);
         });
       }

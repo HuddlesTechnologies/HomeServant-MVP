@@ -55,9 +55,13 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     // session, from another tab) wouldn't otherwise show up here until a
     // full app restart. Refreshing on entry means at least opening this
     // tab picks up anything new, on top of the pull-to-refresh below.
-    context.read<AppState>().loadProperties();
+    // After the first frame: loadProperties notifies listeners straight
+    // away (to show loading), which isn't allowed while this screen is
+    // still being built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) offerBrowserNotifications(context);
+      if (!mounted) return;
+      context.read<AppState>().loadProperties();
+      offerBrowserNotifications(context);
     });
   }
 

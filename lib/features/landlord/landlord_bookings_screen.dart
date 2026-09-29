@@ -171,6 +171,8 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     if (b.leaseStartDate != null) parts.add('since ${formatShortDate(b.leaseStartDate!)}');
     if (b.leaseEndDate != null) parts.add('expires ${formatShortDate(b.leaseEndDate!)}');
     if (b.lastPaidAt != null) parts.add('last paid ${formatShortDate(b.lastPaidAt!)}');
+    // Same wording the tenant sees on their booking (HistoryScreen).
+    if (b.monthlyRentOverdue) parts.add('monthly rent overdue since ${formatShortDate(b.rentPaidThrough!)}');
     if (parts.isEmpty) return 'since ${formatShortDate(b.createdAt)}';
     return parts.join(' • ');
   }

@@ -40,7 +40,7 @@ export class PaystackService {
     const response = await fetch('https://api.paystack.co/bank?country=nigeria&currency=NGN', {
       headers: { Authorization: `Bearer ${this.secretKey}` },
     });
-    const body = (await response.json()) as { status: boolean; message: string; data?: { name: string; code: string; active: boolean }[] };
+    const body = (await response.json().catch(() => ({}))) as { status: boolean; message: string; data?: { name: string; code: string; active: boolean }[] };
     if (!response.ok || !body.status || !body.data) {
       throw new InternalServerErrorException('Could not load the bank list right now');
     }
@@ -59,7 +59,7 @@ export class PaystackService {
       `https://api.paystack.co/bank/resolve?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`,
       { headers: { Authorization: `Bearer ${this.secretKey}` } },
     );
-    const body = (await response.json()) as { status: boolean; message: string; data?: { account_number: string; account_name: string } };
+    const body = (await response.json().catch(() => ({}))) as { status: boolean; message: string; data?: { account_number: string; account_name: string } };
     if (!response.ok || !body.status || !body.data) {
       throw new BadRequestException(body.message || "Couldn't verify that account number — check the bank and number are correct");
     }
@@ -91,7 +91,7 @@ export class PaystackService {
         ...(this.appUrl() ? { callback_url: this.appUrl() } : {}),
       }),
     });
-    const body = (await response.json()) as {
+    const body = (await response.json().catch(() => ({}))) as {
       status: boolean;
       message: string;
       data?: { authorization_url: string; access_code: string; reference: string };
@@ -143,7 +143,7 @@ export class PaystackService {
       headers: { Authorization: `Bearer ${this.secretKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'nuban', name: accountName, account_number: accountNumber, bank_code: bankCode, currency: 'NGN' }),
     });
-    const body = (await response.json()) as { status: boolean; message: string; data?: { recipient_code: string } };
+    const body = (await response.json().catch(() => ({}))) as { status: boolean; message: string; data?: { recipient_code: string } };
     if (!response.ok || !body.status || !body.data) {
       this.logger.error(`createTransferRecipient failed: ${body.message}`);
       throw new InternalServerErrorException(body.message || 'Could not register the payout account right now');
@@ -169,7 +169,7 @@ export class PaystackService {
       headers: { Authorization: `Bearer ${this.secretKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: 'balance', amount: amountKobo, recipient: recipientCode, reason, reference }),
     });
-    const body = (await response.json()) as { status: boolean; message: string; data?: { transfer_code: string; status: string } };
+    const body = (await response.json().catch(() => ({}))) as { status: boolean; message: string; data?: { transfer_code: string; status: string } };
     if (!response.ok || !body.status || !body.data) {
       this.logger.error(`initiateTransfer failed for recipient ${recipientCode}: ${body.message}`);
       throw new InternalServerErrorException(body.message || 'Could not release this payment right now');
@@ -232,7 +232,7 @@ export class PaystackService {
       headers: { Authorization: `Bearer ${this.secretKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ transaction: reference, ...(amountKobo !== undefined ? { amount: amountKobo } : {}) }),
     });
-    const body = (await response.json()) as { status: boolean; message: string };
+    const body = (await response.json().catch(() => ({}))) as { status: boolean; message: string };
     if (!response.ok || !body.status) {
       this.logger.error(`refundTransaction failed for reference ${reference}: ${body.message}`);
       throw new InternalServerErrorException(body.message || 'Could not process this refund right now');
