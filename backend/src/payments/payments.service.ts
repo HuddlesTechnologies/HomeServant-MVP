@@ -1,4 +1,5 @@
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPlan, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
@@ -80,6 +81,27 @@ const PAYOUT_LOCK_MS = 10 * 60 * 1000;
 /// attempt (with a fresh reference) is safe. Anything else — success,
 /// pending, processing, otp, queued, received — counts as sent.
 const RETRYABLE_TRANSFER_STATUSES = new Set(['failed', 'reversed', 'abandoned', 'rejected']);
+
+/// Start of the error recorded when a payout can't be sent because
+/// HomeServant's Paystack balance is lower than it. Such payouts are
+/// retried automatically (see retryLowBalancePayouts) once money arrives.
+export const LOW_BALANCE_ERROR = "HomeServant's Paystack balance is too low";
+
+/// Paystack's own wording for a transfer bigger than the balance
+/// ("Your balance is not enough to fulfil this request", "Insufficient
+/// balance"), or ours from the balance check below.
+export function isLowBalanceError(message: string | null | undefined): boolean {
+  return !!message && (message.startsWith(LOW_BALANCE_ERROR) || /balance.*(not enough|insufficient)|insufficient.*balance/i.test(message));
+}
+
+function lowBalanceMessage(availableKobo: number | null, neededKobo: number): string {
+  const naira = (kobo: number) => `NGN ${(kobo / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
+  return (
+    `${LOW_BALANCE_ERROR} to send this payout (${availableKobo === null ? 'balance unknown' : `${naira(availableKobo)} available`}, ` +
+    `${naira(neededKobo)} needed). Payouts are sent from the Paystack balance: fund it, or have Paystack keep collected ` +
+    `payments there instead of settling them to the bank. It's retried automatically every 30 minutes.`
+  );
+}
 
 /// What a landlord is told when a transfer didn't go through first time.
 const DELAYED_PAYOUT_LINE =
@@ -1200,13 +1222,28 @@ export class PaymentsService {
         await this.prisma.payment.update({ where: { id: payment.id }, data: { transferRecipientCode: recipientCode } });
       }
 
+      // Payouts come out of HomeServant's Paystack balance. Check it first,
+      // so a payout it can't cover isn't sent (and counted as an attempt)
+      // only to be refused. If the balance can't be read, send anyway —
+      // Paystack still refuses what it can't cover.
+      const amountKobo = payment.amount - payment.platformFeeAmount;
+      const available = await this.paystackBalanceKobo();
+      if (available !== null && available < amountKobo) {
+        throw new BadRequestException(lowBalanceMessage(available, amountKobo));
+      }
+
       // Record the reference BEFORE sending, so if anything goes wrong after
       // Paystack accepts it, the next attempt finds it above.
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { payoutReference: reference, payoutAttempts: { increment: 1 }, payoutLastAttemptAt: new Date() },
       });
-      await this.paystack.initiateTransfer(payment.amount - payment.platformFeeAmount, recipientCode, opts.reason, reference);
+      try {
+        await this.paystack.initiateTransfer(amountKobo, recipientCode, opts.reason, reference);
+      } catch (error) {
+        if (isLowBalanceError((error as Error).message)) throw new BadRequestException(lowBalanceMessage(available, amountKobo));
+        throw error;
+      }
       await this.markReleased(payment.id, reference);
     } catch (error) {
       await this.prisma.payment.updateMany({
@@ -1454,6 +1491,43 @@ export class PaymentsService {
         bookingId: p.booking?.id ?? null,
       };
     });
+  }
+
+  /// HomeServant's current Paystack balance, for the admin Payouts screen
+  /// (null if Paystack can't be asked right now).
+  async paystackBalanceKobo(): Promise<number | null> {
+    try {
+      return await this.paystack.balanceKobo();
+    } catch {
+      return null;
+    }
+  }
+
+  /// Payouts that failed only because the Paystack balance was too low are
+  /// retried every 30 minutes, oldest first, so landlords are paid as soon
+  /// as money is available without an admin pressing Retry. Each retry
+  /// goes through retryPayout (locked, and Paystack is asked first whether
+  /// it already went out), so it can never pay twice. Stops at the first
+  /// one the balance still can't cover.
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async retryLowBalancePayouts(): Promise<number> {
+    const waiting = await this.prisma.payment.findMany({
+      where: { purpose: PaymentPurpose.RENTAL_BOOKING, status: PaymentStatus.PAID_HELD, payoutLastError: { not: null } },
+      select: { id: true, payoutLastError: true },
+      orderBy: { paidAt: 'asc' },
+    });
+    let paid = 0;
+    for (const p of waiting.filter((w) => isLowBalanceError(w.payoutLastError))) {
+      try {
+        await this.retryPayout(p.id);
+        paid++;
+      } catch (err) {
+        if (isLowBalanceError((err as Error).message)) break;
+        this.logger.warn(`Automatic payout retry for ${p.id} failed: ${(err as Error).message}`);
+      }
+    }
+    if (paid > 0) this.logger.log(`Automatic payout retry sent ${paid} payout(s)`);
+    return paid;
   }
 
   async stuckPayoutCount(): Promise<number> {

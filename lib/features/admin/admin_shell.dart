@@ -446,7 +446,11 @@ class _AdminShellState extends State<AdminShell> {
       _closeOpenedPages();
       setState(() => _openPage = item);
     } else {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
+      // Coming back from a case (an eviction decided, a payout retried):
+      // recount, rather than keep showing what was counted before.
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item))).then((_) {
+        if (mounted) _loadBadgeCounts();
+      });
     }
   }
 
@@ -539,7 +543,9 @@ class _AdminShellState extends State<AdminShell> {
                       trailing: item.count > 0 ? _CountBadge(count: item.count) : null,
                       onTap: () {
                         Navigator.of(sheetContext).pop();
-                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item))).then((_) {
+                          if (mounted) _loadBadgeCounts();
+                        });
                       },
                     ),
                 ],

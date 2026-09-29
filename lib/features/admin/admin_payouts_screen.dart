@@ -31,6 +31,11 @@ class AdminPayoutsScreen extends StatefulWidget {
 class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
   List<StuckPayment>? _items;
   String? _error;
+
+  /// HomeServant's Paystack balance (payouts are sent from it); null while
+  /// loading or when Paystack couldn't be asked.
+  int? _balanceKobo;
+  bool _balanceLoaded = false;
   final Set<String> _busy = {};
 
   @override
@@ -41,12 +46,77 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
 
   Future<void> _load() async {
     setState(() => _error = null);
+    final repo = context.read<AppState>().verification;
+    // Best-effort: the list still shows if the balance can't be read.
+    repo.paystackBalanceKobo().then<int?>((b) => b).catchError((_) => null).then((b) {
+      if (!mounted) return;
+      setState(() {
+        _balanceKobo = b;
+        _balanceLoaded = true;
+      });
+    });
     try {
-      final items = await context.read<AppState>().verification.stuckPayments();
+      final items = await repo.stuckPayments();
       if (mounted) setState(() => _items = items);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
+  }
+
+  /// Payouts waiting only because the Paystack balance is too low (the
+  /// server's error starts with this; see backend LOW_BALANCE_ERROR).
+  bool _blockedByBalance(StuckPayment p) =>
+      p.kind == StuckPaymentKind.payout && (p.lastError?.contains("Paystack balance is too low") ?? false);
+
+  /// Paystack balance, plus — when payouts are stuck on it — what to do.
+  /// Navy text on white; the warning in the screen's darkened amber.
+  Widget _balanceCard(List<StuckPayment>? items) {
+    final blocked = items?.where(_blockedByBalance).toList() ?? const <StuckPayment>[];
+    final owedKobo = blocked.fold<int>(0, (sum, p) => sum + p.amountKobo);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: blocked.isEmpty ? null : Border.all(color: _amber, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.account_balance_wallet_outlined, color: AppColors.navy, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  !_balanceLoaded
+                      ? 'Paystack balance: checking…'
+                      : _balanceKobo == null
+                      ? "Paystack balance: couldn't be checked right now"
+                      : 'Paystack balance: ${nairaLabelFromKobo(_balanceKobo!)}',
+                  style: AppTextStyles.body(color: AppColors.navy, size: 13.5, weight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Payouts to landlords are sent from this balance, so it has to hold at least the amount being paid out.',
+            style: AppTextStyles.body(color: AppColors.navy, size: 12.5),
+          ),
+          if (blocked.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${blocked.length} payout${blocked.length == 1 ? '' : 's'} (${nairaLabelFromKobo(owedKobo)}) '
+              '${blocked.length == 1 ? 'is' : 'are'} waiting for enough balance. Fund the Paystack balance, or ask Paystack to keep '
+              'collected payments in the balance instead of settling them to the bank. They are retried automatically every '
+              '30 minutes, so Retry is only needed if you want to send one straight away.',
+              style: AppTextStyles.body(color: _amber, size: 12.5, weight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Future<void> _run(StuckPayment p, Future<String> Function() action) async {
@@ -141,6 +211,8 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
+          _balanceCard(items),
           const SizedBox(height: 12),
           if (_error != null)
             Padding(
