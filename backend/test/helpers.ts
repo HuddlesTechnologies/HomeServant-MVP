@@ -1,3 +1,4 @@
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, UserRole } from '@prisma/client';
 
 /// These tests run against a real Postgres, never a production database:
@@ -8,7 +9,7 @@ export const testDbUrl = process.env.TEST_DATABASE_URL;
 
 export function testPrisma(): PrismaClient {
   if (!testDbUrl) throw new Error('Set TEST_DATABASE_URL to a disposable, migrated Postgres database');
-  return new PrismaClient({ datasources: { db: { url: testDbUrl } } });
+  return new PrismaClient({ adapter: new PrismaPg({ connectionString: testDbUrl }) });
 }
 
 export async function resetDb(prisma: PrismaClient): Promise<void> {

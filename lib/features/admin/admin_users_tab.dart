@@ -18,6 +18,7 @@ import 'widgets/admin_search_bar.dart';
 import '../../widgets/verified_badge.dart';
 import '../../api/models/verification.dart';
 import 'widgets/admin_badge.dart';
+import '../../widgets/profile_photo_viewer.dart';
 
 class AdminUsersTab extends StatefulWidget {
   const AdminUsersTab({super.key, this.initialRoleFilter, this.initialShowDeactivatedOnly = false});
@@ -200,7 +201,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                           decoration: adminCardDecoration,
                           child: Row(
                             children: [
-                              _UserAvatar(photoUrl: user.profilePhotoUrl),
+                              _UserAvatar(photoUrl: user.profilePhotoUrl, name: user.fullName),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -271,17 +272,22 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
 }
 
 class _UserAvatar extends StatelessWidget {
-  const _UserAvatar({this.photoUrl});
+  const _UserAvatar({this.photoUrl, this.name});
 
   final String? photoUrl;
+  final String? name;
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 20,
-      backgroundColor: AppColors.offWhite,
-      backgroundImage: photoUrl != null ? imageProviderForPath(photoUrl!) : null,
-      child: photoUrl == null ? const Icon(Icons.person_outline_rounded, color: AppColors.hintGrey, size: 20) : null,
+    return ProfilePhotoTapTarget(
+      photoPath: photoUrl,
+      name: name,
+      child: CircleAvatar(
+        radius: 20,
+        backgroundColor: AppColors.offWhite,
+        backgroundImage: photoUrl != null ? imageProviderForPath(photoUrl!) : null,
+        child: photoUrl == null ? const Icon(Icons.person_outline_rounded, color: AppColors.hintGrey, size: 20) : null,
+      ),
     );
   }
 }

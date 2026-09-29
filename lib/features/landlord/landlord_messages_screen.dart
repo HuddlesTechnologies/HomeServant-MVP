@@ -10,6 +10,7 @@ import '../../state/app_state.dart';
 import '../../widgets/chat_thread_list_tile.dart';
 import '../../widgets/contact_avatar.dart';
 import '../dashboard/chat_thread_screen.dart';
+import '../../widgets/pull_to_refresh.dart';
 
 /// Messages tab of the redesigned landlord dashboard — real conversations
 /// from the API, filterable by unread. "Deleted"/"Archived" have no backend
@@ -205,8 +206,10 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
             Expanded(
               child: _threads == null
                   ? const Center(child: CircularProgressIndicator())
-                  : _visible.isEmpty
-                      ? Center(
+                  : PullToRefresh(
+                    onRefresh: _load,
+                    child: _visible.isEmpty
+                      ? PullableEmptyState(
                           child: Text(
                             _searching && _searchQuery.trim().isNotEmpty
                                 ? 'No conversations match "${_searchQuery.trim()}".'
@@ -218,6 +221,7 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                           ),
                         )
                       : ListView.separated(
+                          physics: PullToRefresh.alwaysScrollable,
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 120),
                           itemCount: _visible.length,
                           separatorBuilder: (_, __) => Divider(color: theme.foreground.withValues(alpha: 0.1), height: 1),
@@ -266,6 +270,7 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                             );
                           },
                         ),
+                  ),
             ),
           ],
         ),

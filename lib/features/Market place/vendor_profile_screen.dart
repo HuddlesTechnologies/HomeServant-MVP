@@ -15,6 +15,7 @@ import 'vendor_transactions_screen.dart';
 import 'widgets/vendor_bottom_nav.dart';
 import 'widgets/vendor_tab_route.dart';
 import '../../widgets/confirm_sheet.dart';
+import '../../widgets/profile_photo_viewer.dart';
 
 /// The vendor's own shop profile — business details plus the "Danger
 /// Zone" actions (deactivating the shop). Reached from the vendor
@@ -131,11 +132,15 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           Center(
             child: Column(
               children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundColor: theme.accent.withValues(alpha: 0.15),
-                  backgroundImage: vendor.logoUrl != null ? imageProviderForPath(vendor.logoUrl!) : null,
-                  child: vendor.logoUrl == null ? Icon(Icons.storefront_rounded, color: theme.accent, size: 36) : null,
+                ProfilePhotoTapTarget(
+                  photoPath: vendor.logoUrl,
+                  name: vendor.businessName,
+                  child: CircleAvatar(
+                    radius: 40,
+                    backgroundColor: theme.accent.withValues(alpha: 0.15),
+                    backgroundImage: vendor.logoUrl != null ? imageProviderForPath(vendor.logoUrl!) : null,
+                    child: vendor.logoUrl == null ? Icon(Icons.storefront_rounded, color: theme.accent, size: 36) : null,
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Text(vendor.businessName, style: AppTextStyles.heading(color: theme.foreground, size: 18)),

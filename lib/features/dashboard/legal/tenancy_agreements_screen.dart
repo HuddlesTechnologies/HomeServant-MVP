@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../api/models/booking.dart';
+import '../../../core/date_format.dart';
 import '../../../core/responsive.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/dashboard_theme.dart';
 import '../../../state/app_state.dart';
 import '../../../widgets/dashboard_page_scaffold.dart';
 import '../../../widgets/empty_state.dart';
+import '../../../widgets/pull_to_refresh.dart';
 import 'tenancy_agreement_view_screen.dart';
 
 /// Lists a tenancy agreement for every booking the tenant has actually
@@ -23,7 +25,9 @@ class TenancyAgreementsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final entries = appState.myBookings.where((b) => !b.isShortlet && b.status == BookingStatus.movedIn).toList()
-      ..sort((a, b) => (b.leaseStartDate ?? b.createdAt).compareTo(a.leaseStartDate ?? a.createdAt));
+      ..sort(
+        (a, b) => (b.agreementCreatedAt ?? b.leaseStartDate ?? b.createdAt).compareTo(a.agreementCreatedAt ?? a.leaseStartDate ?? a.createdAt),
+      );
 
     return DashboardPageScaffold(
       background: theme.background,
@@ -41,11 +45,15 @@ class TenancyAgreementsScreen extends StatelessWidget {
                       'Once you move into a rented property, its tenancy agreement will appear here for you to '
                       'view and download.',
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  children: [
-                    for (final booking in entries) _AgreementTile(theme: theme, booking: booking),
-                  ],
+              : PullToRefresh(
+                  onRefresh: () => context.read<AppState>().refreshAll(),
+                  child: ListView(
+                    physics: PullToRefresh.alwaysScrollable,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                    children: [
+                      for (final booking in entries) _AgreementTile(theme: theme, booking: booking),
+                    ],
+                  ),
                 ),
         ),
       ),
@@ -61,6 +69,9 @@ class _AgreementTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Generated at move-in; the lease start is the same day for bookings
+    // loaded without the agreement attached.
+    final createdAt = booking.agreementCreatedAt ?? booking.leaseStartDate;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -95,6 +106,13 @@ class _AgreementTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 12.5),
                     ),
+                    if (createdAt != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Created ${formatShortDate(createdAt)}',
+                        style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.8), size: 12, weight: FontWeight.w600),
+                      ),
+                    ],
                   ],
                 ),
               ),

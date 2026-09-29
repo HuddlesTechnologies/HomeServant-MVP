@@ -1,6 +1,6 @@
 # HomeServant API
 
-NestJS 10 + Prisma 5 + PostgreSQL (Supabase) backend for the HomeServant
+NestJS 11 + Prisma 7 + PostgreSQL (Supabase) backend for the HomeServant
 Flutter app (web and mobile), deployed on Render. It covers:
 
 - **Accounts:** email + password with email codes and optional two-factor,
@@ -70,9 +70,14 @@ real database). Only sockets, email and push are faked.
 
 ```bash
 createdb hs_test
-DATABASE_URL=postgresql://localhost/hs_test npx prisma migrate deploy
+DIRECT_URL=postgresql://localhost/hs_test npx prisma migrate deploy
 TEST_DATABASE_URL=postgresql://localhost/hs_test npm test
 ```
+
+The Prisma CLI reads its connection URL from `prisma.config.ts`
+(`DIRECT_URL`, falling back to `DATABASE_URL`); since Prisma 7 it is no
+longer in `schema.prisma`. The app itself connects with `DATABASE_URL`
+through the `pg` driver adapter (see `src/prisma/prisma.service.ts`).
 
 `npx tsc --noEmit -p tsconfig.json` type-checks. GitHub Actions
 (`.github/workflows/ci.yml`) runs the type check, applies the migrations and

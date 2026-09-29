@@ -28,6 +28,7 @@ import '../services/browser_notifications.dart';
 import '../api/support_tools_repository.dart';
 import '../api/reviews_repository.dart';
 import '../api/token_storage.dart';
+import '../core/payment_return_stub.dart' if (dart.library.html) '../core/payment_return_web.dart';
 import '../api/web_session_storage_stub.dart' if (dart.library.html) '../api/web_session_storage_web.dart' as web_storage;
 import '../api/uploads_repository.dart';
 import '../api/users_repository.dart';
@@ -85,6 +86,11 @@ class AppState extends ChangeNotifier {
     // reconnects under the hood across login/logout, so this stays valid
     // the same way NotificationBannerOverlay's own subscription does.
     _chatSocket.onNotification.listen(_handleRealtimeNotification);
+    // Someone else rented (or the landlord edited/hid) a listing: refresh
+    // what a tenant is browsing, quietly, so it just drops off the list.
+    _chatSocket.onListingsChanged.listen((_) {
+      if (role == UserRole.tenant) unawaited(loadProperties(silent: true).catchError((_) {}));
+    });
     _chatSocket.onAccountBanned.listen(
       (reason) => _handleSessionExpired(
         'This account has been permanently banned from HomeServant.'
@@ -96,7 +102,9 @@ class AppState extends ChangeNotifier {
     _chatRepo.onThreadRead = _markThreadNotificationsReadLocally;
     // Notifications created while the socket was down never arrived live.
     _chatSocket.onReconnected.listen((_) {
-      if (userId != null) unawaited(loadNotifications());
+      // Anything that changed while the socket was down (phone locked, tab
+      // in the background, flaky network) never arrived live — fetch it all.
+      if (userId != null) unawaited(refreshAll());
     });
   }
 
@@ -800,9 +808,13 @@ class AppState extends ChangeNotifier {
   List<Property> properties = [];
   bool propertiesLoading = false;
 
-  Future<void> loadProperties({String? state, String? category}) async {
-    propertiesLoading = true;
-    notifyListeners();
+  /// [silent]: a background refresh — the list swaps in place without
+  /// showing the loading state first.
+  Future<void> loadProperties({String? state, String? category, bool silent = false}) async {
+    if (!silent) {
+      propertiesLoading = true;
+      notifyListeners();
+    }
     try {
       properties = await _propertiesRepo.findMany(state: state, category: category);
     } finally {
@@ -996,15 +1008,45 @@ class AppState extends ChangeNotifier {
   /// accept/decline, inspection date, payment, etc.), instead of only
   /// picking it up on the next login.
   void _handleRealtimeNotification(AppNotification notification) {
-    if (notification.type != NotificationType.bookingStatus) return;
+    if (notification.type != NotificationType.bookingStatus && notification.type != NotificationType.rentExpiryReminder) return;
     // An identity review decision (VerificationService.review) — refresh
     // so the profile's verification card updates without a reload.
     if (notification.title.startsWith('Your identity')) unawaited(refreshProfile().catchError((_) {}));
+    // Booking notifications also cover payments, move-ins (which mark the
+    // property occupied), evictions and lease ends, so reload everything
+    // those touch — not just the bookings list.
     if (role == UserRole.landlord) {
-      unawaited(loadLandlordBookings());
+      unawaited(loadLandlordBookings().catchError((_) {}));
+      unawaited(loadLandlordProperties().catchError((_) {}));
     } else if (role == UserRole.tenant) {
-      unawaited(loadMyBookings());
+      unawaited(loadMyBookings().catchError((_) {}));
+      unawaited(loadProperties(silent: true).catchError((_) {}));
     }
+  }
+
+  DateTime? _lastRefreshAll;
+
+  /// Fetches again everything this user's screens show — what pull-to-
+  /// refresh does, and what runs when the app comes back to the foreground
+  /// or the live connection reconnects (updates sent meanwhile were
+  /// missed). One failing list doesn't stop the others.
+  ///
+  /// [ifOlderThan] skips the refresh when one ran that recently, so
+  /// switching tabs/apps back and forth doesn't refetch every time.
+  Future<void> refreshAll({Duration? ifOlderThan}) async {
+    if (userId == null) return;
+    final last = _lastRefreshAll;
+    if (ifOlderThan != null && last != null && DateTime.now().difference(last) < ifOlderThan) return;
+    _lastRefreshAll = DateTime.now();
+    Future<void> safe(Future<void> f) => f.catchError((_) {});
+    await Future.wait([
+      safe(loadNotifications()),
+      safe(refreshProfile()),
+      if (role == UserRole.admin) safe(_loadAdminLevel()),
+      if (role == UserRole.tenant) ...[safe(loadMyBookings()), safe(loadFavorites()), safe(loadMyReviews()), safe(loadProperties(silent: true))],
+      if (role == UserRole.landlord) ...[safe(loadLandlordBookings()), safe(loadLandlordProperties()), safe(loadEvictions())],
+    ]);
+    _chatSocket.notifyThreadsChanged();
   }
 
   Future<void> respondToBooking(String id, {required bool accepted}) async {
@@ -1030,7 +1072,9 @@ class AppState extends ChangeNotifier {
       nights: isShortlet ? nights : null,
       payMonthly: payMonthly,
     );
-    myBookings = [result.booking, ...myBookings];
+    // The server continues an unfinished checkout rather than creating a
+    // second booking, so the same id can come back.
+    myBookings = [result.booking, ...myBookings.where((b) => b.id != result.booking.id)];
     notifyListeners();
     return result;
   }
@@ -1283,18 +1327,48 @@ class AppState extends ChangeNotifier {
 
     final accessToken = await _tokens.readAccessToken();
     if (accessToken != null) {
+      restoringSession = true;
+      super.notifyListeners();
       try {
         final user = await _usersRepo.me();
         _applyUser(user);
-        await _loadInitialData();
+        // The admin console reads its level once on open, so have it first.
+        if (role == UserRole.admin) await _loadInitialData();
       } catch (_) {
         await _tokens.clear();
       }
     }
 
+    // Routing only needs to know who's signed in. This used to wait for
+    // every list (bookings, favorites, notifications...) as well, and the
+    // router ignores the session until isLoaded — so on a slow start (e.g.
+    // coming back from Paystack) the tenant sat on the Get Started page,
+    // and then tapping Log In jumped straight to the dashboard without a
+    // password once loading finished behind it.
     isLoaded = true;
+    restoringSession = false;
     super.notifyListeners(); // restored data, not a change to persist again
+
+    if (isAuthenticated && role != UserRole.admin) {
+      final paymentReference = takePaymentReturnReference();
+      if (paymentReference != null && role == UserRole.tenant) {
+        try {
+          await _bookingsRepo.confirmPayment(paymentReference);
+        } catch (_) {
+          // The webhook still marks it paid; History refreshes when it does.
+        }
+      }
+      try {
+        await _loadInitialData();
+      } catch (_) {
+        // Each screen shows its own empty/error state and reloads later.
+      }
+    }
   }
+
+  /// A saved session is being checked on startup — the landing page shows a
+  /// loader instead of Get Started / Log In meanwhile.
+  bool restoringSession = false;
 }
 
 class _ReviewSummary {

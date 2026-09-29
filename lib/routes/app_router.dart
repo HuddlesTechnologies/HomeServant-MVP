@@ -20,6 +20,7 @@ import '../features/Market place/marketplace_navigator_host.dart';
 import '../features/onboarding/get_started_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/splash/web_landing_screen.dart';
+import '../core/theme/app_colors.dart';
 import '../models/user_role.dart';
 import '../state/app_state.dart';
 import '../widgets/app_lock_screen.dart';
@@ -230,7 +231,12 @@ GoRouter buildAppRouter(AppState appState) {
     routes: [
       GoRoute(
         path: '/',
-        builder: (context, state) => kIsWeb
+        // While a saved session is being checked (e.g. the tab just came
+        // back from Paystack checkout), a signed-in user is about to be
+        // sent to their dashboard — don't flash Get Started / Log In first.
+        builder: (context, state) => context.select<AppState, bool>((s) => s.restoringSession)
+            ? const _RestoringSessionScreen()
+            : kIsWeb
             ? WebLandingScreen(
                 // "Get Started" on the marketing site goes straight to
                 // role-selection sign-up, skipping the Login/Sign Up choice
@@ -475,4 +481,18 @@ GoRouter buildAppRouter(AppState appState) {
       ),
     ],
   );
+}
+
+/// Plain loader shown on '/' while [AppState.restoringSession]. White
+/// background from AppColors with the navy brand color for the spinner.
+class _RestoringSessionScreen extends StatelessWidget {
+  const _RestoringSessionScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: AppColors.white,
+      body: Center(child: CircularProgressIndicator(color: AppColors.navy)),
+    );
+  }
 }

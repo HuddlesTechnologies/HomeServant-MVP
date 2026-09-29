@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
@@ -14,6 +16,7 @@ import '../../widgets/confirm_sheet.dart';
 import '../../widgets/eviction_widgets.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/pull_to_refresh.dart';
 import 'legal/tenancy_agreement_view_screen.dart';
 import 'property_detail_screen.dart';
 import '../../widgets/hidden_listing_notice.dart';
@@ -49,11 +52,15 @@ class HistoryScreen extends StatelessWidget {
                   title: 'No history yet',
                   message: 'Properties you rent or book will show up here.',
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  children: [
-                    for (final booking in bookings) _HistoryTile(booking: booking, theme: theme),
-                  ],
+              : PullToRefresh(
+                  onRefresh: () => context.read<AppState>().refreshAll(),
+                  child: ListView(
+                    physics: PullToRefresh.alwaysScrollable,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                    children: [
+                      for (final booking in bookings) _HistoryTile(booking: booking, theme: theme),
+                    ],
+                  ),
                 ),
         ),
       ),
@@ -139,8 +146,22 @@ class _HistoryTileState extends State<_HistoryTile> {
       }
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      // E.g. "already paid": the server has just confirmed that payment.
+      unawaited(appState.loadMyBookings().catchError((_) {}));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// A rental whose checkout was started (Rent Now) but never paid.
+  bool get _awaitingCheckout => booking.status == BookingStatus.pending && !booking.isShortlet;
+
+  Future<void> _rate(double value) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().rateHistoryProperty(booking.property.id, value);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -380,25 +401,39 @@ class _HistoryTileState extends State<_HistoryTile> {
               ),
             ),
           ],
-          if (booking.status != BookingStatus.pending && booking.status != BookingStatus.declined) ...[
+          if (booking.status != BookingStatus.declined && (booking.status != BookingStatus.pending || _awaitingCheckout)) ...[
             const SizedBox(height: 12),
             Divider(color: theme.foreground.withValues(alpha: 0.12), height: 1),
             const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Your rating', style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 12)),
-                    const SizedBox(height: 4),
-                    _RatingStars(
-                      rating: context.watch<AppState>().myReviewFor(property.id),
-                      color: theme.accent,
-                      onRate: (value) => context.read<AppState>().rateHistoryProperty(property.id, value),
+                // Rating opens only once the landlord has actually been paid
+                // (move-in confirmed / Shortlet payout sent); the server
+                // enforces the same rule.
+                if (booking.landlordPaid && booking.status != BookingStatus.refunded)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Your rating', style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 12)),
+                      const SizedBox(height: 4),
+                      _RatingStars(
+                        rating: context.watch<AppState>().myReviewFor(property.id),
+                        color: theme.accent,
+                        onRate: _rate,
+                      ),
+                    ],
+                  )
+                else if (booking.status != BookingStatus.refunded && booking.status != BookingStatus.pending)
+                  Flexible(
+                    child: Text(
+                      'You can rate this property once your payment is completed.',
+                      style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 11.5),
                     ),
-                  ],
-                ),
+                  )
+                else
+                  const SizedBox.shrink(),
+                const SizedBox(width: 10),
                 Flexible(child: Wrap(alignment: WrapAlignment.end, spacing: 10, runSpacing: 8, children: _actionsFor(booking, withinRenewalWindow))),
               ],
             ),
@@ -426,6 +461,9 @@ class _HistoryTileState extends State<_HistoryTile> {
       return booking.payingMonthly
           ? 'First month paid — book an inspection whenever you\'re ready'
           : 'Paid — book an inspection whenever you\'re ready';
+    }
+    if (booking.status == BookingStatus.pending && !isShortlet) {
+      return 'Payment not completed';
     }
     if (booking.leaseStartDate != null && booking.leaseEndDate != null) {
       return '${isShortlet ? 'Booked' : 'Leased'} ${formatShortDate(booking.leaseStartDate!)} – ${formatShortDate(booking.leaseEndDate!)}';
@@ -486,6 +524,10 @@ class _HistoryTileState extends State<_HistoryTile> {
         if (context.read<AppState>().evictionForBooking(booking.id)?.status == EvictionStatus.approved) return const [];
         return [_ActionButton(label: 'Renew Lease', theme: theme, onTap: _renew)];
       case BookingStatus.pending:
+        // An unfinished rental checkout: finish paying for this booking
+        // (the server confirms it first if it was actually paid already).
+        if (_awaitingCheckout) return [_ActionButton(label: 'Complete Payment', theme: theme, onTap: _payRent)];
+        return const [];
       case BookingStatus.declined:
       case BookingStatus.refunded:
         return const [];

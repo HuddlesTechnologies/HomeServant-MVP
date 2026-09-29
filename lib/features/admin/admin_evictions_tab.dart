@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/eviction.dart';
 import '../../core/date_format.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
+import '../dashboard/chat_thread_screen.dart';
 import 'widgets/admin_filter_chip.dart';
 
 const _red = Color(0xFFC53030);
@@ -175,6 +178,11 @@ class _EvictionCard extends StatelessWidget {
           if (r.leaseStartDate != null && r.leaseEndDate != null)
             _row('Lease', '${formatShortDate(r.leaseStartDate!)} – ${formatShortDate(r.leaseEndDate!)}'),
           _row('Filed', formatShortDate(r.createdAt)),
+          const SizedBox(height: 10),
+          // Reach either side about the case straight from here.
+          _ContactButtons(party: r.tenant, role: 'tenant'),
+          const SizedBox(height: 6),
+          _ContactButtons(party: r.landlord, role: 'landlord'),
           const SizedBox(height: 10),
           _block("Landlord's reason", r.reason),
           const SizedBox(height: 8),
@@ -356,6 +364,77 @@ class _DecisionSheetState extends State<_DecisionSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// "Message <role>" and "Call <role>" for one side of an eviction case.
+/// Navy on the card's white, like the Reject button; Call is disabled (and
+/// says so) when that person has no phone number on file.
+class _ContactButtons extends StatelessWidget {
+  const _ContactButtons({required this.party, required this.role});
+
+  final EvictionParty party;
+  final String role;
+
+  Future<void> _message(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final thread = await context.read<AppState>().chat.openThread(recipientId: party.id);
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            theme: DashboardTheme.midnight,
+            contactName: party.name,
+            threadId: thread.id,
+            adminViewOfUserId: party.id,
+            showExportAction: true,
+            otherParticipant: thread.otherParticipant,
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _call(BuildContext context, String phone) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = Uri(scheme: 'tel', path: phone.replaceAll(RegExp(r'[^0-9+]'), ''));
+    var launched = false;
+    try {
+      launched = await launchUrl(uri);
+    } catch (_) {}
+    // Nothing on this device places calls (e.g. a desktop browser): show
+    // the number so it can be dialled from a phone.
+    if (!launched) messenger.showSnackBar(SnackBar(content: Text('Call ${party.name} on $phone')));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = party.phone?.trim();
+    final hasPhone = phone != null && phone.isNotEmpty;
+    Widget button(IconData icon, String label, VoidCallback? onPressed) => OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        side: BorderSide(color: onPressed == null ? AppColors.hintGrey : AppColors.navy),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      onPressed: onPressed,
+      icon: Icon(icon, size: 16, color: onPressed == null ? AppColors.hintGrey : AppColors.navy),
+      label: Text(
+        label,
+        style: AppTextStyles.body(color: onPressed == null ? AppColors.hintGrey : AppColors.navy, size: 12.5, weight: FontWeight.w700),
+      ),
+    );
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        button(Icons.chat_bubble_outline_rounded, 'Message $role', () => _message(context)),
+        button(Icons.call_outlined, hasPhone ? 'Call $role' : 'No phone for $role', hasPhone ? () => _call(context, phone) : null),
+      ],
     );
   }
 }

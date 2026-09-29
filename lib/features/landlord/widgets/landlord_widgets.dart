@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/upload_picker.dart';
+import '../../../widgets/profile_photo_viewer.dart';
 import '../../../core/theme/app_text_styles.dart';
 
 /// Composite "house with a person" glyph used across the landlord redesign
@@ -108,7 +109,7 @@ class LandlordStatCard extends StatelessWidget {
 /// screens (bookings, messages) is mock data with no portrait asset, so
 /// every list tile uses this instead of a photo.
 class LandlordAvatar extends StatelessWidget {
-  const LandlordAvatar({super.key, this.radius = 22, this.background, this.iconColor, this.photoUrl});
+  const LandlordAvatar({super.key, this.radius = 22, this.background, this.iconColor, this.photoUrl, this.name});
 
   final double radius;
   final Color? background;
@@ -118,16 +119,23 @@ class LandlordAvatar extends StatelessWidget {
   /// (or it fails to load).
   final String? photoUrl;
 
+  /// Shown under the photo when it's tapped open.
+  final String? name;
+
   @override
   Widget build(BuildContext context) {
     final photo = photoUrl;
     final hasPhoto = photo != null && photo.isNotEmpty;
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: background ?? AppColors.hintGrey.withValues(alpha: 0.25),
-      backgroundImage: hasPhoto ? imageProviderForPath(photo) : null,
-      onBackgroundImageError: hasPhoto ? (_, __) {} : null,
-      child: hasPhoto ? null : Icon(Icons.person_rounded, color: iconColor ?? AppColors.hintGrey, size: radius),
+    return ProfilePhotoTapTarget(
+      photoPath: photo,
+      name: name,
+      child: CircleAvatar(
+        radius: radius,
+        backgroundColor: background ?? AppColors.hintGrey.withValues(alpha: 0.25),
+        backgroundImage: hasPhoto ? imageProviderForPath(photo) : null,
+        onBackgroundImageError: hasPhoto ? (_, __) {} : null,
+        child: hasPhoto ? null : Icon(Icons.person_rounded, color: iconColor ?? AppColors.hintGrey, size: radius),
+      ),
     );
   }
 }

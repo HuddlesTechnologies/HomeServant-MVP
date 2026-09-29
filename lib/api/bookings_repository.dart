@@ -133,6 +133,17 @@ class BookingsRepository {
     });
   }
 
+  /// Called when Paystack sends the tenant back to the app with this
+  /// [reference]: the server checks the charge with Paystack and, if it
+  /// went through, marks the booking paid straight away instead of waiting
+  /// on the webhook. True if it's paid.
+  Future<bool> confirmPayment(String reference) {
+    return _client.call(() async {
+      final response = await _client.dio.post('/bookings/confirm-payment', data: {'reference': reference});
+      return (response.data as Map<String, dynamic>)['paid'] as bool? ?? false;
+    });
+  }
+
   // The six booking actions below return nothing: the server replies with
   // the bare booking row (no property or tenant attached), which
   // Booking.fromApi can't read. AppState reloads the list after each one

@@ -14,9 +14,11 @@ import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../models/user_role.dart';
 import '../../services/chat_socket_service.dart';
 import '../../api/models/booking.dart';
 import '../../state/app_state.dart';
+import '../../widgets/confirm_sheet.dart';
 import '../../widgets/support_rating_card.dart';
 import '../../widgets/contact_avatar.dart';
 import '../../widgets/pill_text_field.dart';
@@ -25,6 +27,7 @@ import '../Market place/models/order_options.dart';
 import '../admin/widgets/support_tool_sheets.dart';
 import '../admin/chat_transcript_pdf.dart';
 import '../admin/admin_user_detail_screen.dart' show showAdminUserProfilePopup;
+import 'legal/tenancy_agreement_view_screen.dart';
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
@@ -205,6 +208,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   Future<void> _showPropertyPopup(Property property) {
     final theme = widget.theme;
     final images = [property.image, ...property.galleryImages].where((p) => p.isNotEmpty).toSet().toList();
+    final isTenant = context.read<AppState>().role == UserRole.tenant;
     // theme.surface/onSurface: a fixed light-surface/navy-text pair in every
     // DashboardTheme (see CLAUDE.md).
     final text = theme.onSurface;
@@ -248,6 +252,22 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                 children: [
+                  // Where the tenant's rental of this property stands, and
+                  // the next step they can take from here.
+                  if (isTenant) ...[
+                    _TenantBookingStatusPanel(
+                      theme: theme,
+                      propertyId: property.id,
+                      // The in-chat date picker needs the chat's property.
+                      onBookInspection: widget.property?.id == property.id
+                          ? () {
+                              Navigator.of(context).pop();
+                              _bookInspection();
+                            }
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (images.isNotEmpty)
                     SizedBox(
                       height: 210,
@@ -2262,6 +2282,198 @@ class _BookedPropertyCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Top of the property pop-up in a tenant's chat: where their booking of
+/// this property stands, with the next step — book an inspection, wait on
+/// the landlord (Pending), confirm move-in once the inspection is agreed,
+/// then "rented" with a link to the tenancy agreement. Watches AppState,
+/// so it updates in place (e.g. right after Moved In).
+///
+/// Drawn on the sheet's theme.surface: text in theme.onSurface, buttons in
+/// theme.accent/onAccent, and each status colour only as a tinted pill
+/// behind text of that same colour darkened for contrast.
+class _TenantBookingStatusPanel extends StatefulWidget {
+  const _TenantBookingStatusPanel({required this.theme, required this.propertyId, this.onBookInspection});
+
+  final DashboardTheme theme;
+  final String propertyId;
+
+  /// Opens the in-chat inspection date picker; null hides that button.
+  final VoidCallback? onBookInspection;
+
+  @override
+  State<_TenantBookingStatusPanel> createState() => _TenantBookingStatusPanelState();
+}
+
+class _TenantBookingStatusPanelState extends State<_TenantBookingStatusPanel> {
+  bool _busy = false;
+
+  DashboardTheme get theme => widget.theme;
+
+  /// The booking that matters here: the newest one still in progress, else
+  /// the newest overall (e.g. refunded).
+  Booking? _bookingFrom(List<Booking> all) {
+    final mine = all.where((b) => b.property.id == widget.propertyId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    if (mine.isEmpty) return null;
+    return mine.firstWhere(
+      (b) => b.status != BookingStatus.declined && b.status != BookingStatus.refunded,
+      orElse: () => mine.first,
+    );
+  }
+
+  Future<void> _confirmMovedIn(Booking booking) async {
+    final confirmed = await showConfirmSheet(
+      context,
+      title: "Confirm you've moved in?",
+      body:
+          "This releases the held rent to the landlord and generates your tenancy agreement. This can't be "
+          "undone — only confirm once you're ready and have actually moved in.",
+      actionLabel: 'Confirm Move-In',
+    );
+    if (!confirmed || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final appState = context.read<AppState>();
+    setState(() => _busy = true);
+    try {
+      await appState.markBookingMovedIn(booking.id);
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _openAgreement(Booking booking) => Navigator.of(
+    context,
+  ).push(MaterialPageRoute(builder: (_) => TenancyAgreementViewScreen(theme: theme, bookingId: booking.id)));
+
+  @override
+  Widget build(BuildContext context) {
+    final booking = _bookingFrom(context.watch<AppState>().myBookings);
+    if (booking == null) return const SizedBox.shrink();
+    final text = theme.onSurface;
+    final date = booking.requestedDate == null ? null : formatShortDate(booking.requestedDate!);
+
+    final (String label, Color color, String message, List<Widget> actions) = switch (booking.status) {
+      BookingStatus.pending when !booking.isShortlet => (
+        'Not paid',
+        const Color(0xFF8A6D1F),
+        "Payment for this property wasn't completed. You can finish it from Booking History.",
+        const <Widget>[],
+      ),
+      BookingStatus.pending => ('Pending', const Color(0xFF8A6D1F), 'Waiting for the landlord to accept your booking request.', const <Widget>[]),
+      BookingStatus.accepted => (
+        'Accepted',
+        const Color(0xFF1F6FA8),
+        'The landlord accepted your booking. Pay for it from Booking History to confirm your stay.',
+        const <Widget>[],
+      ),
+      BookingStatus.paid => ('Booked', const Color(0xFF2F855A), 'Your stay is paid for and confirmed.', const <Widget>[]),
+      BookingStatus.paidAwaitingInspection => (
+        'Payment held',
+        const Color(0xFF8A6D1F),
+        'Your payment is held safely. Choose an inspection date whenever you are ready.',
+        [if (widget.onBookInspection != null) _button('Book Inspection', widget.onBookInspection!)],
+      ),
+      BookingStatus.inspectionProposed => (
+        'Pending',
+        const Color(0xFF8A6D1F),
+        date == null
+            ? 'Waiting for the landlord to accept your inspection date.'
+            : 'Waiting for the landlord to accept your inspection date ($date).',
+        [if (widget.onBookInspection != null) _button('Change date', widget.onBookInspection!, outlined: true)],
+      ),
+      BookingStatus.inspectionConfirmed => (
+        'Inspection confirmed',
+        const Color(0xFF1F6FA8),
+        '${date == null ? 'Your inspection is confirmed.' : 'Your inspection is confirmed for $date.'} '
+            "Once you're ready to move in, confirm it here.",
+        [_button('Moved In', () => _confirmMovedIn(booking))],
+      ),
+      BookingStatus.movedIn => (
+        'Rented',
+        const Color(0xFF2F855A),
+        'You have successfully rented this property.',
+        [_button('View Tenancy Agreement', () => _openAgreement(booking))],
+      ),
+      BookingStatus.declined => ('Declined', const Color(0xFFB42318), 'The landlord rejected this booking — you were refunded in full.', const <Widget>[]),
+      BookingStatus.refunded => ('Refunded', const Color(0xFF5B6475), 'This booking was refunded.', const <Widget>[]),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: text.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: text.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Your booking', style: AppTextStyles.body(color: text, size: 14, weight: FontWeight.w700)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(12)),
+                child: Text(label, style: AppTextStyles.body(color: color, size: 11.5, weight: FontWeight.w800)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (booking.status == BookingStatus.movedIn) ...[
+                Icon(Icons.check_circle_rounded, color: color, size: 18),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  message,
+                  style: AppTextStyles.body(
+                    color: text.withValues(alpha: 0.85),
+                    size: 13,
+                    weight: booking.status == BookingStatus.movedIn ? FontWeight.w700 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            if (_busy)
+              Center(child: SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4, color: text)))
+            else
+              Wrap(spacing: 10, runSpacing: 8, children: actions),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// A filled theme.accent button with its onAccent label, or (outlined)
+  /// an onSurface border and label — not accent, which is sand on Midnight
+  /// and would vanish against the white surface.
+  Widget _button(String label, VoidCallback onPressed, {bool outlined = false}) {
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(20));
+    const padding = EdgeInsets.symmetric(horizontal: 16, vertical: 10);
+    if (outlined) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(side: BorderSide(color: theme.onSurface, width: 1.2), padding: padding, shape: shape),
+        child: Text(label, style: AppTextStyles.body(color: theme.onSurface, size: 13, weight: FontWeight.w700)),
+      );
+    }
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(backgroundColor: theme.accent, padding: padding, shape: shape),
+      child: Text(label, style: AppTextStyles.body(color: theme.onAccent, size: 13, weight: FontWeight.w700)),
     );
   }
 }

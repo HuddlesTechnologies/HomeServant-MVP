@@ -11,6 +11,7 @@ import '../../widgets/eviction_widgets.dart';
 import '../landlord/landlord_add_property_screen.dart';
 import 'chat_thread_screen.dart';
 import 'edit_profile_screen.dart';
+import 'history_screen.dart';
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
@@ -31,6 +32,29 @@ const _paidBookingStatuses = {
   BookingStatus.inspectionConfirmed,
   BookingStatus.movedIn,
 };
+
+/// Why this tenant can't Rent Now / Book Now again, or null if they can.
+/// A rental that's paid for (or lived in, until the lease ends) blocks
+/// renting it again; a Shortlet only blocks a second request while one is
+/// still waiting on the landlord or on payment — booking another stay
+/// after that is fine.
+String? _existingBookingNote(Iterable<Booking> bookings, bool isShortlet) {
+  final now = DateTime.now();
+  for (final b in bookings) {
+    if (isShortlet) {
+      if (b.status == BookingStatus.pending) return 'Your booking request is waiting on the landlord.';
+      if (b.status == BookingStatus.accepted) return 'Your booking was accepted — pay for it from Booking History.';
+      continue;
+    }
+    if (b.status == BookingStatus.movedIn && (b.leaseEndDate == null || b.leaseEndDate!.isAfter(now))) {
+      return "You're renting this property.";
+    }
+    if (_paidBookingStatuses.contains(b.status) && b.status != BookingStatus.movedIn) {
+      return "You've paid for this property. Book your inspection or manage it from Booking History.";
+    }
+  }
+  return null;
+}
 
 class PropertyDetailScreen extends StatefulWidget {
   const PropertyDetailScreen({super.key, required this.property, required this.theme, this.ownerView = false});
@@ -253,6 +277,12 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     final messagingEnabled = property.messagingEnabled;
     final isShortlet = property.category == 'Shortlet';
     final unavailable = isShortlet && property.shortletUnavailable;
+    // Rent Now used to stay live after paying, letting a tenant pay (and
+    // book) the same property twice. The server refuses too now; this
+    // explains why and points at the booking they already have.
+    final existingBookingNote = context.select<AppState, String?>(
+      (state) => _existingBookingNote(state.myBookings.where((b) => b.property.id == property.id), isShortlet),
+    );
     return Scaffold(
       backgroundColor: theme.background,
       body: SafeArea(
@@ -496,6 +526,14 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 until: property.shortletUnavailableUntil ?? DateTime.now(),
                                 color: theme.foreground,
                               ),
+                            )
+                          else if (existingBookingNote != null)
+                            _ExistingBookingNotice(
+                              theme: theme,
+                              message: existingBookingNote,
+                              onViewHistory: () => Navigator.of(
+                                context,
+                              ).push(MaterialPageRoute(builder: (_) => HistoryScreen(theme: theme))),
                             )
                           else
                             SizedBox(
@@ -822,6 +860,53 @@ class _ExpandableDescription extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Stands in for Rent Now once the tenant already has this property
+/// booked. theme.foreground text on a faint foreground wash over
+/// theme.background (a guaranteed pair); the button's accent label on
+/// that same wash matches Booking History's action buttons.
+class _ExistingBookingNotice extends StatelessWidget {
+  const _ExistingBookingNotice({required this.theme, required this.message, required this.onViewHistory});
+
+  final DashboardTheme theme;
+  final String message;
+  final VoidCallback onViewHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      decoration: BoxDecoration(color: theme.foreground.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(24)),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: theme.foreground, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(message, style: AppTextStyles.body(color: theme.foreground, size: 13.5, weight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: theme.accent, width: 1.2),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              ),
+              onPressed: onViewHistory,
+              child: Text('View Booking History', style: AppTextStyles.body(color: theme.accent, size: 14, weight: FontWeight.w700)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

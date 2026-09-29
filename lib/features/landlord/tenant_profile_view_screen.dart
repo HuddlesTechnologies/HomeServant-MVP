@@ -8,6 +8,7 @@ import '../../widgets/eviction_widgets.dart';
 import '../../widgets/upload_picker.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/labeled_value_row.dart';
+import '../../widgets/profile_photo_viewer.dart';
 
 /// Read-only tenant profile — reached from a landlord's booking row via
 /// "View Tenant Profile". Shows only what `GET /bookings/landlord` already
@@ -53,7 +54,10 @@ class TenantProfileViewScreen extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
           children: [
             Center(
-              child: Container(
+              child: ProfilePhotoTapTarget(
+                photoPath: photoUrl,
+                name: booking.tenantName,
+                child: Container(
                 width: 96,
                 height: 96,
                 decoration: BoxDecoration(
@@ -67,6 +71,7 @@ class TenantProfileViewScreen extends StatelessWidget {
                 child: (photoUrl == null || photoUrl.isEmpty)
                     ? const Icon(Icons.person_rounded, color: AppColors.navy, size: 44)
                     : null,
+                ),
               ),
             ),
             const SizedBox(height: 14),

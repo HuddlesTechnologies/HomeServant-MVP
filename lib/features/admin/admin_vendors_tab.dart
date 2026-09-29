@@ -14,6 +14,7 @@ import 'widgets/admin_confirm_sheet.dart';
 import 'widgets/admin_filter_chip.dart';
 import 'widgets/admin_permissions.dart';
 import 'widgets/admin_search_bar.dart';
+import '../../widgets/profile_photo_viewer.dart';
 
 class AdminVendorsTab extends StatefulWidget {
   const AdminVendorsTab({super.key, this.initialStatusFilter});
@@ -194,7 +195,10 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                ClipRRect(
+                                ProfilePhotoTapTarget(
+                                  photoPath: vendor.logoUrl,
+                                  name: vendor.businessName,
+                                  child: ClipRRect(
                                   borderRadius: BorderRadius.circular(20),
                                   child: Container(
                                     width: 40,
@@ -207,6 +211,7 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
                                             errorBuilder: (_, _, _) => const Icon(Icons.storefront_outlined, color: AppColors.hintGrey),
                                           )
                                         : const Icon(Icons.storefront_outlined, color: AppColors.hintGrey),
+                                  ),
                                   ),
                                 ),
                                 const SizedBox(width: 10),

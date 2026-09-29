@@ -30,6 +30,7 @@ class ChatSocketService {
   final _accessRevokedController = StreamController<String>.broadcast();
   final _reconnectedController = StreamController<void>.broadcast();
   final _threadsChangedController = StreamController<void>.broadcast();
+  final _listingsChangedController = StreamController<void>.broadcast();
   Timer? _retryTimer;
   int _retryAttempt = 0;
 
@@ -48,6 +49,11 @@ class ChatSocketService {
   Stream<void> get onThreadsChanged => _threadsChangedController.stream;
 
   void notifyThreadsChanged() => _threadsChangedController.add(null);
+
+  /// Fires when browse results may have changed for everyone — a listing
+  /// was edited, or a rental was paid for, moved into or relisted (backend
+  /// ChatGateway's `listings:changed`, sent to every connected app).
+  Stream<void> get onListingsChanged => _listingsChangedController.stream;
 
   /// Fires with a thread id the instant the *other* participant marks that
   /// thread read (see backend ChatController.markRead) — lets an already-
@@ -149,6 +155,7 @@ class ChatSocketService {
       }
     });
     socket.on('admin:badges-changed', (_) => _badgesChangedController.add(null));
+    socket.on('listings:changed', (_) => _listingsChangedController.add(null));
     socket.on('account:banned', (data) => _bannedController.add(data is Map ? data['reason'] as String? : null));
     socket.on('thread:access-revoked', (data) {
       if (data is Map) {
