@@ -50,6 +50,35 @@ export class StorageService implements OnModuleInit {
   /// background: a slow or unreachable Supabase must not hold up startup.
   onModuleInit(): void {
     void this.ensurePrivateBucket();
+    void this.checkPublicBucketAccepts();
+  }
+
+  /// The public bucket is set up by hand in the Supabase dashboard. A
+  /// bucket accepts every file type unless "Allowed MIME types" is set on
+  /// it; if it is, it must include everything the app uploads, or those
+  /// uploads fail at Supabase. Logs what this bucket would refuse, and its
+  /// per-file size limit (the project-wide limit applies on top of it).
+  async checkPublicBucketAccepts(): Promise<string[]> {
+    try {
+      const { data, error } = await this.client.storage.getBucket(this.bucket);
+      if (error || !data) throw error ?? new Error('bucket not found');
+      const refused = publicBucketRefuses(data.allowed_mime_types);
+      if (refused.length > 0) {
+        this.logger.error(
+          `Bucket "${this.bucket}" only allows ${data.allowed_mime_types!.join(', ')} — uploads of ${refused.join(', ')} will fail. ` +
+            'Add them (or clear Allowed MIME types) in Supabase > Storage > bucket settings.',
+        );
+      } else {
+        this.logger.log(`Bucket "${this.bucket}" accepts every file type the app uploads`);
+      }
+      if (data.file_size_limit) {
+        this.logger.log(`Bucket "${this.bucket}" file size limit: ${Math.round(data.file_size_limit / 1024 / 1024)} MB per file`);
+      }
+      return refused;
+    } catch (error) {
+      this.logger.error(`Could not check bucket "${this.bucket}": ${(error as Error)?.message}`);
+      return [];
+    }
   }
 
   private async ensurePrivateBucket(): Promise<void> {
@@ -195,4 +224,28 @@ export class StorageService implements OnModuleInit {
   async assertAreOwnImages(urls: string[]): Promise<void> {
     await Promise.all(urls.map((url) => this.assertIsOwnImage(url)));
   }
+}
+
+/// Every content type the app uploads to the public bucket: photos
+/// everywhere, and walkthrough videos in property-videos.
+export const PUBLIC_UPLOAD_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  'video/mp4',
+  'video/quicktime',
+  'video/x-m4v',
+  'video/webm',
+] as const;
+
+/// Which of [PUBLIC_UPLOAD_MIME_TYPES] a bucket with [allowed] ("Allowed
+/// MIME types"; empty or null = everything, entries may be `type/*`) refuses.
+export function publicBucketRefuses(allowed: string[] | null | undefined): string[] {
+  if (!allowed || allowed.length === 0) return [];
+  return PUBLIC_UPLOAD_MIME_TYPES.filter(
+    (type) => !allowed.some((a) => a === type || a === '*/*' || (a.endsWith('/*') && type.startsWith(a.slice(0, -1)))),
+  );
 }

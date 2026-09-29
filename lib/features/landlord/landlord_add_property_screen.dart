@@ -38,6 +38,10 @@ class LandlordAddPropertyScreen extends StatefulWidget {
   State<LandlordAddPropertyScreen> createState() => _LandlordAddPropertyScreenState();
 }
 
+/// Largest walkthrough video accepted — Supabase's Free-plan limit per
+/// file. Raise it if the project's storage limit is raised.
+const _maxVideoBytes = 50 * 1024 * 1024;
+
 class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   final _formKey = GlobalKey<FormState>();
   final _title = TextEditingController();
@@ -250,6 +254,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
         videoUrl = await appState.uploads.upload(
           file: PickedUpload(path: videoUrl, fileName: _videoFileName ?? videoUrl.split('/').last, isImage: false),
           folder: 'property-videos',
+          maxBytes: _maxVideoBytes,
         );
       }
       final isShortlet = _category == 'Shortlet';
