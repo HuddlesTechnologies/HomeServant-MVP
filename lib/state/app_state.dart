@@ -41,6 +41,11 @@ import '../services/app_icon_service.dart';
 import '../services/chat_socket_service.dart';
 import '../services/google_auth_service.dart';
 
+part 'sections/notifications_section.dart';
+part 'sections/listings_section.dart';
+part 'sections/bookings_section.dart';
+part 'sections/device_preferences_section.dart';
+
 /// What happened on a [AppState.login]/[AppState.loginWithGoogle] call —
 /// see each method's doc comment for how a caller should react to
 /// [requiresTwoFactor]/[requiresReactivation].
@@ -53,7 +58,7 @@ enum LoginOutcome { success, requiresTwoFactor, requiresReactivation, requiresEm
 /// live in the platform keychain instead (see [TokenStorage]); everything
 /// else about the signed-in user is re-fetched from the API on launch via
 /// [load].
-class AppState extends ChangeNotifier {
+class AppState extends ChangeNotifier with _NotificationsSection, _ListingsSection, _BookingsSection, _DevicePreferencesSection {
   AppState() {
     _apiClient = ApiClient(_tokens)..onSessionExpired = _handleSessionExpired;
     _authRepo = AuthRepository(_apiClient, _tokens);
@@ -110,17 +115,24 @@ class AppState extends ChangeNotifier {
 
   static const _prefsKey = 'app_state_v2';
 
+  @override
   final TokenStorage _tokens = TokenStorage();
   late final ApiClient _apiClient;
   late final AuthRepository _authRepo;
   late final UsersRepository _usersRepo;
+  @override
   late final PropertiesRepository _propertiesRepo;
+  @override
   late final BookingsRepository _bookingsRepo;
+  @override
   late final FavoritesRepository _favoritesRepo;
+  @override
   late final ReviewsRepository _reviewsRepo;
   late final ChatRepository _chatRepo;
   late final SupportToolsRepository _supportToolsRepo;
+  @override
   late final PushRepository _pushRepo;
+  @override
   late final EvictionsRepository _evictionsRepo;
   late final VerificationRepository _verificationRepo;
   late final ReportsRepository _reportsRepo;
@@ -129,6 +141,7 @@ class AppState extends ChangeNotifier {
   late final MarketplaceProductsRepository _marketplaceProductsRepo;
   late final MarketplaceOrdersRepository _marketplaceOrdersRepo;
   late final PaystackRepository _paystackRepo;
+  @override
   late final NotificationsRepository _notificationsRepo;
   late final AdminRepository _adminRepo;
 
@@ -162,6 +175,7 @@ class AppState extends ChangeNotifier {
 
   /// Null until signup/login/OTP-verify succeeds or a saved session is
   /// restored on launch — see [isAuthenticated].
+  @override
   String? userId;
   bool get isAuthenticated => userId != null;
 
@@ -238,7 +252,6 @@ class AppState extends ChangeNotifier {
   /// [imageProviderForPath], which renders either.
   String? profilePhotoPath;
   bool twoFactorEnabled = false;
-  DashboardTheme dashboardTheme = DashboardTheme.classic;
 
   /// The landlord's payout account — the account a tenant's payment is
   /// credited to. Populated from the server (see [_applyUser]); never set
@@ -551,28 +564,14 @@ class AppState extends ChangeNotifier {
     bankName = null;
     accountNumber = null;
     accountName = null;
-    _favorites = [];
-    _landlordProperties = [];
-    myBookings = [];
-    landlordBookings = [];
-    evictions = [];
-    _myReviews = [];
-    notifications = [];
-    unreadNotificationCount = 0;
     _hasVendorProfile = null;
     adminLevel = null;
-    pushNotificationsEnabled = true;
-    newMessageNotifications = true;
-    propertyUpdateNotifications = true;
-    wishlistPriceDropAlerts = true;
-    promotionalNotifications = false;
-    bannerAutoDismiss = true;
     adminOnDuty = true;
     adminLevelLoadFailed = false;
-    appLockEnabled = false;
-    appLockPin = null;
-    unawaited(_tokens.clearAppLockPin());
-    dashboardTheme = DashboardTheme.classic;
+    _clearListings();
+    _clearBookings();
+    _clearNotifications();
+    _clearDevicePreferences();
     notifyListeners();
     AppIconService.apply(dashboardTheme);
   }
@@ -686,88 +685,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // --- Web Push ------------------------------------------------------------
-
-  /// Keeps this browser's push subscription registered for the signed-in
-  /// user. Does nothing unless notifications are already allowed and the
-  /// server has push configured — asking for permission is [enableWebPush]'s
-  /// job, from a tap.
-  Future<void> syncWebPush() async {
-    if (!webPushSupported || browserNotificationPermission != 'granted' || userId == null) return;
-    try {
-      final key = await _pushRepo.publicKey();
-      if (key == null) return;
-      final subscription = await subscribeWebPush(key);
-      if (subscription != null) await _pushRepo.subscribe(subscription);
-    } catch (_) {
-      // Best-effort: the in-app banners still work without push.
-    }
-  }
-
-  /// From a user tap: asks the browser for notification permission, then
-  /// registers for push. Returns whether notifications are now allowed.
-  Future<bool> enableWebPush() async {
-    final permission = await requestBrowserNotificationPermission();
-    if (permission != 'granted') return false;
-    await syncWebPush();
-    return true;
-  }
-
-  Future<void> _forgetWebPush() async {
-    try {
-      final endpoint = await unsubscribeWebPush();
-      if (endpoint != null) await _pushRepo.unsubscribe(endpoint);
-    } catch (_) {}
-  }
-
-  // --- Notifications -----------------------------------------------------
-
-  List<AppNotification> notifications = [];
-  int unreadNotificationCount = 0;
-
-  Future<void> loadNotifications() async {
-    try {
-      final results = await Future.wait([_notificationsRepo.findMine(), _notificationsRepo.unreadCount()]);
-      notifications = results[0] as List<AppNotification>;
-      unreadNotificationCount = results[1] as int;
-      notifyListeners();
-    } catch (_) {
-      // Leaves whatever was last loaded (or the empty default) in place —
-      // the bell/list just won't reflect anything newer until the next
-      // successful load.
-    }
-  }
-
-  Future<void> markNotificationRead(String id) async {
-    final index = notifications.indexWhere((n) => n.id == id);
-    if (index == -1 || notifications[index].isRead) return;
-    await _notificationsRepo.markRead(id);
-    notifications[index] = notifications[index].markedRead();
-    unreadNotificationCount = (unreadNotificationCount - 1).clamp(0, 1 << 30);
-    notifyListeners();
-  }
-
-  /// The server clears a conversation's notifications when it's read
-  /// (ChatService.markRead); this mirrors that locally so the bell count
-  /// drops straight away.
-  void _markThreadNotificationsReadLocally(String threadId) {
-    final cleared = notifications.where((n) => n.threadId == threadId && !n.isRead).length;
-    if (cleared == 0) return;
-    notifications = [for (final n in notifications) n.threadId == threadId ? n.markedRead() : n];
-    unreadNotificationCount = (unreadNotificationCount - cleared).clamp(0, 1 << 30);
-    notifyListeners();
-  }
-
-  Future<void> markAllNotificationsRead() async {
-    if (unreadNotificationCount == 0) return;
-    await _notificationsRepo.markAllRead();
-    notifications = [
-      for (final n in notifications)
-        n.markedRead(),
-    ];
-    unreadNotificationCount = 0;
-    notifyListeners();
-  }
 
   // --- Vendor profile (tenant-owned shop) ---------------------------------
   //
@@ -801,205 +718,6 @@ class AppState extends ChangeNotifier {
   void markVendorProfileCreated() {
     _hasVendorProfile = true;
     notifyListeners();
-  }
-
-  // --- Properties (public browse feed) --------------------------------
-
-  List<Property> properties = [];
-  bool propertiesLoading = false;
-
-  /// [silent]: a background refresh — the list swaps in place without
-  /// showing the loading state first.
-  Future<void> loadProperties({String? state, String? category, bool silent = false}) async {
-    if (!silent) {
-      propertiesLoading = true;
-      notifyListeners();
-    }
-    try {
-      properties = await _propertiesRepo.findMany(state: state, category: category);
-    } finally {
-      propertiesLoading = false;
-      notifyListeners();
-    }
-  }
-
-  /// Fetches a single property fresh from the server — used by
-  /// PropertyDetailScreen so a price/availability change made elsewhere
-  /// (another tab, another session, an admin edit) shows up even when the
-  /// screen was opened from an already-stale list, instead of only ever
-  /// trusting the snapshot it was handed.
-  Future<Property> fetchProperty(String id) => _propertiesRepo.findOne(id);
-
-  // --- Landlord: properties added through "Add Property" ----------------
-
-  List<Property> _landlordProperties = [];
-  List<Property> get landlordProperties => List.unmodifiable(_landlordProperties);
-
-  Future<void> loadLandlordProperties() async {
-    final id = userId;
-    if (id == null) return;
-    _landlordProperties = await _propertiesRepo.findMany(landlordId: id);
-    notifyListeners();
-  }
-
-  Future<Property> addLandlordProperty(Property property) async {
-    final created = await _propertiesRepo.create(property);
-    _landlordProperties = [created, ..._landlordProperties];
-    notifyListeners();
-    return created;
-  }
-
-  /// Full re-edit (rent duration, messaging toggle, shortlet fields, etc.)
-  /// of an existing listing — `PATCH /properties/:id`.
-  Future<Property> updateLandlordProperty(Property property) async {
-    final updated = await _propertiesRepo.update(property.id, property.toUpdateJson());
-    _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
-    notifyListeners();
-    return updated;
-  }
-
-  /// Hides an unoccupied listing from browse, search and booking (or shows
-  /// it again) — `PATCH /properties/:id` with `isHidden`. The server
-  /// refuses to hide an occupied listing, with the reason.
-  Future<Property> setLandlordPropertyHidden(String id, bool hidden) async {
-    final updated = await _propertiesRepo.update(id, {'isHidden': hidden});
-    _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
-    if (hidden) properties = [for (final p in properties) if (p.id != id) p];
-    notifyListeners();
-    return updated;
-  }
-
-  /// `DELETE /properties/:id`. The server refuses while the property is
-  /// occupied or a tenant's payment is in play (PropertiesService
-  /// .deletionBlockReason) — that ApiException's message says why.
-  Future<void> deleteLandlordProperty(String id) async {
-    await _propertiesRepo.remove(id);
-    _landlordProperties = [for (final p in _landlordProperties) if (p.id != id) p];
-    properties = [for (final p in properties) if (p.id != id) p];
-    _favorites = [for (final p in _favorites) if (p.id != id) p];
-    notifyListeners();
-  }
-
-  // --- Wishlist ----------------------------------------------------------
-
-  List<Property> _favorites = [];
-  List<Property> get favoriteProperties => List.unmodifiable(_favorites);
-
-  bool isFavorite(String propertyId) => _favorites.any((p) => p.id == propertyId);
-
-  Future<void> loadFavorites() async {
-    if (userId == null) return;
-    _favorites = await _favoritesRepo.mine();
-    notifyListeners();
-  }
-
-  /// Optimistic: flips local state immediately (so the heart icon responds
-  /// instantly) and reconciles with the server in the background, reverting
-  /// by refetching if the request fails.
-  Future<void> toggleFavorite(String propertyId) async {
-    if (userId == null) return;
-    final wasFavorited = isFavorite(propertyId);
-    // The "add" branch can only build the optimistic entry from the cached
-    // browse list ([properties]) — if the property being favorited isn't
-    // in it (viewed via its own detail fetch instead, a different filter
-    // was last loaded, or it's past that list's page-size cap), there's
-    // nothing to optimistically render, so this falls through to
-    // [loadFavorites] below instead of silently leaving the heart looking
-    // unfavorited despite the toggle having actually succeeded.
-    var appliedOptimistically = false;
-    if (wasFavorited) {
-      _favorites = _favorites.where((p) => p.id != propertyId).toList();
-      appliedOptimistically = true;
-    } else {
-      final match = properties.where((p) => p.id == propertyId);
-      if (match.isNotEmpty) {
-        _favorites = [..._favorites, match.first];
-        appliedOptimistically = true;
-      }
-    }
-    notifyListeners();
-    try {
-      await _favoritesRepo.toggle(propertyId);
-      if (!appliedOptimistically) await loadFavorites();
-    } catch (_) {
-      await loadFavorites();
-    }
-  }
-
-  // --- Bookings & rental history ------------------------------------------
-
-  List<Booking> myBookings = [];
-  List<Booking> landlordBookings = [];
-  List<_ReviewSummary> _myReviews = [];
-
-  /// This tenant's own star rating for [propertyId], if they've rated it —
-  /// used by history/booking tiles instead of the removed derived
-  /// `RentalRecord` map.
-  double? myReviewFor(String propertyId) {
-    final match = _myReviews.where((r) => r.propertyId == propertyId);
-    return match.isEmpty ? null : match.first.rating;
-  }
-
-  Future<void> loadMyBookings() async {
-    if (userId == null) return;
-    myBookings = await _bookingsRepo.mine();
-    notifyListeners();
-    unawaited(loadEvictions());
-  }
-
-  /// Clears requests from the landlord's home feed (or restores them, for
-  /// Undo), then refreshes. Nothing is declined.
-  Future<void> setIncomingFeedCleared({required bool cleared, List<String>? bookingIds}) async {
-    await _bookingsRepo.setFeedCleared(cleared: cleared, bookingIds: bookingIds);
-    await loadLandlordBookings();
-  }
-
-  Future<void> loadLandlordBookings() async {
-    if (userId == null) return;
-    landlordBookings = await _bookingsRepo.forLandlord();
-    notifyListeners();
-    unawaited(loadEvictions());
-  }
-
-  // --- Eviction requests (landlord files, tenant responds, super admin decides)
-
-  /// Every eviction request this user is a party to, newest first.
-  List<EvictionRequest> evictions = [];
-
-  /// The most recent eviction request on [bookingId], if any.
-  EvictionRequest? evictionForBooking(String bookingId) {
-    for (final e in evictions) {
-      if (e.bookingId == bookingId) return e;
-    }
-    return null;
-  }
-
-  /// Refreshed with the bookings lists (so a BOOKING_STATUS notification,
-  /// which every eviction event also sends, updates it live). Best-effort:
-  /// a failure here must never break the bookings screens.
-  Future<void> loadEvictions() async {
-    if (userId == null) return;
-    try {
-      evictions = await _evictionsRepo.mine();
-      notifyListeners();
-    } catch (_) {}
-  }
-
-  void _upsertEviction(EvictionRequest updated) {
-    evictions = [updated, for (final e in evictions) if (e.id != updated.id) e];
-    notifyListeners();
-  }
-
-  Future<void> requestEviction(String bookingId, String reason) async {
-    _upsertEviction(await _evictionsRepo.create(bookingId, reason));
-  }
-
-  Future<void> cancelEviction(String id) async {
-    _upsertEviction(await _evictionsRepo.cancel(id));
-  }
-
-  Future<void> respondToEviction(String id, String response) async {
-    _upsertEviction(await _evictionsRepo.respond(id, response));
   }
 
   /// See the subscription set up in the constructor — refetches whichever
@@ -1047,175 +765,6 @@ class AppState extends ChangeNotifier {
       if (role == UserRole.landlord) ...[safe(loadLandlordBookings()), safe(loadLandlordProperties()), safe(loadEvictions())],
     ]);
     _chatSocket.notifyThreadsChanged();
-  }
-
-  Future<void> respondToBooking(String id, {required bool accepted}) async {
-    await _bookingsRepo.respond(id: id, accepted: accepted);
-    await loadLandlordBookings();
-  }
-
-  /// For a Shortlet property, sends a booking request to the landlord
-  /// (unchanged flow: request → landlord `respond`s → tenant `pay`s
-  /// separately). For a non-Shortlet property, creates the booking and
-  /// immediately starts its Paystack charge — [BookingCreationResult.payment]
-  /// is set in that case; open its `authorizationUrl` right away. [nights]
-  /// is required only when [isShortlet].
-  Future<BookingCreationResult> recordRentalOrBooking(
-    String propertyId, {
-    required bool isShortlet,
-    int? nights,
-    bool payMonthly = false,
-  }) async {
-    final result = await _bookingsRepo.create(
-      propertyId: propertyId,
-      isShortlet: isShortlet,
-      nights: isShortlet ? nights : null,
-      payMonthly: payMonthly,
-    );
-    // The server continues an unfinished checkout rather than creating a
-    // second booking, so the same id can come back.
-    myBookings = [result.booking, ...myBookings.where((b) => b.id != result.booking.id)];
-    notifyListeners();
-    return result;
-  }
-
-  /// Starts a Paystack charge for [bookingId] — open the returned
-  /// authorization URL in a browser/webview. Also usable as a retry if a
-  /// create-time charge attempt didn't finish.
-  Future<PaymentInitiation> payForBooking(String bookingId) => _bookingsRepo.pay(bookingId);
-
-  Future<void> markBookingMovedIn(String bookingId) async {
-    await _bookingsRepo.markMovedIn(bookingId);
-    await loadMyBookings();
-  }
-
-  Future<void> refundBooking(String bookingId) async {
-    await _bookingsRepo.refund(bookingId);
-    await loadMyBookings();
-  }
-
-  Future<RenewalQuote> renewalQuote(String bookingId) => _bookingsRepo.renewalQuote(bookingId);
-
-  /// Monthly plan: pay next month's rent (opens checkout).
-  Future<PaymentInitiation> payNextMonth(String bookingId) => _bookingsRepo.payNextMonth(bookingId);
-
-  /// Starts the renewal payment for the amount in [quote]; the lease is
-  /// extended once Paystack confirms it (the bookings list refreshes then).
-  Future<PaymentInitiation> renewBooking(String bookingId, RenewalQuote quote) => _bookingsRepo.renew(bookingId, quote);
-
-  Future<TenancyAgreement?> fetchTenancyAgreement(String bookingId) => _bookingsRepo.tenancyAgreement(bookingId);
-
-  /// Tenant proposes (or re-proposes) an inspection date for a
-  /// PAID_AWAITING_INSPECTION booking — reachable any time from history,
-  /// including right after paying ("book later") or much later.
-  Future<void> proposeInspection(String bookingId, DateTime requestedDate) async {
-    await _bookingsRepo.proposeInspection(id: bookingId, requestedDate: requestedDate);
-    await loadMyBookings();
-  }
-
-  /// Landlord accepts/declines the tenant's specific proposed inspection
-  /// date — distinct from [rejectBooking], which ends the booking outright.
-  Future<void> respondToInspection(String bookingId, {required bool accepted}) async {
-    await _bookingsRepo.respondToInspection(id: bookingId, accepted: accepted);
-    await loadLandlordBookings();
-  }
-
-  /// Landlord sets the inspection date themselves (no tenant proposal
-  /// needed, or instead of the one proposed).
-  Future<void> scheduleInspection(String bookingId, DateTime date) async {
-    await _bookingsRepo.scheduleInspection(id: bookingId, date: date);
-    await loadLandlordBookings();
-  }
-
-  /// Landlord's distinct "reject this booking outright" lever — full
-  /// refund, no platform fee withheld.
-  Future<void> rejectBooking(String bookingId) async {
-    await _bookingsRepo.rejectBooking(bookingId);
-    await loadLandlordBookings();
-  }
-
-  Future<void> loadMyReviews() async {
-    if (userId == null) return;
-    final reviews = await _reviewsRepo.mine();
-    _myReviews = [for (final r in reviews) _ReviewSummary(propertyId: r.propertyId, rating: r.rating.toDouble())];
-    notifyListeners();
-  }
-
-  Future<void> rateHistoryProperty(String propertyId, double rating) async {
-    await _reviewsRepo.upsert(propertyId: propertyId, rating: rating.round());
-    await loadMyReviews();
-  }
-
-  // --- Notification preferences (device-local, no server model) ----------
-
-  bool pushNotificationsEnabled = true;
-  bool newMessageNotifications = true;
-  bool propertyUpdateNotifications = true;
-  // Ties directly into the Wishlist feature — lets a tenant know the moment
-  // a house they've saved gets cheaper, without having to keep re-checking it.
-  bool wishlistPriceDropAlerts = true;
-  bool promotionalNotifications = false;
-
-  void setPushNotificationsEnabled(bool value) {
-    pushNotificationsEnabled = value;
-    notifyListeners();
-  }
-
-  void setNewMessageNotifications(bool value) {
-    newMessageNotifications = value;
-    notifyListeners();
-  }
-
-  void setPropertyUpdateNotifications(bool value) {
-    propertyUpdateNotifications = value;
-    notifyListeners();
-  }
-
-  void setWishlistPriceDropAlerts(bool value) {
-    wishlistPriceDropAlerts = value;
-    notifyListeners();
-  }
-
-  void setPromotionalNotifications(bool value) {
-    promotionalNotifications = value;
-    notifyListeners();
-  }
-
-  /// Controls the global Instagram-style banner shown by
-  /// NotificationBannerOverlay the instant a `notification:new` socket
-  /// event arrives: `true` (default) auto-dismisses it after ~3s; `false`
-  /// leaves it up until the user swipes it away. Purely a display
-  /// preference (no server model), same as the rest of this section.
-  bool bannerAutoDismiss = true;
-
-  void setBannerAutoDismiss(bool value) {
-    bannerAutoDismiss = value;
-    notifyListeners();
-  }
-
-  // --- Security: app lock (device-local) ----------------------------------
-
-  bool appLockEnabled = false;
-  String? appLockPin;
-
-  void enableAppLock(String pin) {
-    appLockEnabled = true;
-    appLockPin = pin;
-    unawaited(_tokens.saveAppLockPin(pin));
-    notifyListeners();
-  }
-
-  void disableAppLock() {
-    appLockEnabled = false;
-    appLockPin = null;
-    unawaited(_tokens.clearAppLockPin());
-    notifyListeners();
-  }
-
-  void setDashboardTheme(DashboardTheme theme) {
-    dashboardTheme = theme;
-    notifyListeners();
-    AppIconService.apply(theme);
   }
 
   // --- Local persistence ---------------------------------------------------
@@ -1369,10 +918,4 @@ class AppState extends ChangeNotifier {
   /// A saved session is being checked on startup — the landing page shows a
   /// loader instead of Get Started / Log In meanwhile.
   bool restoringSession = false;
-}
-
-class _ReviewSummary {
-  const _ReviewSummary({required this.propertyId, required this.rating});
-  final String propertyId;
-  final double rating;
 }
