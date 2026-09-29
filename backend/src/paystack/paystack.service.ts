@@ -177,6 +177,16 @@ export class PaystackService {
     return { transferCode: body.data.transfer_code, status: body.data.status };
   }
 
+  /// Which Paystack mode the server's key is for — test and live have
+  /// completely separate balances, so money added in one mode is invisible
+  /// to a key for the other. Read from the key's prefix only; the key
+  /// itself never leaves the server.
+  get mode(): 'test' | 'live' | 'unknown' {
+    if (this.secretKey.startsWith('sk_test_')) return 'test';
+    if (this.secretKey.startsWith('sk_live_')) return 'live';
+    return 'unknown';
+  }
+
   /// HomeServant's available Paystack balance in kobo (NGN). Payouts are
   /// sent from this balance, so a transfer bigger than it is refused ("Your
   /// balance is not enough..."). Throws if Paystack can't be asked.

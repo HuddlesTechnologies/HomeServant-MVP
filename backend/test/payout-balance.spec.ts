@@ -1,4 +1,5 @@
 import { PrismaClient, UserRole } from '@prisma/client';
+import { PaystackService } from '../src/paystack/paystack.service';
 import { isLowBalanceError, PaymentsService } from '../src/payments/payments.service';
 import { PlatformSettingsService } from '../src/platform-settings/platform-settings.service';
 import { changesAdminQueues } from '../src/prisma/prisma.service';
@@ -133,5 +134,15 @@ describeDb('payouts and a low Paystack balance (real Postgres)', () => {
     await payments.releaseBookingOnMovedIn(booking.id, tenant.id);
     const row = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
     expect(row.payoutLastError).toMatch(/Paystack balance is too low.*balance unknown/);
+  });
+});
+
+describe('Paystack test/live mode', () => {
+  const service = (key: string) => new PaystackService({ getOrThrow: () => key } as never);
+
+  it('comes from the key prefix', () => {
+    expect(service('sk_test_abc').mode).toBe('test');
+    expect(service('sk_live_abc').mode).toBe('live');
+    expect(service('pk_live_abc').mode).toBe('unknown');
   });
 });

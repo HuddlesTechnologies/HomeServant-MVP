@@ -1495,6 +1495,12 @@ export class PaymentsService {
 
   /// HomeServant's current Paystack balance, for the admin Payouts screen
   /// (null if Paystack can't be asked right now).
+  /// 'test' or 'live' (or 'unknown'): which Paystack balance the payouts
+  /// come from — see PaystackService.mode.
+  paystackMode(): 'test' | 'live' | 'unknown' {
+    return this.paystack.mode ?? 'unknown';
+  }
+
   async paystackBalanceKobo(): Promise<number | null> {
     try {
       return await this.paystack.balanceKobo();
