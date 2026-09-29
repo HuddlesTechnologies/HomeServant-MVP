@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../api/models/booking.dart';
+import '../../../core/date_format.dart';
 import '../../../core/responsive.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/dashboard_theme.dart';
@@ -23,7 +24,9 @@ class TenancyAgreementsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final appState = context.watch<AppState>();
     final entries = appState.myBookings.where((b) => !b.isShortlet && b.status == BookingStatus.movedIn).toList()
-      ..sort((a, b) => (b.leaseStartDate ?? b.createdAt).compareTo(a.leaseStartDate ?? a.createdAt));
+      ..sort(
+        (a, b) => (b.agreementCreatedAt ?? b.leaseStartDate ?? b.createdAt).compareTo(a.agreementCreatedAt ?? a.leaseStartDate ?? a.createdAt),
+      );
 
     return DashboardPageScaffold(
       background: theme.background,
@@ -61,6 +64,9 @@ class _AgreementTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Generated at move-in; the lease start is the same day for bookings
+    // loaded without the agreement attached.
+    final createdAt = booking.agreementCreatedAt ?? booking.leaseStartDate;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -95,6 +101,13 @@ class _AgreementTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 12.5),
                     ),
+                    if (createdAt != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Created ${formatShortDate(createdAt)}',
+                        style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.8), size: 12, weight: FontWeight.w600),
+                      ),
+                    ],
                   ],
                 ),
               ),

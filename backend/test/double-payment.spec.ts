@@ -3,6 +3,7 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import { BookingsService } from '../src/bookings/bookings.service';
 import { PaymentsService } from '../src/payments/payments.service';
 import { PlatformSettingsService } from '../src/platform-settings/platform-settings.service';
+import { PropertiesService } from '../src/properties/properties.service';
 import { ReviewsService } from '../src/reviews/reviews.service';
 import { fakeMail, makeProperty, makeUser, resetDb, testDbUrl, testPrisma } from './helpers';
 
@@ -122,6 +123,34 @@ describeDb('one booking per property, and rating after payout (real Postgres)', 
 
     const history = await bookings.findForTenant(tenant.id);
     expect(history.map((b) => b.id)).toEqual([paid.id]);
+  });
+
+  it('hides a rental from browsing once paid for, and refuses a second tenant', async () => {
+    const { tenant, property } = await listing();
+    const notifier = { create: async () => undefined };
+    const settings = new PlatformSettingsService(prisma as never, notifier as never, fakeMail() as never);
+    const properties = new PropertiesService(prisma as never, reviews, {} as never, settings, notifier as never);
+    const browse = async () => (await properties.findMany({})).items.map((p) => p.id);
+    expect(await browse()).toEqual([property.id]);
+
+    // Rent Now pressed but never paid: still listed.
+    const booking = (await bookings.create(tenant.id, { propertyId: property.id })) as unknown as Created;
+    expect(await browse()).toEqual([property.id]);
+
+    await payments.handleChargeSuccess(booking.reference);
+    expect(await browse()).toEqual([]);
+    const other = await makeUser(prisma, UserRole.TENANT);
+    await expect(bookings.create(other.id, { propertyId: property.id })).rejects.toThrow('already been rented');
+    // The tenant who paid can still open it directly.
+    await expect(properties.findOne(property.id)).resolves.toMatchObject({ id: property.id });
+
+    // Moved in: still hidden. Refunded instead: listed again.
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: 'INSPECTION_CONFIRMED' } });
+    await payments.releaseBookingOnMovedIn(booking.id, tenant.id);
+    expect(await browse()).toEqual([]);
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: 'REFUNDED' } });
+    await prisma.property.update({ where: { id: property.id }, data: { isOccupied: false } });
+    expect(await browse()).toEqual([property.id]);
   });
 
   it('only lets a tenant rate once the landlord has been paid', async () => {

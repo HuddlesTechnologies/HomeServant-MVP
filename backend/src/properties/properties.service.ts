@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { BookingStatus, NotificationType, PaymentStatus, PriceUnit, Prisma, PropertyCategory, VerificationStatus } from '@prisma/client';
 import { formatRent } from '../common/format-rent';
+import { RESERVING_STATUSES } from '../common/rental-availability';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -103,6 +104,14 @@ export class PropertiesService {
     const requireVerified = await this.platform.requireVerifiedLandlords();
     if (!query.landlordId && requireVerified) {
       where.landlord = { deactivatedAt: null, bannedAt: null, ...PlatformSettingsService.verifiedLandlordFilter() };
+    }
+    // General browsing leaves out a rental that's taken: occupied, or paid
+    // for by a tenant who hasn't moved in yet. It comes back once the lease
+    // ends or the booking is refunded/rejected. (A Shortlet stays listed
+    // and shows its own "unavailable until" countdown instead.) A
+    // landlord's own list and a direct link still show it.
+    if (!query.landlordId) {
+      where.OR = [{ category: PropertyCategory.SHORTLET }, { isOccupied: false, bookings: { none: { status: { in: RESERVING_STATUSES } } } }];
     }
 
     const page = query.page ?? 1;

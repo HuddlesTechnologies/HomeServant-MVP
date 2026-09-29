@@ -3,6 +3,7 @@ import { BookingStatus, NotificationType, PropertyCategory, VerificationStatus, 
 import { ChatService } from '../chat/chat.service';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { assertRentalAvailable } from '../common/rental-availability';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
@@ -120,6 +121,8 @@ export class BookingsService {
       if (live.some((b) => PAID_STATUSES.has(b.status))) {
         throw new BadRequestException("You've already paid for this property — see your Booking History.");
       }
+      // Taken by someone else: refuse before creating a booking row.
+      await assertRentalAvailable(this.prisma, dto.propertyId, tenantId);
       // An unfinished checkout (Rent Now pressed, never paid): carry on with
       // it instead of starting another booking. If it was actually paid and
       // the webhook just hasn't landed, the charge call confirms it and

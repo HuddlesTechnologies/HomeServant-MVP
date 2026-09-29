@@ -4,6 +4,7 @@ import { randomBytes } from 'crypto';
 import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPlan, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
 import { ChatService } from '../chat/chat.service';
 import { formatRent } from '../common/format-rent';
+import { assertRentalAvailable } from '../common/rental-availability';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
@@ -285,6 +286,7 @@ export class PaymentsService {
     if (!readyForPayment) {
       throw new BadRequestException('This booking is not ready for payment yet');
     }
+    if (!isShortlet) await assertRentalAvailable(this.prisma, booking.propertyId, tenantId);
     if (booking.property.category !== PropertyCategory.SHORTLET && !booking.property.rentDurationMonths) {
       throw new BadRequestException('This property has no rent duration configured — contact the landlord');
     }
