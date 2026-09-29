@@ -36,10 +36,11 @@ export class AdminPayoutsController {
     return this.payments.stuckPayouts();
   }
 
-  /// HomeServant's Paystack balance — payouts are sent from it.
+  /// HomeServant's Paystack balance — payouts are sent from it — and
+  /// whether that's the test or live balance.
   @Get('balance')
   async balance() {
-    return { balanceKobo: await this.payments.paystackBalanceKobo() };
+    return { balanceKobo: await this.payments.paystackBalanceKobo(), mode: this.payments.paystackMode() };
   }
 
   @Get('count')

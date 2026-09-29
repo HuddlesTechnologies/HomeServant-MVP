@@ -92,11 +92,13 @@ class VerificationRepository {
     return (response.data as List).cast<Map<String, dynamic>>().map(StuckPayment.fromApi).toList();
   });
 
-  /// HomeServant's Paystack balance in kobo — payouts are sent from it.
-  /// Null when Paystack couldn't be asked.
-  Future<int?> paystackBalanceKobo() => _client.call(() async {
+  /// HomeServant's Paystack balance in kobo — payouts are sent from it —
+  /// null when Paystack couldn't be asked; and which balance it is: 'test'
+  /// or 'live' (from the server key's prefix), or 'unknown'.
+  Future<({int? balanceKobo, String mode})> paystackBalance() => _client.call(() async {
     final response = await _client.dio.get('/admin/payouts/balance');
-    return (response.data as Map<String, dynamic>)['balanceKobo'] as int?;
+    final data = response.data as Map<String, dynamic>;
+    return (balanceKobo: data['balanceKobo'] as int?, mode: data['mode'] as String? ?? 'unknown');
   });
 
   Future<int> stuckPaymentCount() => _client.call(() async {

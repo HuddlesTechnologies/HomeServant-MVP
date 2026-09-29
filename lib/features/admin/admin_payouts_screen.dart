@@ -36,6 +36,10 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
   /// loading or when Paystack couldn't be asked.
   int? _balanceKobo;
   bool _balanceLoaded = false;
+
+  /// 'test', 'live' or 'unknown' — which Paystack balance the server's key
+  /// reads. Test and live are separate: money added in one isn't in the other.
+  String _mode = 'unknown';
   final Set<String> _busy = {};
 
   @override
@@ -48,10 +52,11 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
     setState(() => _error = null);
     final repo = context.read<AppState>().verification;
     // Best-effort: the list still shows if the balance can't be read.
-    repo.paystackBalanceKobo().then<int?>((b) => b).catchError((_) => null).then((b) {
+    repo.paystackBalance().then<({int? balanceKobo, String mode})?>((b) => b).catchError((_) => null).then((b) {
       if (!mounted) return;
       setState(() {
-        _balanceKobo = b;
+        _balanceKobo = b?.balanceKobo;
+        _mode = b?.mode ?? 'unknown';
         _balanceLoaded = true;
       });
     });
@@ -97,11 +102,15 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
                   style: AppTextStyles.body(color: AppColors.navy, size: 13.5, weight: FontWeight.w700),
                 ),
               ),
+              if (_balanceLoaded) _modeChip(),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            'Payouts to landlords are sent from this balance, so it has to hold at least the amount being paid out.',
+            'Payouts to landlords are sent from this balance, so it has to hold at least the amount being paid out. '
+            '${_mode == 'test' ? 'The server is using a TEST key: only the test balance counts, and no real money moves. ' : ''}'
+            '${_mode == 'unknown' ? "The server's Paystack key isn't a normal test or live key; check PAYSTACK_SECRET_KEY. " : ''}'
+            'Money added in the Paystack dashboard in the other mode (test vs live) is not available here.',
             style: AppTextStyles.body(color: AppColors.navy, size: 12.5),
           ),
           if (blocked.isNotEmpty) ...[
@@ -230,6 +239,23 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
             for (final p in items) _card(p),
         ],
       ),
+    );
+  }
+
+  /// "Live mode" / "Test mode" pill. Text in the same colour as its tint
+  /// (green for live, the screen's amber for test/unknown), darkened so it
+  /// reads on the tinted white.
+  Widget _modeChip() {
+    final (label, color) = switch (_mode) {
+      'live' => ('Live mode', const Color(0xFF1E6B3A)),
+      'test' => ('Test mode', _amber),
+      _ => ('Mode unknown', _red),
+    };
+    return Container(
+      margin: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
+      child: Text(label, style: AppTextStyles.body(color: color, size: 11.5, weight: FontWeight.w800)),
     );
   }
 
