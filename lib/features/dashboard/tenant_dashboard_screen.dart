@@ -526,7 +526,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 1100),
         child: RefreshIndicator(
-          onRefresh: () => context.read<AppState>().loadProperties(),
+          onRefresh: () => context.read<AppState>().refreshAll(),
           child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(

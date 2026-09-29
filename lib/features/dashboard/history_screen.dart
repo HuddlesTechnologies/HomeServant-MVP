@@ -16,6 +16,7 @@ import '../../widgets/confirm_sheet.dart';
 import '../../widgets/eviction_widgets.dart';
 import '../../widgets/dashboard_page_scaffold.dart';
 import '../../widgets/empty_state.dart';
+import '../../widgets/pull_to_refresh.dart';
 import 'legal/tenancy_agreement_view_screen.dart';
 import 'property_detail_screen.dart';
 import '../../widgets/hidden_listing_notice.dart';
@@ -51,11 +52,15 @@ class HistoryScreen extends StatelessWidget {
                   title: 'No history yet',
                   message: 'Properties you rent or book will show up here.',
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  children: [
-                    for (final booking in bookings) _HistoryTile(booking: booking, theme: theme),
-                  ],
+              : PullToRefresh(
+                  onRefresh: () => context.read<AppState>().refreshAll(),
+                  child: ListView(
+                    physics: PullToRefresh.alwaysScrollable,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                    children: [
+                      for (final booking in bookings) _HistoryTile(booking: booking, theme: theme),
+                    ],
+                  ),
                 ),
         ),
       ),

@@ -97,7 +97,9 @@ class AppState extends ChangeNotifier {
     _chatRepo.onThreadRead = _markThreadNotificationsReadLocally;
     // Notifications created while the socket was down never arrived live.
     _chatSocket.onReconnected.listen((_) {
-      if (userId != null) unawaited(loadNotifications());
+      // Anything that changed while the socket was down (phone locked, tab
+      // in the background, flaky network) never arrived live — fetch it all.
+      if (userId != null) unawaited(refreshAll());
     });
   }
 
@@ -997,15 +999,45 @@ class AppState extends ChangeNotifier {
   /// accept/decline, inspection date, payment, etc.), instead of only
   /// picking it up on the next login.
   void _handleRealtimeNotification(AppNotification notification) {
-    if (notification.type != NotificationType.bookingStatus) return;
+    if (notification.type != NotificationType.bookingStatus && notification.type != NotificationType.rentExpiryReminder) return;
     // An identity review decision (VerificationService.review) — refresh
     // so the profile's verification card updates without a reload.
     if (notification.title.startsWith('Your identity')) unawaited(refreshProfile().catchError((_) {}));
+    // Booking notifications also cover payments, move-ins (which mark the
+    // property occupied), evictions and lease ends, so reload everything
+    // those touch — not just the bookings list.
     if (role == UserRole.landlord) {
-      unawaited(loadLandlordBookings());
+      unawaited(loadLandlordBookings().catchError((_) {}));
+      unawaited(loadLandlordProperties().catchError((_) {}));
     } else if (role == UserRole.tenant) {
-      unawaited(loadMyBookings());
+      unawaited(loadMyBookings().catchError((_) {}));
+      unawaited(loadProperties().catchError((_) {}));
     }
+  }
+
+  DateTime? _lastRefreshAll;
+
+  /// Fetches again everything this user's screens show — what pull-to-
+  /// refresh does, and what runs when the app comes back to the foreground
+  /// or the live connection reconnects (updates sent meanwhile were
+  /// missed). One failing list doesn't stop the others.
+  ///
+  /// [ifOlderThan] skips the refresh when one ran that recently, so
+  /// switching tabs/apps back and forth doesn't refetch every time.
+  Future<void> refreshAll({Duration? ifOlderThan}) async {
+    if (userId == null) return;
+    final last = _lastRefreshAll;
+    if (ifOlderThan != null && last != null && DateTime.now().difference(last) < ifOlderThan) return;
+    _lastRefreshAll = DateTime.now();
+    Future<void> safe(Future<void> f) => f.catchError((_) {});
+    await Future.wait([
+      safe(loadNotifications()),
+      safe(refreshProfile()),
+      if (role == UserRole.admin) safe(_loadAdminLevel()),
+      if (role == UserRole.tenant) ...[safe(loadMyBookings()), safe(loadFavorites()), safe(loadMyReviews()), safe(loadProperties())],
+      if (role == UserRole.landlord) ...[safe(loadLandlordBookings()), safe(loadLandlordProperties()), safe(loadEvictions())],
+    ]);
+    _chatSocket.notifyThreadsChanged();
   }
 
   Future<void> respondToBooking(String id, {required bool accepted}) async {

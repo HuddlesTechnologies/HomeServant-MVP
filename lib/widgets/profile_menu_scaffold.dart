@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../state/app_state.dart';
 import 'profile_edit_button.dart';
 import 'profile_menu_tile.dart';
 import 'profile_photo_viewer.dart';
+import 'pull_to_refresh.dart';
 import 'upload_picker.dart';
 
 /// Spec for one row in a [ProfileMenuScaffold]'s menu list — mirrors
@@ -92,7 +95,11 @@ class ProfileMenuScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: backgroundColor,
-      child: ListView(
+      // Drag down to fetch everything again (e.g. a verification decision).
+      child: PullToRefresh(
+        onRefresh: () => context.read<AppState>().refreshAll(),
+        child: ListView(
+        physics: PullToRefresh.alwaysScrollable,
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
         children: [
           if (header != null) ...[header!, const SizedBox(height: 22)] else const SizedBox(height: 20),
@@ -139,6 +146,7 @@ class ProfileMenuScaffold extends StatelessWidget {
             ),
           if (footer != null) ...[const SizedBox(height: 8), footer!],
         ],
+        ),
       ),
     );
   }

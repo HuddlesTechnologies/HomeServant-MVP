@@ -14,6 +14,7 @@ import '../dashboard/property_detail_screen.dart';
 import '../dashboard/widgets/property_image.dart';
 import 'landlord_add_property_screen.dart';
 import 'landlord_property_status.dart';
+import '../../widgets/pull_to_refresh.dart';
 
 /// The booking that put the current tenant into [property], if any — the
 /// most recent MOVED_IN (non-Shortlet)/PAID (Shortlet) booking against it.
@@ -232,14 +233,17 @@ class _LandlordPropertiesScreenState extends State<LandlordPropertiesScreen> {
                   ),
                 ),
                 Expanded(
-                  child: entries.isEmpty
-                      ? Center(
+                  child: PullToRefresh(
+                    onRefresh: () => context.read<AppState>().refreshAll(),
+                    child: entries.isEmpty
+                      ? PullableEmptyState(
                           child: Text(
                             all.isEmpty ? 'No properties here yet.' : 'No properties match these filters.',
                             style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6)),
                           ),
                         )
                       : ListView.builder(
+                          physics: PullToRefresh.alwaysScrollable,
                           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
                           itemCount: entries.length,
                           itemBuilder: (context, index) {
@@ -262,6 +266,7 @@ class _LandlordPropertiesScreenState extends State<LandlordPropertiesScreen> {
                             );
                           },
                         ),
+                  ),
                 ),
               ],
             ),

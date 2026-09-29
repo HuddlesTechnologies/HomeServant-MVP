@@ -13,6 +13,7 @@ import '../../widgets/notification_bell.dart';
 import '../../widgets/upload_picker.dart';
 import 'tenant_profile_view_screen.dart';
 import 'widgets/landlord_widgets.dart';
+import '../../widgets/pull_to_refresh.dart';
 
 enum _Outcome { pending, accepted, declined }
 
@@ -239,256 +240,261 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.hintGrey.withValues(alpha: 0.2),
-                    image: photoPath != null
-                        ? DecorationImage(image: imageProviderForPath(photoPath), fit: BoxFit.contain)
+        // Drag down to fetch everything again.
+        child: PullToRefresh(
+          onRefresh: () => context.read<AppState>().refreshAll(),
+          child: ListView(
+            physics: PullToRefresh.alwaysScrollable,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.hintGrey.withValues(alpha: 0.2),
+                      image: photoPath != null
+                          ? DecorationImage(image: imageProviderForPath(photoPath), fit: BoxFit.contain)
+                          : null,
+                    ),
+                    child: photoPath == null
+                        ? Icon(Icons.person_rounded, color: theme.foreground.withValues(alpha: 0.6))
                         : null,
                   ),
-                  child: photoPath == null
-                      ? Icon(Icons.person_rounded, color: theme.foreground.withValues(alpha: 0.6))
-                      : null,
-                ),
-                NotificationBell(
-                  color: theme.foreground,
-                  showDot: context.watch<AppState>().unreadNotificationCount > 0,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => NotificationsScreen(theme: theme)),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            LandlordSectionPill(icon: HouseBookingIcon(color: AppColors.gold, size: 20), label: 'Bookings'),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(20)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      HouseBookingIcon(color: AppColors.gold, size: 20),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Upcoming Bookings',
-                        style: AppTextStyles.body(color: AppColors.gold, size: 15, weight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  if (pendingBookings.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'No pending bookings.',
-                        style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 13),
-                      ),
-                    )
-                  else
-                    for (final booking in pendingBookings)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          children: [
-                            LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl, name: booking.tenantName),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    booking.tenantName ?? 'Tenant',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.body(color: Colors.white, size: 14, weight: FontWeight.w700),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    booking.isShortlet
-                                        ? '${booking.property.title} •'
-                                        // A non-Shortlet booking only ever sits PENDING for the
-                                        // brief moment between creation and its immediate charge
-                                        // landing — `respond` is Shortlet-only now, so there's no
-                                        // landlord action here, just a status note.
-                                        : '${booking.property.title} • payment in progress',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
-                                  ),
-                                  TenantIntroLine(booking: booking),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              onPressed: () => _openTenantProfile(booking),
-                              tooltip: 'View Tenant Profile',
-                              icon: const Icon(Icons.badge_outlined, color: AppColors.gold, size: 20),
-                            ),
-                            if (booking.isShortlet)
-                              LandlordAcceptRejectButtons(
-                                onAccept: () => _respond(booking, accepted: true),
-                                onReject: () => _respond(booking, accepted: false),
-                                acceptTooltip: 'Accept booking',
-                                rejectTooltip: 'Decline booking',
-                              ),
-                          ],
-                        ),
-                      ),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: InkWell(
-                      onTap: () => _openBookingHistory(allBookings),
-                      child: Text(
-                        'See all',
-                        style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.7), size: 12.5, weight: FontWeight.w600),
-                      ),
+                  NotificationBell(
+                    color: theme.foreground,
+                    showDot: context.watch<AppState>().unreadNotificationCount > 0,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => NotificationsScreen(theme: theme)),
                     ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 22),
-            LandlordSectionPill(
-              icon: const Icon(Icons.verified_user_rounded, color: AppColors.gold, size: 20),
-              label: 'Inspections & Active Rentals',
-            ),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(20)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (activeRentals.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'No active rentals awaiting an inspection or move-in.',
-                        style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 13),
-                      ),
-                    )
-                  else
-                    for (final booking in activeRentals)
-                      _ActiveRentalTile(
-                        booking: booking,
-                        onViewProfile: () => _openTenantProfile(booking),
-                        onConfirmInspection: () => _respondToInspection(booking, accepted: true),
-                        onDeclineInspection: () => _respondToInspection(booking, accepted: false),
-                        onScheduleInspection: () => _scheduleInspection(booking),
-                        onReject: () => _rejectBooking(booking),
-                      ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
-            LandlordSectionPill(
-              icon: const Icon(Icons.receipt_long_rounded, color: AppColors.gold, size: 20),
-              label: 'Rent',
-            ),
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(20)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.receipt_long_rounded, color: AppColors.gold, size: 20),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Rent',
-                            style: AppTextStyles.body(color: AppColors.gold, size: 15, weight: FontWeight.w700),
+              const SizedBox(height: 18),
+              LandlordSectionPill(icon: HouseBookingIcon(color: AppColors.gold, size: 20), label: 'Bookings'),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(20)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        HouseBookingIcon(color: AppColors.gold, size: 20),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Upcoming Bookings',
+                          style: AppTextStyles.body(color: AppColors.gold, size: 15, weight: FontWeight.w700),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (pendingBookings.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'No pending bookings.',
+                          style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 13),
+                        ),
+                      )
+                    else
+                      for (final booking in pendingBookings)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                        ],
-                      ),
-                      InkWell(
-                        onTap: () => _openRentHistory(rentedBookings),
-                        child: Row(
-                          children: [
-                            Text(
-                              'See all',
-                              style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.7), size: 12.5, weight: FontWeight.w600),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(Icons.arrow_forward_rounded, color: Colors.white.withValues(alpha: 0.7), size: 16),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  if (currentRentals.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'No rent entries.',
-                        style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 13),
-                      ),
-                    )
-                  else
-                    for (final entry in currentRentals.take(5))
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Row(
-                          children: [
-                            LandlordAvatar(radius: 18, photoUrl: entry.tenantProfilePhotoUrl, name: entry.tenantName),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    entry.tenantName ?? 'Tenant',
-                                    style: AppTextStyles.body(color: AppColors.gold, size: 13.5, weight: FontWeight.w700),
-                                  ),
-                                  Text(
-                                    entry.property.title,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
-                                  ),
-                                  Text(
-                                    _rentSubtitle(entry),
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
-                                  ),
-                                ],
+                          child: Row(
+                            children: [
+                              LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl, name: booking.tenantName),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      booking.tenantName ?? 'Tenant',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.body(color: Colors.white, size: 14, weight: FontWeight.w700),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      booking.isShortlet
+                                          ? '${booking.property.title} •'
+                                          // A non-Shortlet booking only ever sits PENDING for the
+                                          // brief moment between creation and its immediate charge
+                                          // landing — `respond` is Shortlet-only now, so there's no
+                                          // landlord action here, just a status note.
+                                          : '${booking.property.title} • payment in progress',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
+                                    ),
+                                    TenantIntroLine(booking: booking),
+                                  ],
+                                ),
                               ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                onPressed: () => _openTenantProfile(booking),
+                                tooltip: 'View Tenant Profile',
+                                icon: const Icon(Icons.badge_outlined, color: AppColors.gold, size: 20),
+                              ),
+                              if (booking.isShortlet)
+                                LandlordAcceptRejectButtons(
+                                  onAccept: () => _respond(booking, accepted: true),
+                                  onReject: () => _respond(booking, accepted: false),
+                                  acceptTooltip: 'Accept booking',
+                                  rejectTooltip: 'Decline booking',
+                                ),
+                            ],
+                          ),
+                        ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: InkWell(
+                        onTap: () => _openBookingHistory(allBookings),
+                        child: Text(
+                          'See all',
+                          style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.7), size: 12.5, weight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+              LandlordSectionPill(
+                icon: const Icon(Icons.verified_user_rounded, color: AppColors.gold, size: 20),
+                label: 'Inspections & Active Rentals',
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(20)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (activeRentals.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'No active rentals awaiting an inspection or move-in.',
+                          style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 13),
+                        ),
+                      )
+                    else
+                      for (final booking in activeRentals)
+                        _ActiveRentalTile(
+                          booking: booking,
+                          onViewProfile: () => _openTenantProfile(booking),
+                          onConfirmInspection: () => _respondToInspection(booking, accepted: true),
+                          onDeclineInspection: () => _respondToInspection(booking, accepted: false),
+                          onScheduleInspection: () => _scheduleInspection(booking),
+                          onReject: () => _rejectBooking(booking),
+                        ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+              LandlordSectionPill(
+                icon: const Icon(Icons.receipt_long_rounded, color: AppColors.gold, size: 20),
+                label: 'Rent',
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(20)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.receipt_long_rounded, color: AppColors.gold, size: 20),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Rent',
+                              style: AppTextStyles.body(color: AppColors.gold, size: 15, weight: FontWeight.w700),
                             ),
                           ],
                         ),
-                      ),
-                ],
+                        InkWell(
+                          onTap: () => _openRentHistory(rentedBookings),
+                          child: Row(
+                            children: [
+                              Text(
+                                'See all',
+                                style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.7), size: 12.5, weight: FontWeight.w600),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.arrow_forward_rounded, color: Colors.white.withValues(alpha: 0.7), size: 16),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    if (currentRentals.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          'No rent entries.',
+                          style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 13),
+                        ),
+                      )
+                    else
+                      for (final entry in currentRentals.take(5))
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Row(
+                            children: [
+                              LandlordAvatar(radius: 18, photoUrl: entry.tenantProfilePhotoUrl, name: entry.tenantName),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      entry.tenantName ?? 'Tenant',
+                                      style: AppTextStyles.body(color: AppColors.gold, size: 13.5, weight: FontWeight.w700),
+                                    ),
+                                    Text(
+                                      entry.property.title,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
+                                    ),
+                                    Text(
+                                      _rentSubtitle(entry),
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

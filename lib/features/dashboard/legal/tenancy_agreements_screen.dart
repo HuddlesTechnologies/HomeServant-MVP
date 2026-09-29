@@ -8,6 +8,7 @@ import '../../../models/dashboard_theme.dart';
 import '../../../state/app_state.dart';
 import '../../../widgets/dashboard_page_scaffold.dart';
 import '../../../widgets/empty_state.dart';
+import '../../../widgets/pull_to_refresh.dart';
 import 'tenancy_agreement_view_screen.dart';
 
 /// Lists a tenancy agreement for every booking the tenant has actually
@@ -44,11 +45,15 @@ class TenancyAgreementsScreen extends StatelessWidget {
                       'Once you move into a rented property, its tenancy agreement will appear here for you to '
                       'view and download.',
                 )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-                  children: [
-                    for (final booking in entries) _AgreementTile(theme: theme, booking: booking),
-                  ],
+              : PullToRefresh(
+                  onRefresh: () => context.read<AppState>().refreshAll(),
+                  child: ListView(
+                    physics: PullToRefresh.alwaysScrollable,
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                    children: [
+                      for (final booking in entries) _AgreementTile(theme: theme, booking: booking),
+                    ],
+                  ),
                 ),
         ),
       ),

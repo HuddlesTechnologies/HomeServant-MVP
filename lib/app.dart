@@ -15,13 +15,30 @@ class HomeServantApp extends StatefulWidget {
   State<HomeServantApp> createState() => _HomeServantAppState();
 }
 
-class _HomeServantAppState extends State<HomeServantApp> {
+class _HomeServantAppState extends State<HomeServantApp> with WidgetsBindingObserver {
   late final AppState _appState = AppState();
   late final GoRouter _router = buildAppRouter(_appState);
+
+  /// Coming back to the app (or its browser tab): the live connection may
+  /// have been paused meanwhile, so pick up anything that changed instead
+  /// of making the user reload.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _appState.isLoaded) {
+      _appState.refreshAll(ifOlderThan: const Duration(seconds: 30));
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Fire-and-forget: restores the previous session's saved state (if any).
     // The UI mounts immediately with defaults and simply rebuilds once this
     // resolves, via the ChangeNotifierProvider below — no loading gate needed
