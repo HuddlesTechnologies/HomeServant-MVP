@@ -18,12 +18,12 @@ class RefundTenantDto {
   reason!: string;
 }
 
-/// Payouts and refunds needing attention (admin console). Moderators and
-/// super admins can see them and retry: a retry only repeats a payout or
-/// refund that was already decided, through the same double-payment-safe
+/// Payouts and refunds needing attention (admin console) — moderators and
+/// super admins. Every action goes through the same double-payment-safe
 /// release/refund as the automatic ones (see
-/// PaymentsService.releasePaymentToRecipient / retryRefund). Refunding a
-/// tenant in full is a new decision about money, so it stays SUPER_ADMIN.
+/// PaymentsService.releasePaymentToRecipient / retryRefund /
+/// adminRefundBooking), and a full refund needs a written reason both
+/// sides see.
 @Controller('admin/payouts')
 @UseGuards(JwtAuthGuard, RolesGuard, AdminLevelGuard, MustChangePasswordGuard)
 @Roles(UserRole.ADMIN)
@@ -56,7 +56,6 @@ export class AdminPayoutsController {
 
   /// Refund the tenant in full (money still held, before move-in / stay).
   @Post(':paymentId/refund-tenant')
-  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
   refundTenant(@CurrentUser() user: AuthenticatedUser, @Param('paymentId') paymentId: string, @Body() dto: RefundTenantDto) {
     return this.payments.adminRefundBooking(paymentId, user.sub, dto.reason);

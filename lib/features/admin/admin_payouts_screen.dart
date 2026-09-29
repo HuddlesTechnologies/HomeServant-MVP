@@ -236,10 +236,7 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
               children: [
                 if (p.canRetry) _button('Retry payout', filled: true, onTap: () => _retryPayout(p)),
                 if (p.canRetryRefund) _button('Retry refund', filled: true, onTap: () => _retryRefund(p)),
-                // Retrying is for moderators too; a full refund is a new
-                // money decision, so the server keeps it super-admin-only.
-                if (p.canRefundTenant && (context.read<AppState>().adminLevel?.isSuperAdmin ?? false))
-                  _button('Refund tenant', onTap: () => _refundTenant(p)),
+                if (p.canRefundTenant) _button('Refund tenant', onTap: () => _refundTenant(p)),
                 _button('View landlord', onTap: () async {
                   await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminUserDetailScreen(userId: p.landlordId)));
                   if (mounted) _load();

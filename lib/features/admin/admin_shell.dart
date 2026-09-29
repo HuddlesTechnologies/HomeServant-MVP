@@ -487,8 +487,7 @@ class _AdminShellState extends State<AdminShell> {
       _MoreItem(icon: Icons.admin_panel_settings_outlined, label: 'Admins', count: _pendingAdminInvitesCount, builder: AdminAdminsTab.new),
       const _MoreItem(icon: Icons.history_rounded, label: 'Activity Log', builder: AdminActivityLogScreen.new),
       _MoreItem(icon: Icons.verified_user_outlined, label: 'ID Verifications', count: _pendingVerificationsCount, builder: AdminVerificationsTab.new),
-      // Moderators can retry failed payouts and refunds; only a super admin
-      // can refund a tenant in full (AdminPayoutsScreen hides that button).
+      // Moderators can retry failed payouts and refunds and refund a tenant.
       _MoreItem(icon: Icons.payments_outlined, label: 'Payouts & Refunds', count: _stuckPaymentsCount, builder: AdminPayoutsScreen.new),
     ],
     // Every other admin's chat history across the last 30 days — kept
