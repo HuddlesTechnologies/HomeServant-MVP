@@ -1,11 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
-import '../../api/models/chat.dart' show HandoffKind, MessageType, ThreadHandlingHistory, ThreadHandoff, ThreadParticipant, ThreadPersonRef;
+import '../../api/models/chat.dart' show HandoffKind, MessageQuote, MessageType, ThreadHandlingHistory, ThreadHandoff, ThreadParticipant, ThreadPersonRef;
 import '../../api/models/marketplace_api.dart';
 import '../../api/models/support_tools.dart' show SupportTopic;
 import '../../core/date_format.dart';
@@ -14,6 +15,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
 import '../../services/chat_socket_service.dart';
+import '../../api/models/booking.dart';
 import '../../state/app_state.dart';
 import '../../widgets/support_rating_card.dart';
 import '../../widgets/contact_avatar.dart';
@@ -34,6 +36,9 @@ class ChatMessage {
   ChatMessage({
     required this.text,
     required this.fromMe,
+    this.id,
+    this.senderName,
+    this.replyTo,
     this.type = MessageType.text,
     this.attachmentUrl,
     this.previewPropertyTitle,
@@ -47,6 +52,14 @@ class ChatMessage {
   final String text;
   final bool fromMe;
   final MessageType type;
+
+  /// The server's id — null until one of our own messages is delivered.
+  /// Only a delivered message can be replied to.
+  String? id;
+  final String? senderName;
+
+  /// The message this one replies to, shown as a quote above its text.
+  final MessageQuote? replyTo;
 
   /// Set only when [type] is [MessageType.image] — see backend
   /// Message.attachmentUrl.
@@ -159,6 +172,199 @@ class ChatThreadScreen extends StatefulWidget {
 class _ChatThreadScreenState extends State<ChatThreadScreen> {
   late final List<ChatMessage> _messages;
   final _inputController = TextEditingController();
+  final _inputFocus = FocusNode();
+
+  /// The message the next one sent will reply to (swipe it, or long-press
+  /// → Reply); shown above the input with a button to cancel.
+  ChatMessage? _replyingTo;
+
+  /// The property this tenant–landlord chat is about, once the tenant has
+  /// paid (from the thread summary) — pinned above the messages.
+  Property? _bookedProperty;
+
+  MessageQuote _quoteOf(ChatMessage m) => MessageQuote(
+    id: m.id!,
+    body: m.text,
+    isImage: m.type == MessageType.image,
+    senderId: m.fromMe ? context.read<AppState>().userId : null,
+    senderName: m.fromMe ? 'You' : (m.senderName ?? widget.contactName),
+  );
+
+  /// Who a quote is from, as the reader sees it.
+  String _quoteAuthor(MessageQuote q) =>
+      q.senderId != null && q.senderId == context.read<AppState>().userId ? 'You' : (q.senderName ?? widget.contactName);
+
+  void _startReply(ChatMessage m) {
+    if (m.id == null || _readOnly) return;
+    setState(() => _replyingTo = m);
+    _inputFocus.requestFocus();
+  }
+
+  /// The booked property's full details in a sheet over the chat, so either
+  /// side can check them without leaving the conversation.
+  Future<void> _showPropertyPopup(Property property) {
+    final theme = widget.theme;
+    final images = [property.image, ...property.galleryImages].where((p) => p.isNotEmpty).toSet().toList();
+    // theme.surface/onSurface: a fixed light-surface/navy-text pair in every
+    // DashboardTheme (see CLAUDE.md).
+    final text = theme.onSurface;
+    Widget fact(IconData icon, String label) => Padding(
+      padding: const EdgeInsets.only(right: 16, bottom: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: text.withValues(alpha: 0.75), size: 17),
+          const SizedBox(width: 5),
+          Text(label, style: AppTextStyles.body(color: text, size: 13, weight: FontWeight.w600)),
+        ],
+      ),
+    );
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (context) => FractionallySizedBox(
+        heightFactor: 0.85,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Property details', style: AppTextStyles.heading(color: text, size: 17)),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, color: text),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                children: [
+                  if (images.isNotEmpty)
+                    SizedBox(
+                      height: 210,
+                      child: PageView(
+                        children: [
+                          for (var i = 0; i < images.length; i++)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Semantics(
+                                button: true,
+                                label: 'View photo',
+                                child: GestureDetector(
+                                  onTap: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => PropertyGalleryScreen(images: images, initialIndex: i, title: property.title),
+                                    ),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: PropertyImage(path: images[i], width: double.infinity, height: 210),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (images.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        'Swipe for ${images.length - 1} more photo${images.length == 2 ? '' : 's'}',
+                        style: AppTextStyles.body(color: text.withValues(alpha: 0.7), size: 12),
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                  Text(property.title, style: AppTextStyles.heading(color: text, size: 19)),
+                  const SizedBox(height: 4),
+                  Text(
+                    [
+                      if (property.unitAddress?.isNotEmpty ?? false) property.unitAddress!,
+                      _placeLine(property),
+                    ].join(' · '),
+                    style: AppTextStyles.body(color: text.withValues(alpha: 0.8), size: 13.5),
+                  ),
+                  if (property.listingNumber != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text('Listing #${property.listingNumber}', style: AppTextStyles.body(color: text.withValues(alpha: 0.7), size: 12.5)),
+                    ),
+                  const SizedBox(height: 12),
+                  Text(property.priceLabel, style: AppTextStyles.heading(color: text, size: 17)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    children: [
+                      fact(Icons.home_work_outlined, property.category),
+                      fact(Icons.bed_outlined, '${property.bedrooms} bed${property.bedrooms == 1 ? '' : 's'}'),
+                      fact(Icons.bathtub_outlined, '${property.bathrooms} bath${property.bathrooms == 1 ? '' : 's'}'),
+                    ],
+                  ),
+                  if (property.description.trim().isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text('About this property', style: AppTextStyles.body(color: text, size: 14, weight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(property.description, style: AppTextStyles.body(color: text.withValues(alpha: 0.85), size: 13.5)),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Long-press (or right-click on the web): Copy and Reply.
+  Future<void> _showMessageActions(ChatMessage m) async {
+    final theme = widget.theme;
+    final canCopy = m.text.trim().isNotEmpty;
+    final canReply = m.id != null && !_readOnly;
+    if (!canCopy && !canReply) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      // theme.surface/onSurface: a fixed light-surface/navy-text pair in
+      // every DashboardTheme (see CLAUDE.md).
+      backgroundColor: theme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            if (canCopy)
+              ListTile(
+                leading: Icon(Icons.copy_rounded, color: theme.onSurface),
+                title: Text('Copy', style: AppTextStyles.body(color: theme.onSurface, size: 15, weight: FontWeight.w600)),
+                onTap: () => Navigator.of(context).pop('copy'),
+              ),
+            if (canReply)
+              ListTile(
+                leading: Icon(Icons.reply_rounded, color: theme.onSurface),
+                title: Text('Reply', style: AppTextStyles.body(color: theme.onSurface, size: 15, weight: FontWeight.w600)),
+                onTap: () => Navigator.of(context).pop('reply'),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: m.text));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message copied'), duration: Duration(seconds: 1)));
+    } else if (action == 'reply') {
+      _startReply(m);
+    }
+  }
   final _scrollController = ScrollController();
   OrderItemStatus? _orderStatus;
   bool _loadingRemote = false;
@@ -441,6 +647,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           _canEndSupport = !isAdmin && summary.isSupport && !summary.resolved;
           _isSupportThread = summary.isSupport;
           _supportTopic = summary.supportTopic;
+          _bookedProperty = summary.bookedProperty;
         });
       }
       if (!isAdmin && summary.isSupport && summary.resolved) {
@@ -509,6 +716,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           text: body,
           fromMe: false,
           type: type,
+          id: event.message['id'] as String?,
+          senderName: (event.message['sender'] as Map<String, dynamic>?)?['fullName'] as String?,
+          replyTo: MessageQuote.fromApi(event.message['replyTo'] as Map<String, dynamic>?),
           attachmentUrl: event.message['attachmentUrl'] as String?,
           previewPropertyTitle: event.message['previewPropertyTitle'] as String?,
           previewPropertyImageUrl: event.message['previewPropertyImageUrl'] as String?,
@@ -542,6 +752,9 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 text: m.body,
                 fromMe: m.senderId == appState.userId,
                 type: m.type,
+                id: m.id,
+                senderName: m.senderName,
+                replyTo: m.replyTo,
                 attachmentUrl: m.attachmentUrl,
                 previewPropertyTitle: m.previewPropertyTitle,
                 previewPropertyImageUrl: m.previewPropertyImageUrl,
@@ -569,6 +782,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     _socketSubscription?.cancel();
     _readSubscription?.cancel();
     _inputController.dispose();
+    _inputFocus.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -678,11 +892,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     final message = ChatMessage(
       text: body,
       fromMe: true,
+      replyTo: _replyingTo == null ? null : _quoteOf(_replyingTo!),
       sendState: threadId == null ? SendState.sent : SendState.sending,
     );
     setState(() {
       _messages.add(message);
       _inputController.clear();
+      _replyingTo = null;
     });
     _scrollToBottom();
     if (threadId == null) return;
@@ -693,7 +909,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   /// on it: sent, or failed with the reason in a snackbar.
   Future<void> _deliver(ChatMessage message, String threadId) async {
     try {
-      await context.read<AppState>().chat.send(threadId, message.text, attachmentUrl: message.attachmentUrl);
+      final sent = await context
+          .read<AppState>()
+          .chat
+          .send(threadId, message.text, attachmentUrl: message.attachmentUrl, replyToId: message.replyTo?.id);
+      message.id = sent.id;
       if (mounted) setState(() => message.sendState = SendState.sent);
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -747,11 +967,13 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       fromMe: true,
       type: MessageType.image,
       attachmentUrl: url,
+      replyTo: _replyingTo == null ? null : _quoteOf(_replyingTo!),
       sendState: SendState.sending,
     );
     setState(() {
       _messages.add(message);
       _sendingImage = false;
+      _replyingTo = null;
     });
     _scrollToBottom();
     await _deliver(message, threadId);
@@ -762,6 +984,26 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     if (property == null) return;
     final theme = widget.theme;
     final now = DateTime.now();
+    final appState = context.read<AppState>();
+    // Fresh, so a payment that just went through counts.
+    try {
+      await appState.loadMyBookings();
+    } catch (_) {}
+    if (!mounted) return;
+    for (final b in appState.myBookings) {
+      if (b.property.id == property.id && b.status == BookingStatus.inspectionConfirmed) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              b.requestedDate != null
+                  ? 'Your inspection is already confirmed for ${_formatScheduledDateTime(b.requestedDate!)}.'
+                  : 'Your inspection is already confirmed.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
 
     final date = await showDatePicker(
       context: context,
@@ -787,8 +1029,40 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
     final scheduled = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     final formatted = _formatScheduledDateTime(scheduled);
-    _send("I'd like to book an inspection of ${property.title} on $formatted.");
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Inspection request sent for $formatted')));
+    final booking = _inspectableBooking;
+    final messenger = ScaffoldMessenger.of(context);
+    if (booking == null) {
+      // Nothing paid for yet: the landlord has no booking to confirm a date
+      // on, so this can only be a question in the chat.
+      _send("I'd like to inspect ${property.title} on $formatted. Is that possible?");
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Sent as a message. Inspections are booked after you pay (Rent Now) — then choose your date here.')),
+      );
+      return;
+    }
+    // Records the date on the booking (this button used to only send a chat
+    // message, so the landlord then had "no inspection date" to accept).
+    // The server posts the note into this chat itself.
+    try {
+      await context.read<AppState>().proposeInspection(booking.id, scheduled);
+      messenger.showSnackBar(SnackBar(content: Text('Inspection date sent to the landlord: $formatted')));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// The tenant's paid booking for [ChatThreadScreen.property] that's still
+  /// arranging an inspection, if any.
+  Booking? get _inspectableBooking {
+    final property = widget.property;
+    if (property == null) return null;
+    for (final b in context.read<AppState>().myBookings) {
+      if (b.property.id == property.id &&
+          (b.status == BookingStatus.paidAwaitingInspection || b.status == BookingStatus.inspectionProposed)) {
+        return b;
+      }
+    }
+    return null;
   }
 
   Future<void> _setOrderStatus(OrderItemStatus status) async {
@@ -961,6 +1235,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   onTransfer: _handleTransfer,
                 ),
               if (_loadingRemote) const LinearProgressIndicator(minHeight: 2),
+              if (_bookedProperty != null)
+                _BookedPropertyCard(
+                  theme: theme,
+                  property: _bookedProperty!,
+                  onView: () => _showPropertyPopup(_bookedProperty!),
+                ),
               Expanded(
                 child: ListView.builder(
                   controller: _scrollController,
@@ -982,7 +1262,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                             SendState.failed => 'Not sent · Tap to retry',
                             SendState.sent => showSeen ? 'Seen' : null,
                           };
-                    final Widget bubble;
+                    Widget bubble;
                     if (message.type == MessageType.system) {
                       // Centred notice, not a bubble — theme.surface/onSurface
                       // is a fixed contrast pair in every DashboardTheme.
@@ -1044,17 +1324,56 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                             color: message.fromMe ? theme.accent : theme.surface,
                             borderRadius: BorderRadius.circular(18),
                           ),
-                          child: Text(
-                            message.text,
-                            style: AppTextStyles.body(
-                              color:
-                                  message.fromMe
-                                      ? theme.onAccent
-                                      : theme.onSurface,
-                              size: 14,
-                            ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (message.replyTo != null)
+                                _QuoteBlock(
+                                  author: _quoteAuthor(message.replyTo!),
+                                  text: message.replyTo!.preview,
+                                  // Drawn in the bubble's own text colour.
+                                  color: message.fromMe ? theme.onAccent : theme.onSurface,
+                                ),
+                              Text(
+                                message.text,
+                                style: AppTextStyles.body(
+                                  color:
+                                      message.fromMe
+                                          ? theme.onAccent
+                                          : theme.onSurface,
+                                  size: 14,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
+                      );
+                    }
+                    // A photo sent as a reply shows what it answers above it.
+                    if (message.type == MessageType.image && message.replyTo != null) {
+                      bubble = Column(
+                        crossAxisAlignment: message.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                            padding: const EdgeInsets.fromLTRB(10, 8, 10, 2),
+                            decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(12)),
+                            child: _QuoteBlock(author: _quoteAuthor(message.replyTo!), text: message.replyTo!.preview, color: theme.onSurface),
+                          ),
+                          bubble,
+                        ],
+                      );
+                    }
+                    // Swipe right to reply; long-press (right-click on the
+                    // web) for Copy / Reply. Not on system notices.
+                    if (message.type != MessageType.system && widget.threadId != null) {
+                      bubble = _SwipeToReply(
+                        enabled: message.id != null && !_readOnly,
+                        iconColor: theme.foreground,
+                        onReply: () => _startReply(message),
+                        onLongPress: () => _showMessageActions(message),
+                        child: bubble,
                       );
                     }
                     if (statusLabel == null) return bubble;
@@ -1139,6 +1458,32 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                     ],
                   ),
                 ),
+              if (!_readOnly && _replyingTo != null)
+                // theme.surface/onSurface: a fixed contrast pair in every
+                // DashboardTheme.
+                Container(
+                  margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+                  decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(14)),
+                  child: Row(
+                    children: [
+                      Icon(Icons.reply_rounded, color: theme.onSurface, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _QuoteBlock(
+                          author: _replyingTo!.fromMe ? 'Replying to your message' : 'Replying to ${_replyingTo!.senderName ?? widget.contactName}',
+                          text: _quoteOf(_replyingTo!).preview,
+                          color: theme.onSurface,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Cancel reply',
+                        onPressed: () => setState(() => _replyingTo = null),
+                        icon: Icon(Icons.close_rounded, color: theme.onSurface, size: 18),
+                      ),
+                    ],
+                  ),
+                ),
               if (!_readOnly)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1165,6 +1510,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                         child: PillTextField(
                           hint: 'Type a message',
                           controller: _inputController,
+                          focusNode: _inputFocus,
                           fillColor: theme.surface,
                           textColor: theme.onSurface,
                         ),
@@ -1756,3 +2102,171 @@ class _HistoryRow extends StatelessWidget {
     );
   }
 }
+
+
+/// The quoted message at the top of a reply: who wrote it and a line or two
+/// of its text, with a bar on the left. [color] is the text colour of
+/// whatever it's drawn on (the bubble's, or the reply bar's).
+class _QuoteBlock extends StatelessWidget {
+  const _QuoteBlock({required this.author, required this.text, required this.color});
+
+  final String author;
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(left: 8),
+      decoration: BoxDecoration(border: Border(left: BorderSide(color: color.withValues(alpha: 0.6), width: 3))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(author, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.body(color: color, size: 12, weight: FontWeight.w700)),
+          Text(
+            text.isEmpty ? 'Message' : text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.body(color: color.withValues(alpha: 0.8), size: 12.5),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Drag a message to the right to reply to it (a reply arrow appears as it
+/// moves; letting go past the threshold replies), and long-press or
+/// right-click it for Copy / Reply.
+class _SwipeToReply extends StatefulWidget {
+  const _SwipeToReply({
+    required this.enabled,
+    required this.iconColor,
+    required this.onReply,
+    required this.onLongPress,
+    required this.child,
+  });
+
+  final bool enabled;
+  final Color iconColor;
+  final VoidCallback onReply;
+  final VoidCallback onLongPress;
+  final Widget child;
+
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply> {
+  static const _threshold = 56.0;
+  static const _max = 76.0;
+  double _dx = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onLongPress: widget.onLongPress,
+      onSecondaryTap: widget.onLongPress,
+      onHorizontalDragUpdate: widget.enabled
+          ? (d) => setState(() => _dx = (_dx + d.delta.dx).clamp(0.0, _max))
+          : null,
+      onHorizontalDragEnd: widget.enabled
+          ? (_) {
+              if (_dx >= _threshold) {
+                HapticFeedback.selectionClick();
+                widget.onReply();
+              }
+              setState(() => _dx = 0);
+            }
+          : null,
+      onHorizontalDragCancel: () => setState(() => _dx = 0),
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          if (_dx > 8)
+            Opacity(
+              opacity: (_dx / _threshold).clamp(0.0, 1.0),
+              child: Icon(Icons.reply_rounded, color: widget.iconColor, size: 22),
+            ),
+          AnimatedContainer(
+            duration: Duration(milliseconds: _dx == 0 ? 180 : 0),
+            transform: Matrix4.translationValues(_dx, 0, 0),
+            child: widget.child,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Pinned above the messages in a tenant–landlord chat once the tenant has
+/// paid: the property's photo, name, address and price, with View property.
+/// theme.surface/onSurface (a fixed pair in every DashboardTheme), and the
+/// button in theme.accent/onAccent.
+class _BookedPropertyCard extends StatelessWidget {
+  const _BookedPropertyCard({required this.theme, required this.property, required this.onView});
+
+  final DashboardTheme theme;
+  final Property property;
+  final VoidCallback onView;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = theme.onSurface;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: PropertyImage(path: property.image, width: 64, height: 64),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(property.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: AppTextStyles.body(color: text, size: 14, weight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text(
+                  _placeLine(property),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body(color: text.withValues(alpha: 0.8), size: 12),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${property.priceLabel} · ${property.bedrooms} bed · ${property.bathrooms} bath',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body(color: text, size: 12, weight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            onPressed: onView,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.accent,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            child: Text('View property', style: AppTextStyles.body(color: theme.onAccent, size: 12, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Lekki Phase 1, Lagos" — without repeating the state when the location
+/// already ends with it.
+String _placeLine(Property p) =>
+    p.location.toLowerCase().trim().endsWith(p.state.toLowerCase().trim()) ? p.location : '${p.location}, ${p.state}';

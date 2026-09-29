@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
 
 /// [body] is now optional — an image message can be sent with no caption
 /// at all. ChatService.sendMessage is what actually requires at least one
@@ -17,4 +17,9 @@ export class SendMessageDto {
   @IsOptional()
   @IsString()
   attachmentUrl?: string;
+
+  /// The message being replied to — must be in the same conversation.
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
 }

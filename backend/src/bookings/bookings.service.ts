@@ -472,7 +472,12 @@ function inspectionDate(value: string): Date {
   return date;
 }
 
-/// "Fri, 2 October 2026" — for notifications and chat notes.
+/// "Fri, 2 October 2026", plus " at 10:00 am" when a time was chosen (the
+/// in-chat picker asks for one) — in Nigerian time, for notifications and
+/// chat notes.
 export function formatInspectionDate(date: Date): string {
-  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Lagos' });
+  const tz = 'Africa/Lagos';
+  const day = date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: tz });
+  const time = date.toLocaleTimeString('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: tz });
+  return /^12:00\s?am$/i.test(time) ? day : `${day} at ${time.toLowerCase()}`;
 }

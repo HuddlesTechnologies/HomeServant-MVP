@@ -123,11 +123,15 @@ class ChatRepository {
     });
   }
 
-  Future<ChatMessage> send(String threadId, String body, {String? attachmentUrl}) {
+  Future<ChatMessage> send(String threadId, String body, {String? attachmentUrl, String? replyToId}) {
     return _client.call(() async {
       final response = await _client.dio.post(
         '/threads/$threadId/messages',
-        data: {if (body.isNotEmpty) 'body': body, if (attachmentUrl != null) 'attachmentUrl': attachmentUrl},
+        data: {
+          if (body.isNotEmpty) 'body': body,
+          if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
+          if (replyToId != null) 'replyToId': replyToId,
+        },
       );
       onLocalChange?.call();
       return ChatMessage.fromApi(response.data as Map<String, dynamic>);

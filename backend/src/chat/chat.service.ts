@@ -384,6 +384,52 @@ export class ChatService {
   /// adminCanAccessSupportThread), and to an admin who transferred the
   /// thread away — they get the status (so their notification can say where
   /// it went) but canView false, since it's no longer theirs to read.
+  /// The property a tenant–landlord chat is about, with its details, once
+  /// the tenant in it has paid for it (any booking from payment through
+  /// move-in, or a paid shortlet). Null otherwise.
+  private async paidBookingProperty(thread: { isSupport: boolean; propertyId: string | null; participants: { userId: string }[] }) {
+    if (thread.isSupport || !thread.propertyId) return null;
+    const booking = await this.prisma.booking.findFirst({
+      where: {
+        propertyId: thread.propertyId,
+        tenantId: { in: thread.participants.map((p) => p.userId) },
+        status: {
+          in: [
+            BookingStatus.PAID,
+            BookingStatus.PAID_AWAITING_INSPECTION,
+            BookingStatus.INSPECTION_PROPOSED,
+            BookingStatus.INSPECTION_CONFIRMED,
+            BookingStatus.MOVED_IN,
+          ],
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        status: true,
+        property: {
+          select: {
+            id: true,
+            listingNumber: true,
+            title: true,
+            location: true,
+            state: true,
+            category: true,
+            price: true,
+            priceUnit: true,
+            bedrooms: true,
+            bathrooms: true,
+            description: true,
+            imageUrl: true,
+            galleryUrls: true,
+            unitAddress: true,
+            roomNumber: true,
+          },
+        },
+      },
+    });
+    return booking ? { ...booking.property, bookingStatus: booking.status } : null;
+  }
+
   async getThreadSummary(threadId: string, userId: string, role: UserRole) {
     const thread = await this.prisma.thread.findUnique({
       where: { id: threadId },
@@ -414,6 +460,7 @@ export class ChatService {
     const unclaimedSupport = thread.isSupport && !thread.assignedAdminId;
     const lockedReason = isParticipant && !isAdmin ? await this.threadBlockReason(threadId, userId) : null;
     const lastTransfer = thread.transferLogs[0];
+    const bookedProperty = isParticipant && !isAdmin ? await this.paidBookingProperty(thread) : null;
     // Customers only ever see a support admin's first name.
     const publicPerson = (u: { id: string; fullName: string | null; firstName: string | null; role?: UserRole; profilePhotoUrl?: string | null }) => ({
       id: u.id,
@@ -423,6 +470,10 @@ export class ChatService {
     return {
       id: thread.id,
       isSupport: thread.isSupport,
+      // Set in a tenant–landlord chat about a property the tenant has paid
+      // for: the app pins a preview of it (with a View property pop-up)
+      // for both of them.
+      bookedProperty,
       supportTopic: thread.supportTopic,
       priority: thread.priority,
       resolved,
@@ -580,18 +631,16 @@ export class ChatService {
       where: { threadId, ...(before ? { createdAt: { lt: new Date(before) } } : {}) },
       orderBy: { createdAt: 'desc' },
       take: MESSAGE_PAGE_SIZE,
-      include: { sender: { select: { id: true, fullName: true, firstName: true, role: true } } },
+      include: { sender: { select: { id: true, fullName: true, firstName: true, role: true } }, replyTo: { select: REPLY_QUOTE_SELECT } },
     });
     const viewerIsAdmin = senderRole === UserRole.ADMIN;
-    return messages.reverse().map(({ sender, ...message }) => ({
+    // Customers only ever see a support admin's first name.
+    const nameOf = (sender: { fullName: string | null; firstName: string | null; role: UserRole }) =>
+      !viewerIsAdmin && sender.role === UserRole.ADMIN ? adminPublicName(sender) : sender.fullName;
+    return messages.reverse().map(({ sender, replyTo, ...message }) => ({
       ...message,
-      sender: sender
-        ? {
-            id: sender.id,
-            // Customers only ever see a support admin's first name.
-            fullName: !viewerIsAdmin && sender.role === UserRole.ADMIN ? adminPublicName(sender) : sender.fullName,
-          }
-        : null,
+      sender: sender ? { id: sender.id, fullName: nameOf(sender) } : null,
+      replyTo: replyQuote(replyTo, nameOf),
     }));
   }
 
@@ -620,6 +669,10 @@ export class ChatService {
     if (dto.attachmentUrl) {
       await this.storage.assertIsOwnImage(dto.attachmentUrl);
     }
+    if (dto.replyToId) {
+      const original = await this.prisma.message.findFirst({ where: { id: dto.replyToId, threadId }, select: { id: true } });
+      if (!original) throw new BadRequestException("The message you're replying to isn't in this conversation");
+    }
     // Falls back to a fixed label rather than the (possibly empty) body —
     // an image sent with no caption would otherwise show as a blank
     // notification/support-queue preview.
@@ -632,8 +685,9 @@ export class ChatService {
           body,
           type: dto.attachmentUrl ? MessageType.IMAGE : MessageType.TEXT,
           attachmentUrl: dto.attachmentUrl,
+          replyToId: dto.replyToId,
         },
-        include: { sender: { select: { id: true, fullName: true, firstName: true } } },
+        include: { sender: { select: { id: true, fullName: true, firstName: true } }, replyTo: { select: REPLY_QUOTE_SELECT } },
       }),
       this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } }),
     ]);
@@ -684,6 +738,10 @@ export class ChatService {
     // An admin is only ever shown to the customer by first name — that's
     // also what goes out live over the socket (see the gateway broadcast).
     if (senderRole === UserRole.ADMIN && message.sender) message.sender.fullName = adminPublicName(message.sender);
+    // Sent to both sides live, so an admin quoted in it is shown by first
+    // name only, as everywhere else customers see admins.
+    const { replyTo: quoted, ...sent } = message;
+    const withQuote = { ...sent, replyTo: replyQuote(quoted, (s) => (s.role === UserRole.ADMIN ? adminPublicName(s) : s.fullName)) };
     const senderName = message.sender?.fullName ?? 'Someone';
     await Promise.all(
       otherParticipants.map((p) =>
@@ -728,10 +786,10 @@ export class ChatService {
           ),
         ),
       );
-      this.gateway.broadcastToAdmins('message:new', { threadId, message });
+      this.gateway.broadcastToAdmins('message:new', { threadId, message: withQuote });
     }
 
-    return message;
+    return withQuote;
   }
 
   /// Posts an automatic SYSTEM message (no sender) into a thread and pushes
@@ -1177,4 +1235,32 @@ export class ChatService {
       'Another admin handed off a console conversation to you — open Messages in the admin console to continue it.',
     );
   }
+}
+
+/// What a reply shows of the message it quotes.
+const REPLY_QUOTE_SELECT = {
+  id: true,
+  body: true,
+  type: true,
+  attachmentUrl: true,
+  sender: { select: { id: true, fullName: true, firstName: true, role: true } },
+} as const;
+
+type QuotedSender = { id: string; fullName: string | null; firstName: string | null; role: UserRole };
+
+/// The short quote sent with a reply: who wrote the original and its text
+/// (a photo shows as "Photo"). Null when it isn't a reply, or the original
+/// was deleted.
+function replyQuote(
+  original: { id: string; body: string; type: MessageType; attachmentUrl: string | null; sender: QuotedSender | null } | null,
+  nameOf: (sender: QuotedSender) => string | null,
+) {
+  if (!original) return null;
+  return {
+    id: original.id,
+    body: original.body,
+    isImage: original.type === MessageType.IMAGE || (!!original.attachmentUrl && !original.body),
+    senderId: original.sender?.id ?? null,
+    senderName: original.sender ? nameOf(original.sender) : null,
+  };
 }

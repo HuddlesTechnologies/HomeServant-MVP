@@ -81,7 +81,7 @@ class BookingsRepository {
         '/bookings',
         data: {
           'propertyId': propertyId,
-          if (isShortlet && requestedDate != null) 'requestedDate': requestedDate.toIso8601String(),
+          if (isShortlet && requestedDate != null) 'requestedDate': requestedDate.toUtc().toIso8601String(),
           if (message != null && message.isNotEmpty) 'message': message,
           if (isShortlet && nights != null) 'nights': nights,
           if (!isShortlet && payMonthly) 'paymentPlan': 'MONTHLY',
@@ -146,7 +146,7 @@ class BookingsRepository {
     return _client.call(() async {
       await _client.dio.post(
         '/bookings/$id/inspection',
-        data: {'requestedDate': requestedDate.toIso8601String()},
+        data: {'requestedDate': requestedDate.toUtc().toIso8601String()},
       );
     });
   }
@@ -163,7 +163,7 @@ class BookingsRepository {
   /// not the tenant has proposed one. Confirms it straight away.
   Future<void> scheduleInspection({required String id, required DateTime date}) {
     return _client.call(() async {
-      await _client.dio.post('/bookings/$id/inspection/schedule', data: {'requestedDate': date.toIso8601String()});
+      await _client.dio.post('/bookings/$id/inspection/schedule', data: {'requestedDate': date.toUtc().toIso8601String()});
     });
   }
 

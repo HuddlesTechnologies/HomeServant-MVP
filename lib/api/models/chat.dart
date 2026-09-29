@@ -1,4 +1,5 @@
 import 'support_tools.dart';
+import '../../features/dashboard/models/property.dart';
 
 class ThreadParticipant {
   const ThreadParticipant({
@@ -46,6 +47,30 @@ MessageType _messageTypeFromApi(String? value) => switch (value) {
   _ => MessageType.text,
 };
 
+/// The message a reply quotes: who wrote it and its text (or a photo).
+class MessageQuote {
+  const MessageQuote({required this.id, required this.body, required this.isImage, this.senderId, this.senderName});
+
+  final String id;
+  final String body;
+  final bool isImage;
+  final String? senderId;
+  final String? senderName;
+
+  /// What the quote shows: the text, or "Photo" for a picture sent alone.
+  String get preview => body.trim().isNotEmpty ? body.trim() : (isImage ? 'Photo' : '');
+
+  static MessageQuote? fromApi(Map<String, dynamic>? json) => json == null
+      ? null
+      : MessageQuote(
+          id: json['id'] as String,
+          body: json['body'] as String? ?? '',
+          isImage: json['isImage'] as bool? ?? false,
+          senderId: json['senderId'] as String?,
+          senderName: json['senderName'] as String?,
+        );
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -61,10 +86,15 @@ class ChatMessage {
     this.previewPropertyImageUrl,
     this.previewPropertyPrice,
     this.previewPropertyPriceUnit,
+    this.replyTo,
   });
 
   final String id;
   final String threadId;
+
+  /// Set when this message replies to another one (swipe or long-press →
+  /// Reply); null if the original was deleted.
+  final MessageQuote? replyTo;
   /// Null once the sender's account has been deleted — Message.sender is
   /// `onDelete: SetNull`, so their messages stay in the thread without one.
   /// Parsing this as non-null used to throw on any thread holding such a
@@ -104,6 +134,7 @@ class ChatMessage {
     previewPropertyImageUrl: json['previewPropertyImageUrl'] as String?,
     previewPropertyPrice: json['previewPropertyPrice'] as int?,
     previewPropertyPriceUnit: json['previewPropertyPriceUnit'] as String?,
+    replyTo: MessageQuote.fromApi(json['replyTo'] as Map<String, dynamic>?),
   );
 }
 
@@ -279,6 +310,7 @@ class ThreadSummary {
     required this.resolved,
     required this.canView,
     required this.canReply,
+    this.bookedProperty,
     required this.otherParticipants,
     this.canReassign = false,
     this.lockedReason,
@@ -290,6 +322,10 @@ class ThreadSummary {
     this.lastTransferFrom,
     this.lastTransferTo,
   });
+
+  /// The property this tenant–landlord chat is about, once the tenant has
+  /// paid for it — pinned at the top of the chat for both of them.
+  final Property? bookedProperty;
 
   final String id;
   final bool isSupport;
@@ -322,6 +358,9 @@ class ThreadSummary {
     return ThreadSummary(
       id: json['id'] as String,
       isSupport: json['isSupport'] as bool? ?? false,
+      bookedProperty: json['bookedProperty'] is Map<String, dynamic>
+          ? Property.fromApi(json['bookedProperty'] as Map<String, dynamic>)
+          : null,
       resolved: json['resolved'] as bool? ?? false,
       resolvedAt: json['resolvedAt'] != null ? DateTime.parse(json['resolvedAt'] as String) : null,
       assignedAdmin: ThreadPersonRef.fromApi(json['assignedAdmin']),
