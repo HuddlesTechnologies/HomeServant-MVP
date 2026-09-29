@@ -86,6 +86,11 @@ class AppState extends ChangeNotifier {
     // reconnects under the hood across login/logout, so this stays valid
     // the same way NotificationBannerOverlay's own subscription does.
     _chatSocket.onNotification.listen(_handleRealtimeNotification);
+    // Someone else rented (or the landlord edited/hid) a listing: refresh
+    // what a tenant is browsing, quietly, so it just drops off the list.
+    _chatSocket.onListingsChanged.listen((_) {
+      if (role == UserRole.tenant) unawaited(loadProperties(silent: true).catchError((_) {}));
+    });
     _chatSocket.onAccountBanned.listen(
       (reason) => _handleSessionExpired(
         'This account has been permanently banned from HomeServant.'
@@ -803,9 +808,13 @@ class AppState extends ChangeNotifier {
   List<Property> properties = [];
   bool propertiesLoading = false;
 
-  Future<void> loadProperties({String? state, String? category}) async {
-    propertiesLoading = true;
-    notifyListeners();
+  /// [silent]: a background refresh — the list swaps in place without
+  /// showing the loading state first.
+  Future<void> loadProperties({String? state, String? category, bool silent = false}) async {
+    if (!silent) {
+      propertiesLoading = true;
+      notifyListeners();
+    }
     try {
       properties = await _propertiesRepo.findMany(state: state, category: category);
     } finally {
@@ -1011,7 +1020,7 @@ class AppState extends ChangeNotifier {
       unawaited(loadLandlordProperties().catchError((_) {}));
     } else if (role == UserRole.tenant) {
       unawaited(loadMyBookings().catchError((_) {}));
-      unawaited(loadProperties().catchError((_) {}));
+      unawaited(loadProperties(silent: true).catchError((_) {}));
     }
   }
 
@@ -1034,7 +1043,7 @@ class AppState extends ChangeNotifier {
       safe(loadNotifications()),
       safe(refreshProfile()),
       if (role == UserRole.admin) safe(_loadAdminLevel()),
-      if (role == UserRole.tenant) ...[safe(loadMyBookings()), safe(loadFavorites()), safe(loadMyReviews()), safe(loadProperties())],
+      if (role == UserRole.tenant) ...[safe(loadMyBookings()), safe(loadFavorites()), safe(loadMyReviews()), safe(loadProperties(silent: true))],
       if (role == UserRole.landlord) ...[safe(loadLandlordBookings()), safe(loadLandlordProperties()), safe(loadEvictions())],
     ]);
     _chatSocket.notifyThreadsChanged();

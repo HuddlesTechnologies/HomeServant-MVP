@@ -46,7 +46,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly config: ConfigService,
     private readonly presence: PresenceService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) {
+    prisma.onListingsChanged(() => this.scheduleListingsBroadcast());
+  }
+
+  private listingsTimer: NodeJS.Timeout | null = null;
+
+  /// Tells every connected app that browse results may have changed (a
+  /// listing edited, or a rental paid for / moved into / relisted), so a
+  /// tenant's home screen drops a property someone else just rented
+  /// without a reload. Debounced: one write often comes with several
+  /// (and within a transaction, lands before the commit), so this waits a
+  /// moment and sends a single event.
+  private scheduleListingsBroadcast(): void {
+    if (this.listingsTimer) return;
+    this.listingsTimer = setTimeout(() => {
+      this.listingsTimer = null;
+      this.server?.emit('listings:changed');
+    }, 1500);
+  }
 
   async handleConnection(client: Socket): Promise<void> {
     const token = client.handshake.auth?.token as string | undefined;
