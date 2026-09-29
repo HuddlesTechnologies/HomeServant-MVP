@@ -49,7 +49,7 @@ describeDb('monthly rent (real Postgres)', () => {
     };
     const chat = { postBookingSystemMessage: async () => undefined };
     payments = new PaymentsService(prisma as never, paystack as never, notifier as never, mail as never, chat as never, settings);
-    bookings = new BookingsService(prisma as never, notifier as never, payments, settings);
+    bookings = new BookingsService(prisma as never, notifier as never, payments, settings, { postBookingSystemMessage: async () => null } as never);
     lifecycle = new LeaseLifecycleService(prisma as never, notifier as never, mail as never);
   });
 

@@ -240,7 +240,7 @@ class Booking {
       id: json['id'] as String,
       property: Property.fromApi(json['property'] as Map<String, dynamic>),
       status: _statusFromApi(json['status'] as String),
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      createdAt: DateTime.parse(json['createdAt'] as String).toLocal(),
       tenantId: tenant?['id'] as String? ?? json['tenantId'] as String?,
       tenantName: tenant?['fullName'] as String?,
       tenantEmail: tenant?['email'] as String?,
@@ -270,5 +270,7 @@ class Booking {
     );
   }
 
-  static DateTime? _parseDate(dynamic value) => value is String ? DateTime.tryParse(value) : null;
+  /// In the device's local time: the server sends UTC instants, and an
+  /// inspection date chosen as "2 Oct, 10:00" should read back that way.
+  static DateTime? _parseDate(dynamic value) => value is String ? DateTime.tryParse(value)?.toLocal() : null;
 }

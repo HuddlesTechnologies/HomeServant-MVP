@@ -4,6 +4,7 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { escapeHtml } from '../common/escape-html';
+import { EMAIL_PROPERTY_SELECT, propertyEmailDetails } from '../common/property-email';
 
 const include = {
   booking: {
@@ -14,7 +15,7 @@ const include = {
       leaseEndDate: true,
       priceSnapshot: true,
       priceUnitSnapshot: true,
-      property: { select: { id: true, title: true, location: true, state: true, category: true, imageUrl: true } },
+      property: { select: { id: true, imageUrl: true, ...EMAIL_PROPERTY_SELECT } },
     },
   },
   landlord: { select: { id: true, fullName: true, email: true, phoneNumber: true } },
@@ -41,7 +42,7 @@ export class EvictionsService {
   async create(landlordId: string, bookingId: string, reason: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { property: { select: { landlordId: true, title: true } }, tenant: { select: { id: true, email: true } } },
+      include: { property: { select: { landlordId: true, ...EMAIL_PROPERTY_SELECT } }, tenant: { select: { id: true, email: true } } },
     });
     if (!booking || booking.property.landlordId !== landlordId) throw new NotFoundException('Tenancy not found');
     const now = new Date();
@@ -62,15 +63,17 @@ export class EvictionsService {
       booking.tenantId,
       NotificationType.BOOKING_STATUS,
       'Eviction request filed',
-      `Your landlord has asked HomeServant to end your tenancy at ${title}. Nothing changes unless our team approves it — open History to read the reason and add your side.`,
+      `Your landlord has asked HomeServant to end your tenancy at ${title}. Nothing changes unless our team approves it — open Booking History to read the reason and add your side.`,
     );
     await this.mail.send(
       booking.tenant.email,
       `Your landlord has requested to end your tenancy at "${title}"`,
       `<p>Your landlord has asked HomeServant to end your tenancy at <strong>${escapeHtml(title)}</strong>.</p>` +
         `<p><strong>Reason given:</strong> ${escapeHtml(request.reason)}</p>` +
-        `<p>Nothing changes unless a HomeServant super admin reviews the case and approves it. You can add your side of the story from History in the app.</p>`,
-      `Your landlord has asked HomeServant to end your tenancy at "${title}".\n\nReason given: ${request.reason}\n\nNothing changes unless a HomeServant super admin reviews the case and approves it. You can add your side of the story from History in the app.`,
+        `<p>Nothing changes unless a HomeServant super admin reviews the case and approves it. You can add your side of the story from Booking History in the app.</p>` +
+        propertyEmailDetails(booking.property).html,
+      `Your landlord has asked HomeServant to end your tenancy at "${title}".\n\nReason given: ${request.reason}\n\nNothing changes unless a HomeServant super admin reviews the case and approves it. You can add your side of the story from Booking History in the app.` +
+        propertyEmailDetails(booking.property).text,
     );
     // Tell every super admin a case is waiting for review.
     const superAdmins = await this.prisma.user.findMany({
@@ -179,7 +182,8 @@ export class EvictionsService {
       [updated.tenant.email, tenantBody],
       [updated.landlord.email, landlordBody],
     ] as const) {
-      await this.mail.send(to, `${heading}: "${title}"`, `<p>${escapeHtml(body)}</p>`, body);
+      const details = propertyEmailDetails(updated.booking.property);
+      await this.mail.send(to, `${heading}: "${title}"`, `<p>${escapeHtml(body)}</p>${details.html}`, body + details.text);
     }
     this.logger.log(`Eviction ${id} ${approved ? 'approved' : 'rejected'} by ${adminId}`);
     return updated;

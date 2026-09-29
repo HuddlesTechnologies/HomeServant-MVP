@@ -38,7 +38,7 @@ class HistoryScreen extends StatelessWidget {
     return DashboardPageScaffold(
       background: theme.background,
       foreground: theme.foreground,
-      title: 'History',
+      title: 'Booking History',
       body: SafeArea(
         child: ResponsiveCenter(
           maxWidth: 640,
@@ -101,7 +101,7 @@ class _HistoryTileState extends State<_HistoryTile> {
       builder: (context) => AlertDialog(
         title: const Text('Payment received'),
         content: const Text(
-          "Your rent is held safely. Would you like to book your inspection now, do it later from History, "
+          "Your rent is held safely. Would you like to book your inspection now, do it later from Booking History, "
           'or request a refund?',
         ),
         actions: [
@@ -463,6 +463,7 @@ class _HistoryTileState extends State<_HistoryTile> {
       case BookingStatus.inspectionProposed:
         return [
           _ActionButton(label: 'Refund', theme: theme, destructive: true, onTap: _refund),
+          _ActionButton(label: 'Change date', theme: theme, onTap: _proposeInspection),
           Text(
             'Awaiting landlord response',
             style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.6), size: 11.5, weight: FontWeight.w600),

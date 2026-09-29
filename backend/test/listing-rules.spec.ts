@@ -77,7 +77,7 @@ describeDb('landlord listing rules: photo changes and hiding (real Postgres)', (
     const own = await properties.findMany({ landlordId: landlord.id }, landlord.id);
     expect(own.items.map((p) => [p.id, p.hiddenByLandlord])).toEqual([[property.id, true]]);
 
-    const bookings = new BookingsService(prisma as never, {} as never, {} as never, settings);
+    const bookings = new BookingsService(prisma as never, {} as never, {} as never, settings, { postBookingSystemMessage: async () => null } as never);
     await expect(bookings.create(tenant.id, { propertyId: property.id } as never)).rejects.toBeInstanceOf(ForbiddenException);
 
     await properties.update(property.id, landlord.id, { isHidden: false });

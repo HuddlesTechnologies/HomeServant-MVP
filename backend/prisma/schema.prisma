@@ -610,30 +610,30 @@ model PendingAdmin {
 }
 
 model Property {
-  id                 String           @id @default(uuid())
+  id                  String           @id @default(uuid())
   /// System-assigned, sequential and unique across every property ever
   /// listed (independent of Product.listingNumber's own sequence) — the
   /// human-facing identifier shown to landlords/admins always, and to a
   /// tenant only once they've paid (see PropertiesService/AdminService
   /// callers and the Flutter Property.fromApi doc comment).
-  listingNumber      Int              @unique @default(autoincrement())
-  landlordId         String
-  landlord           User             @relation("LandlordProperties", fields: [landlordId], references: [id], onDelete: Cascade)
-  title              String
-  location           String
-  state              String
-  category           PropertyCategory
-  price              Int
-  priceUnit          PriceUnit
-  bedrooms           Int
-  bathrooms          Int
-  description        String
-  imageUrl           String?
-  galleryUrls        String[]         @default([])
+  listingNumber       Int              @unique @default(autoincrement())
+  landlordId          String
+  landlord            User             @relation("LandlordProperties", fields: [landlordId], references: [id], onDelete: Cascade)
+  title               String
+  location            String
+  state               String
+  category            PropertyCategory
+  price               Int
+  priceUnit           PriceUnit
+  bedrooms            Int
+  bathrooms           Int
+  description         String
+  imageUrl            String?
+  galleryUrls         String[]         @default([])
   /// The landlord's walkthrough video (property-videos folder), shown as
   /// the "Property Tour" on the listing. Checked to be a real video of ours
   /// before it's saved (StorageService.assertIsOwnVideo).
-  videoUrl           String?
+  videoUrl            String?
   /// True once a tenant has moved into an accepted, paid lease on this
   /// property (see BookingsService.confirmMovedIn) — hides it from public
   /// search. Never set for a SHORTLET booking (see [category]); those
@@ -641,52 +641,52 @@ model Property {
   /// whether an active Booking's leaseEndDate is still in the future,
   /// rather than this flag, so the listing itself keeps taking future
   /// bookings around the current stay.
-  isOccupied         Boolean          @default(false)
+  isOccupied          Boolean          @default(false)
   /// Set by the landlord at listing time for every non-Shortlet category
   /// — how long a lease runs once a tenant moves in (6-24 months).
   /// Meaningless for SHORTLET, where a stay's length instead comes from
   /// however many nights the tenant books.
-  rentDurationMonths Int?
+  rentDurationMonths  Int?
   /// Off hides the "Message" action on this specific listing and blocks
   /// starting a new thread from it — replaces the old device-local,
   /// unsynced AppState toggle of the same intent.
-  messagingEnabled   Boolean          @default(true)
+  messagingEnabled    Boolean          @default(true)
   /// The landlord lets tenants pay this (non-Shortlet) rental monthly:
   /// the first month up front (held in escrow like a full payment), then
   /// each month as it comes due. See Booking.paymentPlan.
-  allowMonthlyPayment Boolean         @default(false)
+  allowMonthlyPayment Boolean          @default(false)
   /// Shortlet-only — the unit's exact address/room within [location],
   /// since one shortlet listing is a single bookable unit.
-  unitAddress        String?
-  roomNumber         String?
+  unitAddress         String?
+  roomNumber          String?
   /// How many times the landlord has changed this listing's photos in the
   /// current allowance (PlatformSettings.maxListingImageChanges). Reaching
   /// the limit locks the photos until [imagesLockedUntil]; once that has
   /// passed, the next change starts a fresh allowance. The photos a
   /// listing is created with don't count. See PropertiesService.update.
-  imageChangesUsed   Int              @default(0)
-  imagesLockedUntil  DateTime?
+  imageChangesUsed    Int              @default(0)
+  imagesLockedUntil   DateTime?
   /// Set while the landlord has hidden this listing themselves (only
   /// possible while it isn't occupied) — left out of browse and search and
   /// can't be booked, but otherwise untouched. Cleared when they show it
   /// again.
-  hiddenByLandlordAt DateTime?
+  hiddenByLandlordAt  DateTime?
   /// Admin search ranking: 0 = normal, 1 = boosted, 2 = top — set by a
   /// moderator/super admin (e.g. for a popular shortlet), optionally until
   /// [adminBoostUntil]. It only moves a listing up among *available*
   /// listings, and only into the limited promoted slots — see
   /// listing-ranking.ts for the fairness rules.
-  adminBoost         Int              @default(0)
-  adminBoostUntil    DateTime?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  adminBoost          Int              @default(0)
+  adminBoostUntil     DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   bookings   Booking[]
   promotions ListingPromotion[]
-  favorites Favorite[]
-  reviews   Review[]
-  threads   Thread[]
-  reports   Report[]
+  favorites  Favorite[]
+  reviews    Review[]
+  threads    Thread[]
+  reports    Report[]
 
   @@index([landlordId])
   @@index([state, category])
@@ -921,6 +921,11 @@ model Message {
   previewPropertyPrice     Int?
   previewPropertyPriceUnit PriceUnit?
   readAt                   DateTime?
+  /// The message this one replies to (swipe or long-press → Reply in the
+  /// app). Always in the same thread; cleared if that message is deleted.
+  replyToId                String?
+  replyTo                  Message?    @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies                  Message[]   @relation("MessageReplies")
   createdAt                DateTime    @default(now())
 
   @@index([threadId, createdAt])
@@ -935,49 +940,49 @@ enum PaymentPlan {
 }
 
 model Booking {
-  id                      String        @id @default(uuid())
-  propertyId              String
-  property                Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  tenantId                String
-  tenant                  User          @relation("TenantBookings", fields: [tenantId], references: [id], onDelete: Cascade)
-  status                  BookingStatus @default(PENDING)
+  id                        String        @id @default(uuid())
+  propertyId                String
+  property                  Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenantId                  String
+  tenant                    User          @relation("TenantBookings", fields: [tenantId], references: [id], onDelete: Cascade)
+  status                    BookingStatus @default(PENDING)
   /// The tenant's proposed date — an inspection date for a non-Shortlet
   /// rental, or the requested check-in date for a Shortlet (which has no
   /// inspection step, see BookingStatus). Confirmed by the landlord via
   /// [inspectionConfirmedAt] (non-Shortlet only); nothing here supports
   /// the landlord counter-proposing a different date — they only accept
   /// or decline the one the tenant asked for.
-  requestedDate           DateTime?
-  inspectionConfirmedAt   DateTime?
+  requestedDate             DateTime?
+  inspectionConfirmedAt     DateTime?
   /// Shortlet-only — number of nights requested/booked (ignored for a
   /// non-Shortlet booking). Combined with [requestedDate] at webhook time
   /// to compute leaseEndDate = requestedDate + nights on instant payment
   /// release — see PaymentsService.
-  nights                  Int?
+  nights                    Int?
   /// Property.price/priceUnit at the moment this booking was charged — a
   /// later price change on the listing shouldn't retroactively change
   /// what this tenant owes (same convention as
   /// MarketplaceOrderItem.unitPrice). Re-snapshotted on each renewal, since
   /// a landlord may reasonably raise rent at renewal time.
-  priceSnapshot           Int?
-  priceUnitSnapshot       PriceUnit?
+  priceSnapshot             Int?
+  priceUnitSnapshot         PriceUnit?
   /// Set together when payment is released (Shortlet: right after instant
   /// payment; a normal rental: when the tenant clicks "Moved In"). [leaseEndDate]
   /// is [leaseStartDate] plus Property.rentDurationMonths (or the
   /// Shortlet's booked night count) — the lease-lifecycle cron reads this
   /// to auto-expire/relist and to send the 30/15/0-day reminders.
-  leaseStartDate          DateTime?
-  leaseEndDate            DateTime?
+  leaseStartDate            DateTime?
+  leaseEndDate              DateTime?
   /// De-dupes the lease-lifecycle cron's 30/15/0-day rent-expiry
   /// reminder — set to whichever of 30/15/0 was last sent, so a daily
   /// tick doesn't re-send the same threshold every day it's still true.
   /// Reset to null on a successful renewal (a new leaseEndDate starts a
   /// new reminder cycle).
-  lastRentReminderDaysOut Int?
+  lastRentReminderDaysOut   Int?
   /// The landlord cleared this request from their dashboard's "Incoming
   /// Bookings" feed. Only hides it there: it is NOT declined, still shows in
   /// the Bookings tab and still counts as a request waiting for an answer.
-  landlordFeedClearedAt   DateTime?
+  landlordFeedClearedAt     DateTime?
   /// MONTHLY: the first payment is one month's rent (held until move-in
   /// like a full payment); after move-in each further month is paid as it
   /// comes due (PaymentsService.payMonthlyRent) and released straight to
@@ -987,14 +992,14 @@ model Booking {
   /// reminds the tenant before it and flags a missed month to both sides
   /// (de-duped by the two *For fields, which hold the rentPaidThrough they
   /// were sent for).
-  paymentPlan               PaymentPlan @default(FULL)
+  paymentPlan               PaymentPlan   @default(FULL)
   monthlyRent               Int?
   rentPaidThrough           DateTime?
   monthlyReminderSentFor    DateTime?
   monthlyOverdueNotifiedFor DateTime?
-  message                 String?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
+  message                   String?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @updatedAt
 
   payments         Payment[]
   tenancyAgreement TenancyAgreement?
@@ -1364,41 +1369,41 @@ enum IdCheckStatus {
 /// ([*Path] are object paths, never public URLs) and admins only ever see
 /// them through short-lived signed links — see VerificationService.
 model IdentityVerification {
-  id              String             @id @default(uuid())
-  userId          String             @unique
-  user            User               @relation("VerificationSubject", fields: [userId], references: [id], onDelete: Cascade)
-  idType          IdType?
-  idNumber        String?
+  id               String             @id @default(uuid())
+  userId           String             @unique
+  user             User               @relation("VerificationSubject", fields: [userId], references: [id], onDelete: Cascade)
+  idType           IdType?
+  idNumber         String?
   /// What the ID check provider said about [idNumber] — the basis for
   /// verifying a tenant without a moderator (see VerificationService).
-  idCheckStatus   IdCheckStatus      @default(NOT_RUN)
+  idCheckStatus    IdCheckStatus      @default(NOT_RUN)
   /// Which provider answered ("prembly", "console"), and its own
   /// reference for the check, for tracing a decision back to them.
-  idCheckProvider String?
+  idCheckProvider  String?
   idCheckReference String?
   /// The name the issuing authority holds against this ID number, as the
   /// provider returned it. Kept so a reviewer can see why a check
   /// matched or didn't — never any of the photo/signature data the
   /// provider also returns.
-  idCheckName     String?
+  idCheckName      String?
   /// The provider's own message about the check, shown to reviewers.
-  idCheckDetail   String?
-  idCheckedAt     DateTime?
-  certificatePath String?
-  documentPath    String?
-  status          VerificationStatus @default(INCOMPLETE)
-  submittedAt     DateTime?
-  reviewedById    String?
-  reviewedBy      User?              @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewNote      String?
-  reviewedAt      DateTime?
+  idCheckDetail    String?
+  idCheckedAt      DateTime?
+  certificatePath  String?
+  documentPath     String?
+  status           VerificationStatus @default(INCOMPLETE)
+  submittedAt      DateTime?
+  reviewedById     String?
+  reviewedBy       User?              @relation("VerificationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewNote       String?
+  reviewedAt       DateTime?
   /// True when [status] went APPROVED off a clean ID check instead of a
   /// moderator's decision — [reviewedById] is null in that case, so
   /// without this flag an auto-approval is indistinguishable from a
   /// review by an admin whose account was since deleted.
-  autoApproved    Boolean            @default(false)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  autoApproved     Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@index([status])
 }

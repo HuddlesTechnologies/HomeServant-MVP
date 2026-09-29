@@ -2,7 +2,7 @@ import { PrismaClient, UserRole } from '@prisma/client';
 import { AdminService } from '../src/admin/admin.service';
 import { ChatService } from '../src/chat/chat.service';
 import { NotificationsService } from '../src/notifications/notifications.service';
-import { fakeGateway, fakeMail, fakePresence, makeUser, resetDb, testDbUrl, testPrisma } from './helpers';
+import { fakeGateway, fakeMail, fakePresence, makeProperty, makeUser, resetDb, testDbUrl, testPrisma } from './helpers';
 
 const describeDb = testDbUrl ? describe : describe.skip;
 
@@ -63,6 +63,46 @@ describeDb('support chat: admin names, topics and auto-assignment (real Postgres
     // The admin still sees the customer's (and their own colleagues') full names.
     const [adminInbox] = await chat.findForUser(admin.id, true);
     expect(adminInbox.otherParticipants.map((p) => p.fullName)).toEqual(['Tolu Customer']);
+  });
+
+  it('replies quote the original message, only within the same conversation', async () => {
+    const customer = await makeUser(prisma, UserRole.TENANT, { fullName: 'Tolu Customer' });
+    const admin = await makeUser(prisma, UserRole.ADMIN, { fullName: 'Ada Lovelace Okafor', adminLevel: 'SUPPORT' });
+    await prisma.user.update({ where: { id: admin.id }, data: { firstName: 'Ada', lastName: 'Okafor' } });
+    online.add(admin.id);
+    const thread = await chat.openSupportThread(customer.id, 'PAYMENTS');
+    const question = await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Was I charged twice?' });
+    const answer = await chat.sendMessage(thread.id, admin.id, UserRole.ADMIN, { body: 'No, only once.', replyToId: question.id });
+    expect(answer.replyTo).toMatchObject({ id: question.id, body: 'Was I charged twice?', senderName: 'Tolu Customer', isImage: false });
+
+    const followUp = await chat.sendMessage(thread.id, customer.id, UserRole.TENANT, { body: 'Thanks!', replyToId: answer.id });
+    // The customer sees the admin quoted by first name only.
+    expect(followUp.replyTo?.senderName).toBe('Ada');
+    const history = await chat.findMessages(thread.id, customer.id, UserRole.TENANT);
+    expect(history.find((m) => m.id === answer.id)?.replyTo?.body).toBe('Was I charged twice?');
+
+    const other = await chat.openSupportThread((await makeUser(prisma, UserRole.TENANT)).id);
+    await expect(chat.sendMessage(other.id, admin.id, UserRole.ADMIN, { body: 'x', replyToId: question.id })).rejects.toThrow(
+      "isn't in this conversation",
+    );
+  });
+
+  it('shows a paid tenant and their landlord the booked property in their chat, and nobody else', async () => {
+    const tenant = await makeUser(prisma, UserRole.TENANT);
+    const landlord = await makeUser(prisma, UserRole.LANDLORD);
+    const property = await makeProperty(prisma, landlord.id);
+    // Created directly: the app only lets a tenant open this chat after paying.
+    const thread = await prisma.thread.create({
+      data: { propertyId: property.id, participants: { create: [{ userId: tenant.id }, { userId: landlord.id }] } },
+    });
+    // Not paid yet: no preview.
+    expect((await chat.getThreadSummary(thread.id, tenant.id, UserRole.TENANT)).bookedProperty).toBeNull();
+
+    await prisma.booking.create({ data: { tenantId: tenant.id, propertyId: property.id, status: 'PAID_AWAITING_INSPECTION' } });
+    for (const [id, role] of [[tenant.id, UserRole.TENANT], [landlord.id, UserRole.LANDLORD]] as const) {
+      const summary = await chat.getThreadSummary(thread.id, id, role);
+      expect(summary.bookedProperty).toMatchObject({ id: property.id, title: 'Test House', bookingStatus: 'PAID_AWAITING_INSPECTION' });
+    }
   });
 
   it('falls back to the first word of the full name for admins without a first name', async () => {

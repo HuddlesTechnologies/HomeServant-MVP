@@ -91,6 +91,30 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     }
   }
 
+  /// The landlord picks the inspection date themselves — when the tenant
+  /// hasn't proposed one, or instead of the date they proposed.
+  Future<void> _scheduleInspection(api.Booking booking) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: booking.requestedDate != null && booking.requestedDate!.isAfter(now) ? booking.requestedDate! : now.add(const Duration(days: 2)),
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Choose the inspection date',
+    );
+    if (picked == null || !mounted) return;
+    final appState = context.read<AppState>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await appState.scheduleInspection(booking.id, picked);
+      messenger.showSnackBar(
+        SnackBar(content: Text('Inspection set for ${formatShortDate(picked)} — ${booking.tenantName ?? 'the tenant'} has been told')),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   /// The landlord's distinct "reject this booking outright" lever — full
   /// refund, no platform fee withheld, ending the booking terminally. Kept
   /// visually and behaviorally separate from declining just an inspection
@@ -128,7 +152,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => _HistoryListScreen(
-          title: 'All Bookings',
+          title: 'Booking History',
           rows: [
             for (final b in bookings)
               _HistoryRow(
@@ -368,6 +392,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                         onViewProfile: () => _openTenantProfile(booking),
                         onConfirmInspection: () => _respondToInspection(booking, accepted: true),
                         onDeclineInspection: () => _respondToInspection(booking, accepted: false),
+                        onScheduleInspection: () => _scheduleInspection(booking),
                         onReject: () => _rejectBooking(booking),
                       ),
                 ],
@@ -486,6 +511,7 @@ class _ActiveRentalTile extends StatelessWidget {
     required this.onViewProfile,
     required this.onConfirmInspection,
     required this.onDeclineInspection,
+    required this.onScheduleInspection,
     required this.onReject,
   });
 
@@ -493,10 +519,15 @@ class _ActiveRentalTile extends StatelessWidget {
   final VoidCallback onViewProfile;
   final VoidCallback onConfirmInspection;
   final VoidCallback onDeclineInspection;
+  final VoidCallback onScheduleInspection;
   final VoidCallback onReject;
 
+  /// The landlord can fix a date whenever one is still being arranged.
+  bool get _canSchedule =>
+      booking.status == api.BookingStatus.paidAwaitingInspection || booking.status == api.BookingStatus.inspectionProposed;
+
   String get _statusLine => switch (booking.status) {
-    api.BookingStatus.paidAwaitingInspection => 'Paid — waiting for an inspection date to be proposed',
+    api.BookingStatus.paidAwaitingInspection => 'Paid — no inspection date yet',
     api.BookingStatus.inspectionProposed => booking.requestedDate != null
         ? 'Wants inspection on ${formatShortDate(booking.requestedDate!)}'
         : 'Proposed an inspection date',
@@ -553,9 +584,28 @@ class _ActiveRentalTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+            if (_canSchedule)
+              // Gold on the dark navy card (the card is navy with a faint
+              // white tint), like the section icons.
+              OutlinedButton.icon(
+                onPressed: onScheduleInspection,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.gold, width: 1.2),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                ),
+                icon: const Icon(Icons.event_available_rounded, color: AppColors.gold, size: 16),
+                label: Text(
+                  booking.status == api.BookingStatus.inspectionProposed ? 'Pick another date' : 'Set inspection date',
+                  style: AppTextStyles.body(color: AppColors.gold, size: 12, weight: FontWeight.w700),
+                ),
+              ),
+            OutlinedButton.icon(
               onPressed: onReject,
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: Color(0xFFE0554F), width: 1.2),
@@ -568,6 +618,7 @@ class _ActiveRentalTile extends StatelessWidget {
                 style: AppTextStyles.body(color: const Color(0xFFE0554F), size: 12, weight: FontWeight.w700),
               ),
             ),
+            ],
           ),
         ],
       ),

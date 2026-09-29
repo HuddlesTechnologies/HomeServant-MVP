@@ -548,7 +548,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                             final launched = await openPaymentPage(payment.authorizationUrl);
                                             if (!launched && mounted) {
                                               messenger.showSnackBar(
-                                                const SnackBar(content: Text("Couldn't open the payment page — try again from History.")),
+                                                const SnackBar(content: Text("Couldn't open the payment page — try again from Booking History.")),
                                               );
                                             }
                                           } else {

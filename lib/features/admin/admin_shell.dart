@@ -589,13 +589,16 @@ class _AdminShellState extends State<AdminShell> {
     final isSuperAdmin = adminLevel?.isSuperAdmin ?? false;
     final index = _index >= _primaryTabs.length ? 0 : _index;
 
+    final scaffold = _usesSidebar(context)
+        ? _buildWideScaffold(context, canSeeAdmins, isSuperAdmin, index)
+        : _buildScaffold(context, canSeeAdmins, isSuperAdmin, index);
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => _resetIdleTimer(),
       onPointerSignal: (_) => _resetIdleTimer(),
-      child: _usesSidebar(context)
-          ? _buildWideScaffold(context, canSeeAdmins, isSuperAdmin, index)
-          : _buildScaffold(context, canSeeAdmins, isSuperAdmin, index),
+      child: context.watch<AppState>().adminLevelLoadFailed
+          ? Column(children: [const _AdminLevelBanner(), Expanded(child: scaffold)])
+          : scaffold,
     );
   }
 
@@ -771,6 +774,47 @@ class _AdminShellState extends State<AdminShell> {
   }
 }
 
+/// Shown when the console couldn't confirm this admin's level (see
+/// AppState.adminLevelLoadFailed). Until it can, only the lowest-level pages
+/// show, so without this a super admin would just see pages vanish and
+/// think they'd been demoted. Dark amber text on pale amber (9.4:1), navy
+/// button text.
+class _AdminLevelBanner extends StatelessWidget {
+  const _AdminLevelBanner();
+
+  static const _background = Color(0xFFFFF4E5);
+  static const _text = Color(0xFF5C3A00);
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _background,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: _text, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  "Couldn't confirm your admin level, so some pages are hidden. Your level hasn't changed.",
+                  style: AppTextStyles.body(color: _text, size: 13, weight: FontWeight.w600),
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.read<AppState>().retryLoadAdminLevel(),
+                child: Text('Retry', style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One screen folded into the admin console's "More" tab. [count] is its
 /// unattended-activity badge — 0 for a screen with no such concept (e.g.
 /// Activity Log).
@@ -811,7 +855,12 @@ class _NavEntry {
 /// navy icons and labels, the chosen page on a pale navy highlight, dark
 /// grey group names (6.2:1 on white) and each page's red count badge.
 /// Collapsed, it shows icons only, with the name as a tooltip.
-class _AdminSidebar extends StatelessWidget {
+///
+/// A super admin's full list is taller than most laptop windows, so the
+/// scrollbar is always shown: without it the pages at the bottom (Support
+/// Insights, Chat Log, Platform Controls) were simply out of sight, with
+/// nothing to say the list scrolled.
+class _AdminSidebar extends StatefulWidget {
   const _AdminSidebar({
     required this.sections,
     required this.expanded,
@@ -826,7 +875,25 @@ class _AdminSidebar extends StatelessWidget {
   final ValueChanged<_NavEntry> onSelect;
   final VoidCallback onToggle;
 
+  @override
+  State<_AdminSidebar> createState() => _AdminSidebarState();
+}
+
+class _AdminSidebarState extends State<_AdminSidebar> {
   static const _groupColor = Color(0xFF5B6170);
+  final _scroll = ScrollController();
+
+  List<_NavSection> get sections => widget.sections;
+  bool get expanded => widget.expanded;
+  bool Function(_NavEntry) get isSelected => widget.isSelected;
+  ValueChanged<_NavEntry> get onSelect => widget.onSelect;
+  VoidCallback get onToggle => widget.onToggle;
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -841,13 +908,17 @@ class _AdminSidebar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: true,
+              child: ListView(
+              controller: _scroll,
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
               children: [
                 for (final (i, section) in sections.indexed) ...[
                   if (expanded)
                     Padding(
-                      padding: EdgeInsets.fromLTRB(12, i == 0 ? 2 : 16, 12, 6),
+                      padding: EdgeInsets.fromLTRB(12, i == 0 ? 2 : 12, 12, 4),
                       child: Text(
                         section.title.toUpperCase(),
                         maxLines: 1,
@@ -856,10 +927,11 @@ class _AdminSidebar extends StatelessWidget {
                       ),
                     )
                   else if (i > 0)
-                    const Padding(padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12), child: Divider(height: 1)),
+                    const Padding(padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12), child: Divider(height: 1)),
                   for (final entry in section.entries.whereType<_NavEntry>()) _tile(entry),
                 ],
               ],
+            ),
             ),
           ),
           const Divider(height: 1),
@@ -891,7 +963,7 @@ class _AdminSidebar extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: () => onSelect(entry),
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0, vertical: 11),
+          padding: EdgeInsets.symmetric(horizontal: expanded ? 12 : 0, vertical: 8),
           child: expanded
               ? Row(
                   children: [

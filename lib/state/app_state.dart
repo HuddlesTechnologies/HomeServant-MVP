@@ -560,6 +560,7 @@ class AppState extends ChangeNotifier {
     promotionalNotifications = false;
     bannerAutoDismiss = true;
     adminOnDuty = true;
+    adminLevelLoadFailed = false;
     appLockEnabled = false;
     appLockPin = null;
     unawaited(_tokens.clearAppLockPin());
@@ -622,17 +623,44 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// True once loading this admin's level has failed every attempt. The
+  /// console then shows only the lowest-privilege pages, so AdminShell
+  /// shows a banner with a Retry button rather than letting a super admin
+  /// think they've been demoted.
+  bool adminLevelLoadFailed = false;
+
+  /// Loads this admin's level (`GET /admin/me`). A single failed request
+  /// (a slow network, or the server waking up) used to leave the level
+  /// unknown for the whole session, silently hiding every moderator and
+  /// super admin page, so it now retries a few times before giving up.
   Future<void> _loadAdminLevel() async {
-    try {
-      final me = await _adminRepo.me();
-      adminLevel = me.level;
-      adminOnDuty = me.onDuty;
-      notifyListeners();
-    } catch (_) {
-      // Leaves it null — AdminShell treats that the same as "not yet
-      // loaded" and shows the lowest-privilege view until a retry
-      // succeeds, rather than guessing.
+    const retryDelays = [Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)];
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final me = await _adminRepo.me();
+        adminLevel = me.level;
+        adminOnDuty = me.onDuty;
+        adminLevelLoadFailed = false;
+        notifyListeners();
+        return;
+      } catch (_) {
+        if (attempt >= retryDelays.length || role != UserRole.admin) {
+          // Leaves it null: AdminShell shows the lowest-privilege view
+          // (never guesses higher) plus the retry banner.
+          adminLevelLoadFailed = true;
+          notifyListeners();
+          return;
+        }
+        await Future<void>.delayed(retryDelays[attempt]);
+      }
     }
+  }
+
+  /// The console banner's Retry button.
+  Future<void> retryLoadAdminLevel() async {
+    adminLevelLoadFailed = false;
+    notifyListeners();
+    await _loadAdminLevel();
   }
 
   final ChatSocketService _chatSocket = ChatSocketService();
@@ -980,9 +1008,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> respondToBooking(String id, {required bool accepted}) async {
-    final updated = await _bookingsRepo.respond(id: id, accepted: accepted);
-    landlordBookings = [for (final b in landlordBookings) if (b.id == id) updated else b];
-    notifyListeners();
+    await _bookingsRepo.respond(id: id, accepted: accepted);
+    await loadLandlordBookings();
   }
 
   /// For a Shortlet property, sends a booking request to the landlord
@@ -1014,15 +1041,13 @@ class AppState extends ChangeNotifier {
   Future<PaymentInitiation> payForBooking(String bookingId) => _bookingsRepo.pay(bookingId);
 
   Future<void> markBookingMovedIn(String bookingId) async {
-    final updated = await _bookingsRepo.markMovedIn(bookingId);
-    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.markMovedIn(bookingId);
+    await loadMyBookings();
   }
 
   Future<void> refundBooking(String bookingId) async {
-    final updated = await _bookingsRepo.refund(bookingId);
-    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.refund(bookingId);
+    await loadMyBookings();
   }
 
   Future<RenewalQuote> renewalQuote(String bookingId) => _bookingsRepo.renewalQuote(bookingId);
@@ -1040,25 +1065,29 @@ class AppState extends ChangeNotifier {
   /// PAID_AWAITING_INSPECTION booking — reachable any time from history,
   /// including right after paying ("book later") or much later.
   Future<void> proposeInspection(String bookingId, DateTime requestedDate) async {
-    final updated = await _bookingsRepo.proposeInspection(id: bookingId, requestedDate: requestedDate);
-    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.proposeInspection(id: bookingId, requestedDate: requestedDate);
+    await loadMyBookings();
   }
 
   /// Landlord accepts/declines the tenant's specific proposed inspection
   /// date — distinct from [rejectBooking], which ends the booking outright.
   Future<void> respondToInspection(String bookingId, {required bool accepted}) async {
-    final updated = await _bookingsRepo.respondToInspection(id: bookingId, accepted: accepted);
-    landlordBookings = [for (final b in landlordBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.respondToInspection(id: bookingId, accepted: accepted);
+    await loadLandlordBookings();
+  }
+
+  /// Landlord sets the inspection date themselves (no tenant proposal
+  /// needed, or instead of the one proposed).
+  Future<void> scheduleInspection(String bookingId, DateTime date) async {
+    await _bookingsRepo.scheduleInspection(id: bookingId, date: date);
+    await loadLandlordBookings();
   }
 
   /// Landlord's distinct "reject this booking outright" lever — full
   /// refund, no platform fee withheld.
   Future<void> rejectBooking(String bookingId) async {
-    final updated = await _bookingsRepo.rejectBooking(bookingId);
-    landlordBookings = [for (final b in landlordBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.rejectBooking(bookingId);
+    await loadLandlordBookings();
   }
 
   Future<void> loadMyReviews() async {

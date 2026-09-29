@@ -49,7 +49,7 @@ describeDb('audit fixes (real Postgres)', () => {
       });
       return { tenant, landlord, booking };
     }
-    const service = () => new BookingsService(prisma as never, {} as never, {} as never, {} as never);
+    const service = () => new BookingsService(prisma as never, {} as never, {} as never, {} as never, { postBookingSystemMessage: async () => null } as never);
 
     it("returns the agreement to the booking's tenant and landlord", async () => {
       const { tenant, landlord, booking } = await movedInWithAgreement();

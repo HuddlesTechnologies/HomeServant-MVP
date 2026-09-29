@@ -95,9 +95,6 @@ class PropertyCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  // Solid white pill with navy text: legible over any photo.
-                  if (property.landlordVerified)
-                    const Positioned(right: 12, bottom: 10, child: VerifiedPill()),
                   // A paid ad: always labelled, so tenants can tell promoted
                   // listings apart. Navy text on solid gold, over any photo.
                   if (property.featured)
@@ -160,6 +157,14 @@ class PropertyCard extends StatelessWidget {
                       Text(property.title, style: AppTextStyles.body(color: theme.foreground, size: 15, weight: FontWeight.w700)),
                       const SizedBox(height: 2),
                       Text(property.location, style: AppTextStyles.body(color: theme.accent, size: 13, weight: FontWeight.w600)),
+                      // Right on the card, so tenants know before opening the
+                      // listing. theme.foreground text on theme.background;
+                      // the blue check is an icon (3:1 needed, 3.3:1 even on
+                      // the dark Midnight background).
+                      if (property.landlordVerified) ...[
+                        const SizedBox(height: 4),
+                        VerifiedBadge(textColor: theme.foreground, label: 'Verified landlord', size: 12),
+                      ],
                     ],
                   ),
                 ),
