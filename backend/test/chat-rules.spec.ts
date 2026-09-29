@@ -445,6 +445,37 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
       const listed = await admin.findAdmins();
       expect(listed.find((a) => a.id === created.id)?.createdByAdmin?.id).toBe(boss.id);
     });
+
+    it('stops counting an invite towards the Admins badge once cancelled or expired', async () => {
+      const otp = { generate: async () => '1234' };
+      const admin = new (AdminService as unknown as new (...args: unknown[]) => AdminService)(
+        prisma, null, mail, null, otp, null, null, null, gateway,
+      );
+      await admin.requestAdminOtp({ email: 'cancel.me@test.local', firstName: 'Cancel', lastName: 'Me', level: 'SUPPORT' });
+      await admin.requestAdminOtp({ email: 'stale@test.local', firstName: 'Stale', lastName: 'Invite', level: 'SUPPORT' });
+      expect(await admin.pendingAdminInvitesCount()).toBe(2);
+
+      // Cancelled from the console's code step.
+      expect(await admin.cancelAdminInvite('cancel.me@test.local')).toEqual({ cancelled: true });
+      expect(await admin.pendingAdminInvitesCount()).toBe(1);
+
+      // Abandoned: its code has run out, so it can never be confirmed.
+      await prisma.pendingAdmin.update({
+        where: { email: 'stale@test.local' },
+        data: { createdAt: new Date(Date.now() - 11 * 60_000) },
+      });
+      expect(await admin.pendingAdminInvitesCount()).toBe(0);
+      expect(await prisma.pendingAdmin.count()).toBe(0);
+
+      // Resending restarts the clock.
+      await admin.requestAdminOtp({ email: 'resend@test.local', firstName: 'Re', lastName: 'Send', level: 'SUPPORT' });
+      await prisma.pendingAdmin.update({
+        where: { email: 'resend@test.local' },
+        data: { createdAt: new Date(Date.now() - 11 * 60_000) },
+      });
+      await admin.requestAdminOtp({ email: 'resend@test.local', firstName: 'Re', lastName: 'Send', level: 'SUPPORT' });
+      expect(await admin.pendingAdminInvitesCount()).toBe(1);
+    });
   });
 
   // --- Listing deletion ------------------------------------------------------------

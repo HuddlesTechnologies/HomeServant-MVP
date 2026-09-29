@@ -11,6 +11,7 @@ import { MustChangePasswordGuard } from '../common/guards/must-change-password.g
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { AdminService } from './admin.service';
+import { CancelAdminInviteDto } from './dto/cancel-admin-invite.dto';
 import { ConfirmAdminDto } from './dto/confirm-admin.dto';
 import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
 import { DelistReasonDto } from './dto/delist-reason.dto';
@@ -95,6 +96,12 @@ export class AdminController {
   @MinAdminLevel(AdminLevel.SUPER_ADMIN)
   confirmAdmin(@Body() dto: ConfirmAdminDto, @CurrentUser() actingAdmin: AuthenticatedUser) {
     return this.admin.confirmAdminOtp(dto, actingAdmin.sub);
+  }
+
+  @Post('admins/cancel')
+  @MinAdminLevel(AdminLevel.SUPER_ADMIN)
+  cancelAdminInvite(@Body() dto: CancelAdminInviteDto) {
+    return this.admin.cancelAdminInvite(dto.email);
   }
 
   @Patch('admins/:id/level')

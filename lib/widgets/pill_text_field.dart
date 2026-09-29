@@ -1,7 +1,22 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
+
+/// Autofill hints for a "Confirm password" field.
+///
+/// On the web, Flutter backs every obscured field with a real
+/// `<input type="password">`, and browsers (Safari's "Strong Password",
+/// Chrome's password generator) treat a second password input on a signup
+/// form as the confirmation slot and fill it with a generated password on
+/// their own, without the user choosing one. The `one-time-code` hint makes
+/// the engine render this input as a plain text input the password manager
+/// leaves alone (Flutter still draws it masked). Native apps keep the
+/// normal new-password hint.
+const List<String> kConfirmPasswordAutofillHints = kIsWeb
+    ? [AutofillHints.oneTimeCode]
+    : [AutofillHints.newPassword];
 
 /// White, fully-rounded input used throughout every auth / onboarding
 /// screen in the prototype. When [obscureText] is true and the caller
@@ -28,6 +43,7 @@ class PillTextField extends StatefulWidget {
     this.borderRadius = 28,
     this.focusNode,
     this.autofillHints,
+    this.enableSuggestions,
   });
 
   final String hint;
@@ -51,6 +67,11 @@ class PillTextField extends StatefulWidget {
   final double borderRadius;
   final FocusNode? focusNode;
   final Iterable<String>? autofillHints;
+
+  /// Keyboard suggestions and autocorrect. Defaults to off for an obscured
+  /// field; pass false for a password field whose caller toggles
+  /// [obscureText] itself, so revealing it doesn't turn them back on.
+  final bool? enableSuggestions;
 
   @override
   State<PillTextField> createState() => _PillTextFieldState();
@@ -93,6 +114,10 @@ class _PillTextFieldState extends State<PillTextField> {
       minLines: widget.minLines,
       maxLines: widget.maxLines,
       autofillHints: widget.autofillHints,
+      // Never offer keyboard suggestions or autocorrect on a password — the
+      // keyboard would otherwise learn it.
+      autocorrect: widget.enableSuggestions ?? !widget.obscureText,
+      enableSuggestions: widget.enableSuggestions ?? !widget.obscureText,
       style: AppTextStyles.body(color: widget.textColor, size: 16),
       decoration: InputDecoration(
         hintText: widget.hint,
