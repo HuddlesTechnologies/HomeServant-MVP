@@ -245,8 +245,8 @@ export class SupportToolsService {
   /// Every active admin a chat can be handed to, with what helps pick the
   /// right one: permission level, whether they're on duty and online, and
   /// how many open support chats they're already handling. Open to any
-  /// admin — transferring used to load `/admin/admins`, which is
-  /// super-admin-only, so other admins couldn't transfer at all.
+  /// admin, since every admin can transfer a chat (`/admin/admins`, the
+  /// full admin list, is moderator-and-up).
   async transferTargets() {
     const [admins, loads] = await Promise.all([
       this.prisma.user.findMany({

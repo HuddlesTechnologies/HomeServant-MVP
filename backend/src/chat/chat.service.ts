@@ -957,9 +957,8 @@ export class ChatService {
 
   async markRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
     await this.assertCanRead(threadId, userId, senderRole);
-    // Opening a conversation also clears the caller's own notifications
-    // about it — they used to stay unread (and keep the bell count up)
-    // after the chat itself had been read.
+    // Opening a conversation also marks the caller's notifications about it
+    // read, so the bell count drops with the chat's.
     await this.prisma.notification.updateMany({
       where: { userId, threadId, readAt: null },
       data: { readAt: new Date() },

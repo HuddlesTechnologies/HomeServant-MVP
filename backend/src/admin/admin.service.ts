@@ -873,9 +873,9 @@ export class AdminService {
 
   async approveVendor(id: string) {
     const vendor = await this.requireVendor(id);
-    // Idempotent: a double-tap or a retry on a slow response previously
-    // re-sent the approval notification + email every time this was
-    // called, even for a vendor already approved.
+    // Idempotent: approving an already-approved vendor (a double-tap, or a
+    // retry on a slow response) returns without notifying or emailing them
+    // again.
     if (vendor.status === 'APPROVED') return vendor;
     const updated = await this.prisma.vendorProfile.update({
       where: { id },
@@ -1260,10 +1260,9 @@ export class AdminService {
   }
 
   /// The Messages nav badge: conversations this admin has unread messages
-  /// in, plus support conversations nobody has picked up yet. It used to
-  /// add *every* open support conversation — including ones this admin had
-  /// already opened and read, and ones other admins were handling — so the
-  /// badge never went down after reading a chat.
+  /// in, plus support conversations nobody has picked up yet. Chats this
+  /// admin has read, and chats other admins are handling, don't count, so
+  /// the badge goes down as they read.
   async messagesAttentionCount(adminId: string): Promise<number> {
     const [threadsWithUnread, unclaimedSupportThreads] = await Promise.all([
       this.prisma.thread.count({
@@ -1279,9 +1278,9 @@ export class AdminService {
 
   /// Backs the Admins nav badge — invites sent (via [requestAdminOtp]) whose
   /// code can still be entered. An invite past its code's lifetime can never
-  /// be confirmed (only re-requested, which recreates it), so it's dropped
-  /// here rather than keeping the badge lit forever — which is what an
-  /// invite abandoned at the code step used to do.
+  /// be confirmed (only re-requested, which recreates it), so it doesn't
+  /// count: an invite abandoned at the code step mustn't keep the badge lit
+  /// forever.
   async pendingAdminInvitesCount(): Promise<number> {
     const cutoff = new Date(Date.now() - CODE_TTL_MINUTES * 60_000);
     await this.prisma.pendingAdmin.deleteMany({ where: { createdAt: { lt: cutoff } } });

@@ -168,9 +168,8 @@ export class AuthService {
     return { ...tokens, user: this.toPublicUser(user), requiresTwoFactor: false, requiresReactivation: false };
   }
 
-  /// Backs both "Resend OTP" screens (signup verification, login 2FA) —
-  /// previously that button only reset the on-screen countdown and never
-  /// actually requested a new code. Always resolves the same way whether
+  /// Backs both "Resend OTP" screens (signup verification, login 2FA):
+  /// emails a new code. Always resolves the same way whether
   /// or not [dto.email] is eligible (no account, already verified, or 2FA
   /// off), same reasoning as [forgotPassword] — a different response
   /// would let a caller enumerate accounts/settings by email.
@@ -365,9 +364,9 @@ export class AuthService {
   /// Returns a fresh token pair for *this* session — necessary because an
   /// admin's access token carries `mustChangePassword`
   /// (MustChangePasswordGuard) baked in at login; without reissuing here,
-  /// the console would stay locked out under that guard for the rest of
-  /// the old (up to 15-minute) access token's life even after actually
-  /// fixing it.
+  /// the console would stay locked by that guard for the rest of the
+  /// current token's life (up to 15 minutes) after the password is
+  /// changed.
   async changePassword(userId: string, dto: ChangePasswordDto, ip?: string): Promise<TokenPair> {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (!user.passwordHash) {

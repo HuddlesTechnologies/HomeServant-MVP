@@ -6,7 +6,7 @@ import { PremblyIdCheckProvider } from './prembly-id-check.provider';
 
 /// The ID_CHECK_PROVIDER env var picks who ID numbers are checked with.
 /// "console" (the default) checks nothing and leaves every submission for
-/// a moderator — i.e. how verification behaved before this existed.
+/// a moderator to review by hand.
 /// "prembly" looks each number up with the issuing authority through
 /// Prembly/Identitypass (needs PREMBLY_X_API_KEY; PREMBLY_APP_ID only
 /// matters on their legacy hosts, and PREMBLY_BASE_URL overrides the API

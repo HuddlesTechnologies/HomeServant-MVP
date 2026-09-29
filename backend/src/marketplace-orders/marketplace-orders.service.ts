@@ -31,9 +31,7 @@ export class MarketplaceOrdersService {
   ) {}
 
   /// Buyer info comes from the authenticated account's own profile, not a
-  /// separate checkout form — mirrors how the Flutter client already
-  /// worked before this had a real backend (see marketplace_home_screen's
-  /// old `_placeOrder`). Stock is checked and decremented atomically per
+  /// separate checkout form. Stock is checked and decremented atomically per
   /// item (a conditional `updateMany` guarded by `stock >= quantity`, not
   /// a plain read-then-write) so two concurrent buyers can't both
   /// successfully oversell the last unit.
@@ -154,10 +152,10 @@ export class MarketplaceOrdersService {
     });
   }
 
-  /// A vendor can still CANCEL an item (e.g. out of stock, can't fulfil),
-  /// but can no longer mark one COMPLETED directly — now that payments are
-  /// held in escrow, only the buyer's own confirm-received action (see
-  /// confirmReceived) can release funds and mark an item COMPLETED.
+  /// A vendor can CANCEL an item (e.g. out of stock, can't fulfil) but not
+  /// mark it COMPLETED: payments are held in escrow, and only the buyer's
+  /// confirm-received action (see confirmReceived) releases the money and
+  /// completes the item.
   /// Cancelling an item whose payment is already held triggers a full
   /// refund to the buyer (no platform fee withheld — that 0.2% cut is
   /// specific to the rental pre-move-in refund path, not marketplace

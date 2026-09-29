@@ -21,9 +21,8 @@ export class ReportsService {
   /// reporter's honesty:
   /// - a listing: someone who has had real contact with it — booked it (in
   ///   any state, including an unfinished checkout), messaged about it, or
-  ///   saved it. (This used to require an ACCEPTED booking, a status paid
-  ///   rentals never reach any more, so almost nobody could report a
-  ///   listing — including a suspicious one.)
+  ///   saved it. Any real contact counts, so a suspicious listing can be
+  ///   reported before anyone pays for it.
   /// - a marketplace item: someone who bought it.
   /// One open report per person per listing/item; a second is refused.
   async create(reporterId: string, dto: CreateReportDto) {
@@ -63,11 +62,9 @@ export class ReportsService {
         reason: dto.reason,
       },
     });
-    // Nothing previously told an already-open admin console a new report
-    // had come in — the Reports/Properties/Marketplace nav badges
-    // (AdminShell._loadBadgeCounts) only ever refreshed once, at console
-    // startup. This reuses the same admin-room broadcast ChatGateway
-    // already uses for chat (`thread:claimed`/`message:new`).
+    // Tells open admin consoles to refresh their Reports / Properties /
+    // Marketplace badges (AdminShell._loadBadgeCounts), over the same
+    // admin-room broadcast chat uses (`thread:claimed`/`message:new`).
     this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
     return report;
   }

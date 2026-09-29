@@ -119,7 +119,7 @@ export class PaymentsService {
   /// must own the order. Releases the vendor's 95% share and marks the
   /// item COMPLETED. This is the *only* path that releases a marketplace
   /// escrow payment; see MarketplaceOrdersService.respondToItem for why a
-  /// vendor can no longer mark an item COMPLETED directly.
+  /// vendor can't mark an item COMPLETED themselves.
   async confirmOrderItemReceived(itemId: string, buyerId: string) {
     const item = await this.prisma.marketplaceOrderItem.findUnique({
       where: { id: itemId },

@@ -97,10 +97,9 @@ export class BookingsService {
         { paymentPlan: PaymentPlan.MONTHLY, monthlyRent: Math.ceil(property.price / 12) }
       : { paymentPlan: PaymentPlan.FULL, monthlyRent: null };
 
-    // One live booking per tenant per property. Rent Now used to create a
-    // fresh booking every time it was pressed, so a tenant who had already
-    // paid could pay again, and History showed the property twice (the
-    // extra copy stuck on "Pending").
+    // One live booking per tenant per property: pressing Rent Now again
+    // continues an unfinished checkout, and is refused once the tenant has
+    // paid or moved in, so nobody pays twice for the same place.
     const existing = await this.prisma.booking.findMany({
       where: { tenantId, propertyId: dto.propertyId, status: { notIn: [BookingStatus.DECLINED, BookingStatus.REFUNDED] } },
       orderBy: { createdAt: 'desc' },
@@ -151,14 +150,11 @@ export class BookingsService {
       include: { property: true },
     });
 
-    // Without this, a landlord's Bookings tab only ever picked up a brand
-    // new request on next app restart (AppState fetches it once, at
-    // login) — every *subsequent* status change already notifies (see
-    // `respond`/`proposeInspection`/`respondToInspection` below and
-    // PaymentsService), but creation itself never did, so this was the
-    // one gap in that chain. NotificationsService.create is also what
-    // pushes the `notification:new` socket event the Flutter client
-    // reuses to refetch the bookings list live.
+    // Notifies the landlord of the new request, like every later status
+    // change does (`respond`/`proposeInspection`/`respondToInspection`
+    // below and PaymentsService). NotificationsService.create also pushes
+    // the `notification:new` socket event the app uses to refetch the
+    // bookings list live.
     //
     // Only a Shortlet request is announced here. A normal rental is still
     // unpaid at this point (the tenant may never finish checkout), so the
@@ -230,9 +226,8 @@ export class BookingsService {
   /// arbitrary lookup.
   ///
   /// [lastPaidAt] is derived here (not a raw column) from the most recent
-  /// successfully-charged Payment, since a landlord previously had no way
-  /// to see when a tenant actually paid at all — unlike [findForTenant],
-  /// this used to leave the `payments` relation out entirely.
+  /// successfully-charged Payment, so the landlord can see when the tenant
+  /// paid.
   ///
   /// A non-Shortlet booking that is still PENDING is an unfinished
   /// checkout (Rent Now pressed, not paid), not a request the landlord can
