@@ -1,128 +1,69 @@
-import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
-import { randomBytes } from 'crypto';
 import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPlan, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
 import { ChatService } from '../chat/chat.service';
 import { formatRent } from '../common/format-rent';
+import { EmailProperty } from '../common/property-email';
 import { assertRentalAvailable } from '../common/rental-availability';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { escapeHtml } from '../common/escape-html';
-import { EmailProperty, propertyEmailDetails } from '../common/property-email';
+import { BookingRefunds } from './booking-refunds';
+import { withMoneyLock } from './money-lock';
+import { PaymentNotices } from './payment-notices';
+import {
+  KOBO_PER_NAIRA,
+  MONTHLY_PAY_WINDOW_DAYS,
+  MS_PER_DAY,
+  PLATFORM_FEE_BPS,
+  RENEWAL_WINDOW_DAYS,
+  addDays,
+  addMonths,
+  fee,
+  generateReference,
+  isLowBalanceError,
+  landlordPayoutMessage,
+  minDate,
+} from './payment-rules';
+import { PayoutSender } from './payout-sender';
+import { stuckPaymentInclude, stuckPaymentsWhere, toStuckPayment } from './stuck-payouts';
 
-/// HomeServant's cut on a normal release (marketplace, rental move-in,
-/// rental renewal, shortlet instant release) — 5%, expressed in basis
-/// points of 10000 to avoid floating point.
-const PLATFORM_FEE_BPS = 500;
-/// The cut withheld specifically on a rental refund issued *before*
-/// move-in — 0.2%, not the normal 5%. Paystack's own processing fee is
-/// simply never returned to the merchant on a refund by default, so the
-/// tenant ends up bearing both cuts automatically without this app having
-/// to compute Paystack's own fee.
-const REFUND_FEE_BPS = 20;
-const BPS_DENOMINATOR = 10000;
+export { LOW_BALANCE_ERROR, isLowBalanceError } from './payment-rules';
 
-/// A rental renewal can only be requested once the current lease is
-/// within this many days of its leaseEndDate (or already past it, as long
-/// as the lease-lifecycle cron hasn't already auto-expired/relisted the
-/// property — see renewBooking).
-const RENEWAL_WINDOW_DAYS = 30;
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-/// Every non-Shortlet rental status between payment and move-in — the
-/// tenant can refund (refundBookingBeforeMoveIn) or the landlord can
-/// reject outright (rejectBookingByLandlord) from any of these.
-const PRE_MOVE_IN_STATUSES: BookingStatus[] = [
-  BookingStatus.PAID_AWAITING_INSPECTION,
-  BookingStatus.INSPECTION_PROPOSED,
-  BookingStatus.INSPECTION_CONFIRMED,
-];
-
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getTime() + days * MS_PER_DAY);
-}
-
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
-}
-
-/// Every kobo/naira placeholder below is Paystack's smallest-unit
-/// convention: Property.price/Product.price/etc are stored in whole Naira
-/// throughout this codebase (matches the "₦" labels in the Flutter admin/
-/// listing screens), so every amount is multiplied by 100 once, right
-/// here, before it's ever handed to Paystack — nowhere else in this
-/// service deals in Naira.
-const KOBO_PER_NAIRA = 100;
-
-/// A monthly tenant can pay the next month from this many days before
-/// it's due.
-const MONTHLY_PAY_WINDOW_DAYS = 7;
-
-function minDate(a: Date, b: Date): Date {
-  return a.getTime() <= b.getTime() ? a : b;
-}
-
-/// The single home for HomeServant's escrow logic: charge in full, hold
-/// in HomeServant's own Paystack balance, and later Transfer the
-/// recipient's 95% share (HomeServant keeps 5%) — never Paystack Split
-/// Payments. Used by both BookingsService (rentals/shortlets) and
-/// MarketplaceOrdersService (order items), so every money-movement rule
-/// lives in one place instead of being re-derived per feature.
-/// How long a payout lock may be held before it's treated as abandoned.
-const PAYOUT_LOCK_MS = 10 * 60 * 1000;
-
-/// Paystack transfer states that mean the money did NOT go out, so a new
-/// attempt (with a fresh reference) is safe. Anything else — success,
-/// pending, processing, otp, queued, received — counts as sent.
-const RETRYABLE_TRANSFER_STATUSES = new Set(['failed', 'reversed', 'abandoned', 'rejected']);
-
-/// Start of the error recorded when a payout can't be sent because
-/// HomeServant's Paystack balance is lower than it. Such payouts are
-/// retried automatically (see retryLowBalancePayouts) once money arrives.
-export const LOW_BALANCE_ERROR = "HomeServant's Paystack balance is too low";
-
-/// Paystack's own wording for a transfer bigger than the balance
-/// ("Your balance is not enough to fulfil this request", "Insufficient
-/// balance"), or ours from the balance check below.
-export function isLowBalanceError(message: string | null | undefined): boolean {
-  return !!message && (message.startsWith(LOW_BALANCE_ERROR) || /balance.*(not enough|insufficient)|insufficient.*balance/i.test(message));
-}
-
-function lowBalanceMessage(availableKobo: number | null, neededKobo: number): string {
-  const naira = (kobo: number) => `NGN ${(kobo / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
-  return (
-    `${LOW_BALANCE_ERROR} to send this payout (${availableKobo === null ? 'balance unknown' : `${naira(availableKobo)} available`}, ` +
-    `${naira(neededKobo)} needed). Payouts are sent from the Paystack balance: fund it, or have Paystack keep collected ` +
-    `payments there instead of settling them to the bank. It's retried automatically every 30 minutes.`
-  );
-}
-
-/// What a landlord is told when a transfer didn't go through first time.
-const DELAYED_PAYOUT_LINE =
-  "Your payout is delayed by a problem sending it to your bank. HomeServant has been alerted and will send it shortly; check your bank details in the app.";
-
-/// What a landlord is told when their payout is held for verification.
-const HELD_PAYOUT_LINE =
-  "HomeServant is holding your payout until your identity is verified. Open your Profile and tap \"Get verified\"; it's released automatically once you are.";
-
+/// HomeServant's escrow: every payment is charged in full, held in
+/// HomeServant's own Paystack balance, and later either sent to the
+/// landlord or vendor (their share, minus HomeServant's 5%) or refunded to
+/// the payer. Paystack Split Payments are never used. Rentals, shortlets
+/// and marketplace orders all go through here, so each money rule lives in
+/// one place.
+///
+/// This class runs each flow (charge, confirm, move in, renew, refund,
+/// retry). The pieces those flows share live beside it: PayoutSender (send
+/// a payout, never twice), BookingRefunds (the one refund flow),
+/// withMoneyLock (one money action per payment at a time), PaymentNotices
+/// (notifications, emails and chat notices) and payment-rules.ts (fees,
+/// dates and wording).
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger('Payments');
+  private readonly notices: PaymentNotices;
+  private readonly payouts: PayoutSender;
+  private readonly refunds: BookingRefunds;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly paystack: PaystackService,
-    private readonly notifications: NotificationsService,
-    private readonly mail: MailService,
-    private readonly chat: ChatService,
+    notifications: NotificationsService,
+    mail: MailService,
+    chat: ChatService,
     private readonly platform: PlatformSettingsService,
-  ) {}
+  ) {
+    this.notices = new PaymentNotices(notifications, mail, chat, this.logger);
+    this.payouts = new PayoutSender(prisma, paystack, platform, this.notices, this.logger);
+    this.refunds = new BookingRefunds(prisma, paystack, this.notices, this.logger);
+  }
 
   // ---------------------------------------------------------------------
   // Marketplace order items
@@ -143,8 +84,8 @@ export class PaymentsService {
     for (const item of items) {
       const amountNaira = item.unitPrice * item.quantity;
       const amountKobo = amountNaira * KOBO_PER_NAIRA;
-      const platformFeeKobo = this.fee(amountKobo, PLATFORM_FEE_BPS);
-      const reference = this.generateReference('mkt');
+      const platformFeeKobo = fee(amountKobo, PLATFORM_FEE_BPS);
+      const reference = generateReference('mkt');
 
       await this.prisma.payment.create({
         data: {
@@ -193,7 +134,7 @@ export class PaymentsService {
       throw new BadRequestException('Payment for this item is not held yet — nothing to release');
     }
 
-    await this.releasePaymentToRecipient(item.payment, {
+    await this.payouts.send(item.payment, {
       bankCode: item.vendor.bankCode,
       accountNumber: item.vendor.accountNumber,
       accountName: item.vendor.accountName,
@@ -202,14 +143,14 @@ export class PaymentsService {
 
     const updated = await this.prisma.marketplaceOrderItem.update({ where: { id: itemId }, data: { status: OrderItemStatus.COMPLETED } });
 
-    await this.notifyBoth(
+    await this.notices.notifyBoth(
       item.vendor.userId,
       undefined,
       NotificationType.MARKETPLACE_ORDER_STATUS,
       'Payment released',
       `The buyer confirmed receipt of ${item.productName} — your payout has been sent.`,
     );
-    await this.notifyBoth(
+    await this.notices.notifyBoth(
       buyerId,
       undefined,
       NotificationType.MARKETPLACE_ORDER_STATUS,
@@ -230,8 +171,8 @@ export class PaymentsService {
     if (!payment || payment.status !== PaymentStatus.PAID_HELD) return;
     // Same guarantees as rent refunds: one money action at a time, and
     // Paystack is asked first whether it was already refunded.
-    await this.withMoneyLock(payment.id, async () => {
-      await this.refundHeldPayment(payment, payment.amount, 'MARKETPLACE');
+    await withMoneyLock(this.prisma, payment.id, async () => {
+      await this.refunds.refundHeldPayment(payment, payment.amount, 'MARKETPLACE');
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: { status: PaymentStatus.REFUNDED, refundedAt: new Date(), platformFeeAmount: 0, refundLastError: null },
@@ -256,7 +197,7 @@ export class PaymentsService {
       return;
     }
 
-    await this.releasePaymentToRecipient(item.payment, {
+    await this.payouts.send(item.payment, {
       bankCode: item.vendor.bankCode,
       accountNumber: item.vendor.accountNumber,
       accountName: item.vendor.accountName,
@@ -264,14 +205,14 @@ export class PaymentsService {
     });
     await this.prisma.marketplaceOrderItem.update({ where: { id: itemId }, data: { status: OrderItemStatus.COMPLETED } });
 
-    await this.notifyBoth(
+    await this.notices.notifyBoth(
       item.vendor.userId,
       undefined,
       NotificationType.MARKETPLACE_ORDER_STATUS,
       'Payment released',
       `Your payout for ${item.productName} was released automatically 7 days after ${item.fulfillment === 'DELIVERY' ? 'shipping' : 'payment'} — the buyer never confirmed receipt.`,
     );
-    await this.notifyBoth(
+    await this.notices.notifyBoth(
       item.order.buyerId,
       undefined,
       NotificationType.MARKETPLACE_ORDER_STATUS,
@@ -484,8 +425,8 @@ export class PaymentsService {
     const amountNaira =
       monthlyNaira ?? (booking.property.category === PropertyCategory.SHORTLET ? priceNaira * (booking.nights ?? 1) : priceNaira);
     const amountKobo = amountNaira * KOBO_PER_NAIRA;
-    const platformFeeKobo = this.fee(amountKobo, PLATFORM_FEE_BPS);
-    const reference = this.generateReference('rent');
+    const platformFeeKobo = fee(amountKobo, PLATFORM_FEE_BPS);
+    const reference = generateReference('rent');
 
     await this.prisma.$transaction([
       this.prisma.payment.create({
@@ -588,11 +529,11 @@ export class PaymentsService {
 
     // Under the money lock, so a refund (tenant, landlord or admin) can't
     // happen at the same moment: whichever comes second is refused.
-    const { outcome, updatedBooking } = await this.withMoneyLock(payment.id, async () => {
+    const { outcome, updatedBooking } = await withMoneyLock(this.prisma, payment.id, async () => {
       const now = await this.prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
       if (now.status !== BookingStatus.INSPECTION_CONFIRMED) throw new BadRequestException('This booking is not awaiting move-in');
       const held = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
-      const outcome = await this.releaseOrHoldForLandlord(held, landlord, `HomeServant rent release — ${booking.property.title}`, true);
+      const outcome = await this.payouts.releaseOrHold(held, landlord, `HomeServant rent release — ${booking.property.title}`, true);
 
       const leaseStart = new Date();
       const leaseEnd = addMonths(leaseStart, rentDurationMonths);
@@ -633,23 +574,25 @@ export class PaymentsService {
       return { outcome, updatedBooking };
     });
 
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Welcome home!',
       `You've moved into ${booking.property.title}. Your tenancy agreement is ready in your booking history.`,
     );
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
       'Tenant moved in',
-      outcome === 'held'
-        ? `Your tenant has moved into ${booking.property.title}. ${HELD_PAYOUT_LINE}`
-        : outcome === 'failed'
-        ? `Your tenant has moved into ${booking.property.title}. ${DELAYED_PAYOUT_LINE}`
-        : `Your tenant has moved into ${booking.property.title} and your payout has been released.`,
+      landlordPayoutMessage(
+        outcome,
+        `Your tenant has moved into ${booking.property.title}`,
+        `Your tenant has moved into ${booking.property.title} and your payout has been released.`,
+      ),
     );
 
     return updatedBooking;
@@ -665,7 +608,7 @@ export class PaymentsService {
   /// Contrast with `rejectBookingByLandlord`, the landlord-initiated
   /// equivalent, which refunds in full.
   async refundBookingBeforeMoveIn(bookingId: string, tenantId: string) {
-    return this.refundBooking(bookingId, 'TENANT', { actorId: tenantId });
+    return this.refunds.refundBooking(bookingId, 'TENANT', { actorId: tenantId });
   }
 
   /// `POST /bookings/:id/reject` — the landlord's own distinct
@@ -675,7 +618,7 @@ export class PaymentsService {
   /// which keeps the 0.2% cut), since this is the landlord's decision, not
   /// the tenant's.
   async rejectBookingByLandlord(bookingId: string, landlordId: string) {
-    return this.refundBooking(bookingId, 'LANDLORD', { actorId: landlordId });
+    return this.refunds.refundBooking(bookingId, 'LANDLORD', { actorId: landlordId });
   }
 
   /// Super admin refund from the Payouts screen: full refund of money
@@ -687,210 +630,7 @@ export class PaymentsService {
     if (!payment?.bookingId || payment.purpose !== PaymentPurpose.RENTAL_BOOKING) throw new NotFoundException('Payment not found');
     const trimmed = reason.trim();
     if (trimmed.length < 10) throw new BadRequestException('Give a reason (at least 10 characters); the tenant and landlord see it');
-    return this.refundBooking(payment.bookingId, 'ADMIN', { actorId: adminId, reason: trimmed });
-  }
-
-  /// One refund flow for everyone, so the same guarantees apply to all:
-  ///  - the booking's state and the held payment are re-checked *inside*
-  ///    the money lock, so a refund can't overlap a move-in payout, another
-  ///    refund, or a retry (whoever is second is told it's in progress or
-  ///    already done);
-  ///  - Paystack is asked first whether this charge was already refunded
-  ///    (see [refundHeldPayment]), so it is never refunded twice;
-  ///  - once refunded, the booking is REFUNDED/DECLINED and the payment
-  ///    REFUNDED, which every refund path checks first.
-  /// TENANT: before move-in, keeps the 0.2% fee. LANDLORD: before move-in,
-  /// full refund, booking DECLINED. ADMIN: full refund, before move-in or
-  /// before a shortlet stay starts.
-  private async refundBooking(
-    bookingId: string,
-    kind: 'TENANT' | 'LANDLORD' | 'ADMIN',
-    opts: { actorId: string; reason?: string },
-  ) {
-    const booking = await this.prisma.booking.findUnique({ where: { id: bookingId }, include: { property: true, tenant: true } });
-    if (!booking) throw new NotFoundException('Booking not found');
-    if (kind === 'TENANT' && booking.tenantId !== opts.actorId) throw new ForbiddenException('Not your booking');
-    if (kind === 'LANDLORD' && booking.property.landlordId !== opts.actorId) {
-      throw new ForbiddenException('You do not own the property this booking is for');
-    }
-    const isShortlet = booking.property.category === PropertyCategory.SHORTLET;
-    if (isShortlet && kind === 'TENANT') throw new BadRequestException('Shortlet payments release instantly and cannot be refunded through this action');
-    if (isShortlet && kind === 'LANDLORD') throw new BadRequestException('Shortlet bookings are handled through accept/decline, not this action');
-
-    const payment = await this.prisma.payment.findFirst({ where: { bookingId }, orderBy: { createdAt: 'desc' } });
-    if (!payment) throw new BadRequestException('No payment found for this booking');
-    if (payment.status === PaymentStatus.REFUNDED) throw new BadRequestException('This payment has already been refunded');
-    if (payment.status !== PaymentStatus.PAID_HELD) {
-      throw new BadRequestException(
-        payment.status === PaymentStatus.RELEASED ? 'This payment has already been paid out to the landlord' : 'No held payment found for this booking',
-      );
-    }
-
-    const refundAmountKobo = kind === 'TENANT' ? payment.amount - this.fee(payment.amount, REFUND_FEE_BPS) : payment.amount;
-    const updated = await this.withMoneyLock(payment.id, async () => {
-      // Re-check now that nothing else can move this money.
-      const now = await this.prisma.booking.findUniqueOrThrow({ where: { id: bookingId } });
-      const stillHeld = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
-      if (stillHeld.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment has already been refunded or paid out');
-      const refundable = isShortlet
-        ? now.status === BookingStatus.ACCEPTED ||
-          (now.status === BookingStatus.PAID && !!now.leaseStartDate && now.leaseStartDate > new Date())
-        : PRE_MOVE_IN_STATUSES.includes(now.status);
-      if (!refundable) {
-        throw new BadRequestException(
-          kind === 'LANDLORD'
-            ? 'This booking can no longer be rejected'
-            : isShortlet
-              ? 'This stay has already started, so it can no longer be refunded'
-              : 'Only a paid booking that hasn’t been moved into yet can be refunded',
-        );
-      }
-
-      if (kind === 'ADMIN') {
-        // Kept even if the refund fails, so "Retry refund" can reuse it.
-        await this.prisma.payment.update({ where: { id: payment.id }, data: { refundReason: opts.reason, refundedById: opts.actorId } });
-      }
-      await this.refundHeldPayment(stillHeld, refundAmountKobo, kind);
-      const [updatedBooking] = await this.prisma.$transaction([
-        this.prisma.booking.update({
-          where: { id: bookingId },
-          data: { status: kind === 'LANDLORD' ? BookingStatus.DECLINED : BookingStatus.REFUNDED },
-        }),
-        this.prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status: PaymentStatus.REFUNDED,
-            refundedAt: new Date(),
-            platformFeeAmount: payment.amount - refundAmountKobo,
-            heldForVerificationAt: null,
-            refundLastError: null,
-            payoutLastError: null,
-            ...(kind === 'ADMIN' ? { refundedById: opts.actorId, refundReason: opts.reason } : {}),
-          },
-        }),
-      ]);
-      return updatedBooking;
-    });
-
-    const landlord = await this.prisma.user.findUnique({ where: { id: booking.property.landlordId }, select: { id: true, email: true } });
-    const title = booking.property.title;
-    if (kind === 'TENANT') {
-      // Messaging between them closes on a refund (ChatService.landlordTenantBlockReason);
-      // say so in their existing chat, if they have one.
-      await this.postBookingSystemMessage(
-        booking,
-        `Refund initiated by the tenant for ${title}. Further messaging is no longer available unless the tenant books and pays again.`,
-        false,
-      );
-      await this.notifyAboutBooking(booking, booking.tenantId, booking.tenant.email, NotificationType.BOOKING_STATUS, 'Refund issued', `Your payment for ${title} has been refunded.`);
-      if (landlord) {
-        await this.notifyBoth(
-          landlord.id,
-          landlord.email,
-          NotificationType.BOOKING_STATUS,
-          'Booking refunded',
-          `The tenant was refunded for ${title} before moving in. The listing remains available.`,
-        );
-      }
-    } else if (kind === 'LANDLORD') {
-      // The tenant hears about it in Messages too (a thread is started if
-      // they never chatted), and the notification opens that chat.
-      const threadId = await this.postBookingSystemMessage(
-        booking,
-        `The landlord rejected this booking for ${title} and the tenant has been fully refunded. Further messaging is no longer available unless the tenant books and pays again.`,
-        true,
-      );
-      await this.notifyAboutBooking(booking, 
-        booking.tenantId,
-        booking.tenant.email,
-        NotificationType.BOOKING_STATUS,
-        'Booking rejected',
-        `The landlord was unable to proceed with your booking for ${title}. You've been fully refunded.`,
-        threadId ?? undefined,
-
-      );
-    } else {
-      const threadId = await this.postBookingSystemMessage(
-        booking,
-        `HomeServant refunded the tenant in full for ${title}. Reason: ${opts.reason}. Further messaging is no longer available unless the tenant books and pays again.`,
-        true,
-      );
-      await this.notifyAboutBooking(booking, 
-        booking.tenantId,
-        booking.tenant.email,
-        NotificationType.BOOKING_STATUS,
-        'You have been refunded',
-        `HomeServant has refunded your payment for ${title} in full. Reason: ${opts.reason}`,
-        threadId ?? undefined,
-
-      );
-      if (landlord) {
-        await this.notifyBoth(
-          landlord.id,
-          landlord.email,
-          NotificationType.BOOKING_STATUS,
-          'Booking refunded by HomeServant',
-          `HomeServant refunded the tenant for ${title}. Reason: ${opts.reason}`,
-        );
-      }
-    }
-    return updated;
-  }
-
-  /// Sends a refund for a held payment (the caller holds the money lock and
-  /// marks it REFUNDED). Paystack is asked first how much of the charge is
-  /// already refunded: if any is, that refund went through earlier (e.g. our
-  /// own write failed afterwards), so nothing is sent again. A failure is
-  /// kept on the payment (what was asked, by whom, and why it failed) for
-  /// the admin Payouts screen.
-  private async refundHeldPayment(payment: Payment, amountKobo: number, requestedBy: string): Promise<void> {
-    try {
-      const already = await this.paystack.refundedSoFar(payment.paystackReference);
-      if (already > 0) {
-        this.logger.warn(`Refund for payment ${payment.id}: Paystack already has ${already} kobo refunded; not refunding again`);
-        return;
-      }
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { refundRequestedBy: requestedBy, refundRequestedAmount: amountKobo, refundLastAttemptAt: new Date() },
-      });
-      await this.paystack.refundTransaction(payment.paystackReference, amountKobo === payment.amount ? undefined : amountKobo);
-    } catch (error) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          refundRequestedBy: requestedBy,
-          refundRequestedAmount: amountKobo,
-          refundLastAttemptAt: new Date(),
-          refundLastError: (error as Error).message.slice(0, 500),
-        },
-      });
-      throw error;
-    }
-  }
-
-  /// Runs [fn] while holding this payment's money lock (payout OR refund —
-  /// one at a time). Throws if another money action holds it.
-  private async withMoneyLock<T>(paymentId: string, fn: () => Promise<T>): Promise<T> {
-    const claimed = await this.prisma.payment.updateMany({
-      where: {
-        id: paymentId,
-        status: PaymentStatus.PAID_HELD,
-        OR: [{ moneyLockedAt: null }, { moneyLockedAt: { lt: new Date(Date.now() - PAYOUT_LOCK_MS) } }],
-      },
-      data: { moneyLockedAt: new Date() },
-    });
-    if (claimed.count === 0) {
-      const current = await this.prisma.payment.findUnique({ where: { id: paymentId }, select: { status: true } });
-      if (current?.status === PaymentStatus.REFUNDED) throw new BadRequestException('This payment has already been refunded');
-      if (current?.status === PaymentStatus.RELEASED) throw new BadRequestException('This payment has already been paid out');
-      throw new ConflictException('Another payment action is in progress for this booking. Try again in a moment.');
-    }
-    try {
-      return await fn();
-    } finally {
-      await this.prisma.payment.update({ where: { id: paymentId }, data: { moneyLockedAt: null } });
-    }
+    return this.refunds.refundBooking(payment.bookingId, 'ADMIN', { actorId: adminId, reason: trimmed });
   }
 
   // ---------------------------------------------------------------------
@@ -935,14 +675,14 @@ export class PaymentsService {
       this.logger.error(`Payment ${payment.id} paid but its order item ${payment.orderItemId} is gone`);
       return;
     }
-    await this.notifyBoth(
+    await this.notices.notifyBoth(
       item.order.buyerId,
       undefined,
       NotificationType.MARKETPLACE_ORDER_STATUS,
       'Payment held',
       `Your payment for ${item.productName} is confirmed and held until you confirm delivery.`,
     );
-    await this.notifyBoth(
+    await this.notices.notifyBoth(
       item.vendor.userId,
       undefined,
       NotificationType.MARKETPLACE_ORDER_STATUS,
@@ -985,28 +725,28 @@ export class PaymentsService {
     await this.prisma.booking.update({ where: { id: booking.id }, data: { status: BookingStatus.PAID_AWAITING_INSPECTION } });
     // Opens (or reuses) their chat so both notifications can go straight to
     // it: the tenant can message the landlord from the payment notification.
-    const threadId = await this.postBookingSystemMessage(
+    const threadId = await this.notices.postBookingSystemMessage(
       booking,
       `Payment confirmed for ${booking.property.title}. The money is held by HomeServant until the tenant moves in. You can now message each other to arrange the inspection.`,
       true,
     );
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Payment confirmed',
       `Your payment for ${booking.property.title} is confirmed and held. Message the landlord, book an inspection whenever you're ready, or request a refund, from your booking history.`,
       threadId ?? undefined,
-
     );
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       booking.property.landlordId,
       undefined,
       NotificationType.BOOKING_STATUS,
       'Tenant paid',
       `A tenant paid for ${booking.property.title}. Funds are held until an inspection is done and they confirm move-in.`,
       threadId ?? undefined,
-
     );
   }
 
@@ -1022,7 +762,7 @@ export class PaymentsService {
     }
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
 
-    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant shortlet release — ${booking.property.title}`);
+    const outcome = await this.payouts.releaseOrHold(payment, landlord, `HomeServant shortlet release — ${booking.property.title}`);
 
     const leaseStart = booking.requestedDate;
     const leaseEnd = addDays(leaseStart, booking.nights);
@@ -1031,39 +771,35 @@ export class PaymentsService {
       data: { status: BookingStatus.PAID, leaseStartDate: leaseStart, leaseEndDate: leaseEnd },
     });
 
-    const threadId = await this.postBookingSystemMessage(
+    const threadId = await this.notices.postBookingSystemMessage(
       booking,
       `Payment confirmed for the stay at ${booking.property.title}. You can now message each other about check-in.`,
       true,
     );
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Booking confirmed',
       `Your shortlet stay at ${booking.property.title} is confirmed and paid. Message the landlord about check-in from here.`,
       threadId ?? undefined,
-
     );
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
       'Shortlet booked and paid',
-      outcome === 'held'
-        ? `${booking.property.title} was booked and paid. ${HELD_PAYOUT_LINE}`
-        : outcome === 'failed'
-        ? `${booking.property.title} was booked and paid. ${DELAYED_PAYOUT_LINE}`
-        : `${booking.property.title} was booked and your payout has been released.`,
+      landlordPayoutMessage(
+        outcome,
+        `${booking.property.title} was booked and paid`,
+        `${booking.property.title} was booked and your payout has been released.`,
+      ),
       threadId ?? undefined,
-
     );
   }
 
-  /// Renewal: like move-in, no hold — release happens immediately since
-  /// the tenant is already living there. Extends leaseEndDate from its
-  /// *current* value (not from "now"), and resets the reminder de-dupe
-  /// field so the next cycle's 30/15/0-day reminders can fire again.
   /// A monthly tenant's payment for the next month cleared: it goes
   /// straight to the landlord (the tenant already lives there, like a
   /// renewal), and the rent is paid a month further.
@@ -1072,7 +808,7 @@ export class PaymentsService {
     booking: { id: string; rentPaidThrough: Date | null; leaseEndDate: Date | null; property: EmailProperty & { landlordId: string; title: string }; tenantId: string; tenant: { email: string } },
   ): Promise<void> {
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
-    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant monthly rent — ${booking.property.title}`);
+    const outcome = await this.payouts.releaseOrHold(payment, landlord, `HomeServant monthly rent — ${booking.property.title}`);
     const paidThrough = minDate(addMonths(booking.rentPaidThrough!, 1), booking.leaseEndDate!);
     await this.prisma.booking.update({
       where: { id: booking.id },
@@ -1080,26 +816,33 @@ export class PaymentsService {
     });
     const until = paidThrough.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     const naira = `₦${Math.round(payment.amount / KOBO_PER_NAIRA).toLocaleString('en-US')}`;
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Monthly rent paid',
       `Thanks — your rent for ${booking.property.title} is paid until ${until}.`,
     );
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
       'Monthly rent received',
-      outcome === 'held'
-        ? `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until}). ${HELD_PAYOUT_LINE}`
-        : outcome === 'failed'
-          ? `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until}). ${DELAYED_PAYOUT_LINE}`
-          : `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until}) and your payout has been released.`,
+      landlordPayoutMessage(
+        outcome,
+        `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until})`,
+        `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until}) and your payout has been released.`,
+      ),
     );
   }
 
+  /// A renewal payment cleared: like a monthly payment, it goes straight to
+  /// the landlord since the tenant already lives there. Extends the lease
+  /// from its current end date (not from today), makes the rent paid the
+  /// booking's price and the tenancy agreement's rent, and resets the
+  /// reminder fields so the next term's 30/15/0-day reminders fire.
   private async releaseRenewal(payment: Payment, booking: { id: string; propertyId: string; leaseEndDate: Date | null; paymentPlan?: PaymentPlan; property: EmailProperty & { landlordId: string; title: string; rentDurationMonths: number | null }; tenantId: string; tenant: { email: string } }): Promise<void> {
     if (!booking.leaseEndDate || !booking.property.rentDurationMonths) {
       this.logger.error(`Renewal payment ${payment.id} succeeded but booking ${booking.id} is missing leaseEndDate/rentDurationMonths`);
@@ -1107,7 +850,7 @@ export class PaymentsService {
     }
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
 
-    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant rent renewal release — ${booking.property.title}`);
+    const outcome = await this.payouts.releaseOrHold(payment, landlord, `HomeServant rent renewal release — ${booking.property.title}`);
 
     const newLeaseEnd = addMonths(booking.leaseEndDate, booking.property.rentDurationMonths);
     // The rent actually paid for the new term (a renewal is never a
@@ -1147,366 +890,77 @@ export class PaymentsService {
       }),
     ]);
 
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Lease renewed',
       `Your lease for ${booking.property.title} has been renewed until ${newLeaseEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} at ${formatRent(rentPaid, priceUnit)}. Your tenancy agreement has been updated.`,
     );
-    await this.notifyAboutBooking(booking, 
+    await this.notices.notifyAboutBooking(
+      booking,
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
       'Renewal paid',
-      outcome === 'held'
-        ? `Your tenant renewed their lease for ${booking.property.title}. ${HELD_PAYOUT_LINE}`
-        : outcome === 'failed'
-        ? `Your tenant renewed their lease for ${booking.property.title}. ${DELAYED_PAYOUT_LINE}`
-        : `Your tenant renewed their lease for ${booking.property.title} and your payout has been released.`,
+      landlordPayoutMessage(
+        outcome,
+        `Your tenant renewed their lease for ${booking.property.title}`,
+        `Your tenant renewed their lease for ${booking.property.title} and your payout has been released.`,
+      ),
     );
   }
 
   // ---------------------------------------------------------------------
-  // Shared helpers
+  // Payouts (see PayoutSender)
   // ---------------------------------------------------------------------
 
-  /// Sends the recipient's share (amount - platformFeeAmount) and marks the
-  /// Payment RELEASED — built so a payment can never be paid out twice:
-  ///   1. a database lock lets only one release run per payment;
-  ///   2. Paystack is asked first whether the last transfer for this payment
-  ///      already exists — if it was sent (or is on its way) it's recorded
-  ///      as paid and nothing is sent; a new reference is only used when
-  ///      Paystack confirms the previous one failed or was reversed;
-  ///   3. the reference is saved before sending, so a crash after Paystack
-  ///      accepts it is caught by step 2 next time.
-  /// Throws on failure (the error is kept on the Payment for the admin
-  /// Payouts screen). Rent payouts go through releaseOrHoldForLandlord,
-  /// which turns a failure into 'failed' so the tenant's side still goes
-  /// ahead; marketplace confirm-received still surfaces the error.
-  private async releasePaymentToRecipient(
-    payment: Payment,
-    opts: { bankCode: string | null; accountNumber: string | null; accountName: string | null; reason: string },
-    lockHeld = false,
-  ): Promise<void> {
-    if (!lockHeld) {
-      const now = await this.prisma.payment.findUnique({ where: { id: payment.id }, select: { status: true } });
-      if (now?.status === PaymentStatus.RELEASED) return; // already paid — nothing to do
-      return this.withMoneyLock(payment.id, () => this.releasePaymentToRecipient(payment, opts, true));
-    }
-    try {
-      if (!opts.bankCode || !opts.accountNumber || !opts.accountName) {
-        throw new InternalServerErrorException('No payout bank account on file for the recipient');
-      }
-      const current = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
-      if (current.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment is no longer held');
-
-      // Never pay twice: ask Paystack whether the last transfer for this
-      // payment already exists before sending anything. (Payments released
-      // before this tracking existed used their own id.)
-      const lastReference = current.payoutReference ?? payment.id;
-      const existing = await this.paystack.verifyTransfer(lastReference);
-      if (existing !== 'not_found' && !RETRYABLE_TRANSFER_STATUSES.has(existing)) {
-        // Sent, or on its way (pending/processing/otp...): record it, don't resend.
-        this.logger.warn(`Payout ${payment.id}: transfer ${lastReference} already exists at Paystack (${existing}); not sending again`);
-        await this.markReleased(payment.id, lastReference);
-        return;
-      }
-      // A reference Paystack has never seen can be reused; a failed or
-      // reversed one can't, so the next attempt gets a fresh one.
-      const reference = existing === 'not_found' ? lastReference : `${payment.id}-r${current.payoutAttempts + 1}`;
-
-      let recipientCode = current.transferRecipientCode;
-      if (!recipientCode) {
-        recipientCode = await this.paystack.createTransferRecipient(opts.bankCode, opts.accountNumber, opts.accountName);
-        await this.prisma.payment.update({ where: { id: payment.id }, data: { transferRecipientCode: recipientCode } });
-      }
-
-      // Payouts come out of HomeServant's Paystack balance. Check it first,
-      // so a payout it can't cover isn't sent (and counted as an attempt)
-      // only to be refused. If the balance can't be read, send anyway —
-      // Paystack still refuses what it can't cover.
-      const amountKobo = payment.amount - payment.platformFeeAmount;
-      const available = await this.paystackBalanceKobo();
-      if (available !== null && available < amountKobo) {
-        throw new BadRequestException(lowBalanceMessage(available, amountKobo));
-      }
-
-      // Record the reference BEFORE sending, so if anything goes wrong after
-      // Paystack accepts it, the next attempt finds it above.
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { payoutReference: reference, payoutAttempts: { increment: 1 }, payoutLastAttemptAt: new Date() },
-      });
-      try {
-        await this.paystack.initiateTransfer(amountKobo, recipientCode, opts.reason, reference);
-      } catch (error) {
-        if (isLowBalanceError((error as Error).message)) throw new BadRequestException(lowBalanceMessage(available, amountKobo));
-        throw error;
-      }
-      await this.markReleased(payment.id, reference);
-    } catch (error) {
-      await this.prisma.payment.updateMany({
-        where: { id: payment.id, status: PaymentStatus.PAID_HELD },
-        data: { payoutLastError: (error as Error).message.slice(0, 500) },
-      });
-      throw error;
-    }
+  /// Paystack's `transfer.failed` / `transfer.reversed` webhook; see
+  /// PayoutSender.handleTransferFailed.
+  handleTransferFailed(reference: string, outcome: 'failed' | 'reversed', reason?: string): Promise<void> {
+    return this.payouts.handleTransferFailed(reference, outcome, reason);
   }
 
-  private async markReleased(paymentId: string, reference: string): Promise<void> {
-    await this.prisma.payment.update({
-      where: { id: paymentId },
-      data: {
-        status: PaymentStatus.RELEASED,
-        releasedAt: new Date(),
-        payoutReference: reference,
-        heldForVerificationAt: null,
-        payoutLastError: null,
-      },
-    });
+  /// Sends every payout held until [landlordId] was verified. Returns how
+  /// many were sent.
+  releaseHeldPayoutsForLandlord(landlordId: string): Promise<number> {
+    return this.payouts.releaseHeldForLandlord(landlordId);
   }
 
-  /// Paystack's `transfer.failed` / `transfer.reversed` webhook: the money
-  /// never reached (or came back from) the landlord, so the payment is
-  /// owed again and shows on the admin Payouts screen. A retry is safe:
-  /// Paystack confirms that reference failed, so a fresh one is used.
-  async handleTransferFailed(reference: string, outcome: 'failed' | 'reversed', reason?: string): Promise<void> {
-    const payment = await this.prisma.payment.findUnique({ where: { payoutReference: reference } });
-    if (!payment || payment.status !== PaymentStatus.RELEASED) return;
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: PaymentStatus.PAID_HELD,
-        releasedAt: null,
-        moneyLockedAt: null,
-        payoutLastError: `Transfer ${outcome} at the bank${reason ? `: ${reason}` : ''}`.slice(0, 500),
-      },
-    });
-    this.logger.error(`Payout ${payment.id} (${reference}) ${outcome} after release; back to owed`);
-  }
-
-  // ---------------------------------------------------------------------
-  // Payout hold for unverified landlords (Platform Controls)
-  // ---------------------------------------------------------------------
-
-  /// Pays [landlord] now (or reports 'failed' — see below) — or, when Platform Controls has "Pay unverified
-  /// landlords" off and they aren't verified, leaves the money held with
-  /// HomeServant (marked [heldForVerificationAt]) for release later. The
-  /// tenant's side (move-in, stay, renewal) goes ahead either way.
-  private async releaseOrHoldForLandlord(
-    payment: Payment,
-    landlord: { id: string; bankCode: string | null; accountNumber: string | null; accountName: string | null },
-    reason: string,
-    lockHeld = false,
-  ): Promise<'released' | 'held' | 'failed'> {
-    if (!(await this.platform.payUnverifiedLandlords())) {
-      const verification = await this.prisma.identityVerification.findUnique({ where: { userId: landlord.id }, select: { status: true } });
-      if (verification?.status !== VerificationStatus.APPROVED) {
-        await this.prisma.payment.update({ where: { id: payment.id }, data: { heldForVerificationAt: new Date() } });
-        this.logger.log(`Payout for payment ${payment.id} held until landlord ${landlord.id} is verified`);
-        return 'held';
-      }
-    }
-    try {
-      await this.releasePaymentToRecipient(payment, { ...landlord, reason }, lockHeld);
-      return 'released';
-    } catch (err) {
-      // The tenant's side still goes ahead; the payout waits on the admin
-      // Payouts screen (with this error) for a safe retry.
-      this.logger.error(`Payout for payment ${payment.id} failed: ${(err as Error).message}`);
-      return 'failed';
-    }
-  }
-
-  /// Releases every payout held for [landlordId]'s verification — called when
-  /// they're verified, or for everyone when the rule is switched off. A
-  /// transfer that fails stays held (logged) for the next attempt. Returns
-  /// how many were released.
-  async releaseHeldPayoutsForLandlord(landlordId: string): Promise<number> {
-    const landlord = await this.prisma.user.findUnique({
-      where: { id: landlordId },
-      select: { id: true, email: true, bankCode: true, accountNumber: true, accountName: true },
-    });
-    if (!landlord) return 0;
-    const held = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null }, booking: { property: { landlordId } } },
-      include: { booking: { select: { property: { select: { title: true } } } } },
-    });
-    let released = 0;
-    let totalKobo = 0;
-    for (const payment of held) {
-      try {
-        await this.releasePaymentToRecipient(payment, {
-          ...landlord,
-          reason: `HomeServant held payout release — ${payment.booking?.property.title ?? 'rent'}`,
-        });
-        released++;
-        totalKobo += payment.amount - payment.platformFeeAmount;
-      } catch (err) {
-        this.logger.error(`Could not release held payout ${payment.id} for landlord ${landlordId}: ${(err as Error).message}`);
-      }
-    }
-    if (released > 0) {
-      const naira = (totalKobo / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 });
-      await this.notifyBoth(
-        landlord.id,
-        landlord.email,
-        NotificationType.BOOKING_STATUS,
-        'Your held payouts have been released',
-        `${released} payout${released === 1 ? '' : 's'} (NGN ${naira}) held by HomeServant ${released === 1 ? 'has' : 'have'} been sent to your bank account.`,
-      );
-    }
-    return released;
-  }
-
-  /// Every landlord with held payouts — used when "Pay unverified
-  /// landlords" is switched back on.
-  async releaseAllHeldPayouts(): Promise<number> {
-    const rows = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null } },
-      select: { booking: { select: { property: { select: { landlordId: true } } } } },
-    });
-    const landlordIds = [...new Set(rows.map((r) => r.booking?.property.landlordId).filter((id): id is string => !!id))];
-    let released = 0;
-    for (const id of landlordIds) released += await this.releaseHeldPayoutsForLandlord(id);
-    return released;
+  /// Sends every held payout, for every landlord: used when "Pay
+  /// unverified landlords" is switched back on.
+  releaseAllHeldPayouts(): Promise<number> {
+    return this.payouts.releaseAllHeld();
   }
 
   // ---------------------------------------------------------------------
   // Admin: Payouts needing attention
   // ---------------------------------------------------------------------
 
-  /// Rent payouts owed to a landlord that haven't gone out: held for
-  /// verification, a transfer that failed (or failed/reversed at the bank
-  /// later), or — from before failures were recorded — a shortlet whose
-  /// instant payout failed and whose stay was left unconfirmed. Escrow that
-  /// is simply waiting for a tenant to move in is NOT listed.
+  /// Rows for the admin Payouts & Refunds screen, oldest first; see
+  /// stuck-payouts.ts for what's listed and why.
   async stuckPayouts() {
-    const legacyCutoff = new Date(Date.now() - 30 * 60 * 1000);
     const rows = await this.prisma.payment.findMany({
-      where: {
-        purpose: PaymentPurpose.RENTAL_BOOKING,
-        status: PaymentStatus.PAID_HELD,
-        OR: [
-          { heldForVerificationAt: { not: null } },
-          { payoutLastError: { not: null } },
-          { refundLastError: { not: null } },
-          {
-            paidAt: { lt: legacyCutoff },
-            booking: { status: BookingStatus.ACCEPTED, property: { category: PropertyCategory.SHORTLET } },
-          },
-        ],
-      },
-      include: {
-        booking: {
-          select: {
-            id: true,
-            status: true,
-            leaseStartDate: true,
-            property: { select: { id: true, title: true, category: true } },
-            tenant: { select: { id: true, fullName: true, email: true } },
-          },
-        },
-        recipient: {
-          select: { id: true, fullName: true, email: true, bankName: true, accountNumber: true, identityVerification: { select: { status: true } } },
-        },
-      },
+      where: stuckPaymentsWhere(),
+      include: stuckPaymentInclude,
       orderBy: { paidAt: 'asc' },
       take: 300,
     });
     const payUnverified = await this.platform.payUnverifiedLandlords();
-    return rows.map((p) => {
-      const verified = p.recipient.identityVerification?.status === VerificationStatus.APPROVED;
-      const waitingForVerification = !payUnverified && !verified;
-      const bookingStatus = p.booking?.status;
-      const isShortlet = p.booking?.property.category === PropertyCategory.SHORTLET;
-      // Money still held for a tenant who hasn't moved in / whose stay
-      // hasn't started: an admin may refund them (see refundBooking).
-      const tenantRefundable = isShortlet
-        ? bookingStatus === BookingStatus.ACCEPTED ||
-          (bookingStatus === BookingStatus.PAID && !!p.booking?.leaseStartDate && p.booking.leaseStartDate > new Date())
-        : !!bookingStatus && PRE_MOVE_IN_STATUSES.includes(bookingStatus);
-      if (p.refundLastError) {
-        return {
-          kind: 'REFUND' as const,
-          paymentId: p.id,
-          amountKobo: p.refundRequestedAmount ?? p.amount,
-          paidAt: p.paidAt,
-          heldSince: p.refundLastAttemptAt ?? p.paidAt,
-          reason: 'REFUND_FAILED',
-          lastError: p.refundLastError,
-          requestedBy: p.refundRequestedBy,
-          attempts: 0,
-          lastAttemptAt: p.refundLastAttemptAt,
-          inProgress: !!p.moneyLockedAt && p.moneyLockedAt > new Date(Date.now() - PAYOUT_LOCK_MS),
-          canRetry: false,
-          canRetryRefund: tenantRefundable,
-          canRefundTenant: false,
-          landlord: {
-            id: p.recipient.id,
-            name: p.recipient.fullName || p.recipient.email,
-            email: p.recipient.email,
-            bankName: p.recipient.bankName,
-            accountLast4: p.recipient.accountNumber?.slice(-4) ?? null,
-            verified,
-          },
-          property: p.booking?.property ?? null,
-          tenant: p.booking?.tenant ?? null,
-          bookingId: p.booking?.id ?? null,
-        };
-      }
-      const reason = waitingForVerification
-        ? 'AWAITING_VERIFICATION'
-        : !p.recipient.accountNumber
-          ? 'NO_BANK_ACCOUNT'
-          : p.payoutLastError || !p.heldForVerificationAt
-            ? 'FAILED'
-            : 'READY'; // held for verification, and the rule no longer applies
-      return {
-        kind: 'PAYOUT' as const,
-        paymentId: p.id,
-        amountKobo: p.amount - p.platformFeeAmount,
-        paidAt: p.paidAt,
-        heldSince: p.heldForVerificationAt ?? p.payoutLastAttemptAt ?? p.paidAt,
-        reason,
-        lastError: p.payoutLastError ?? (p.heldForVerificationAt ? null : "The instant payout failed (details weren't recorded at the time)"),
-        attempts: p.payoutAttempts,
-        lastAttemptAt: p.payoutLastAttemptAt,
-        inProgress: !!p.moneyLockedAt && p.moneyLockedAt > new Date(Date.now() - PAYOUT_LOCK_MS),
-        requestedBy: null,
-        canRetry: !waitingForVerification && !!p.recipient.accountNumber,
-        canRetryRefund: false,
-        canRefundTenant: tenantRefundable,
-        landlord: {
-          id: p.recipient.id,
-          name: p.recipient.fullName || p.recipient.email,
-          email: p.recipient.email,
-          bankName: p.recipient.bankName,
-          accountLast4: p.recipient.accountNumber?.slice(-4) ?? null,
-          verified,
-        },
-        property: p.booking?.property ?? null,
-        tenant: p.booking?.tenant ?? null,
-        bookingId: p.booking?.id ?? null,
-      };
-    });
+    return rows.map((p) => toStuckPayment(p, payUnverified));
   }
 
-  /// HomeServant's current Paystack balance, for the admin Payouts screen
-  /// (null if Paystack can't be asked right now).
-  /// 'test' or 'live' (or 'unknown'): which Paystack balance the payouts
-  /// come from — see PaystackService.mode.
+  /// 'test' or 'live' (or 'unknown'): which Paystack balance payouts come
+  /// from; see PaystackService.mode.
   paystackMode(): 'test' | 'live' | 'unknown' {
     return this.paystack.mode ?? 'unknown';
   }
 
-  async paystackBalanceKobo(): Promise<number | null> {
-    try {
-      return await this.paystack.balanceKobo();
-    } catch {
-      return null;
-    }
+  /// HomeServant's Paystack balance, for the admin Payouts screen (null if
+  /// Paystack can't be asked right now).
+  paystackBalanceKobo(): Promise<number | null> {
+    return this.payouts.balanceKobo();
   }
 
   /// Payouts that failed only because the Paystack balance was too low are
@@ -1551,10 +1005,10 @@ export class PaymentsService {
     if (!payment?.booking || payment.purpose !== PaymentPurpose.RENTAL_BOOKING) throw new NotFoundException('Payment not found');
     if (payment.status === PaymentStatus.REFUNDED) return { status: 'ALREADY_REFUNDED' as const };
     const kind = payment.refundRequestedBy;
-    if (kind === 'TENANT') await this.refundBooking(payment.booking.id, 'TENANT', { actorId: payment.booking.tenantId });
-    else if (kind === 'LANDLORD') await this.refundBooking(payment.booking.id, 'LANDLORD', { actorId: payment.booking.property.landlordId });
+    if (kind === 'TENANT') await this.refunds.refundBooking(payment.booking.id, 'TENANT', { actorId: payment.booking.tenantId });
+    else if (kind === 'LANDLORD') await this.refunds.refundBooking(payment.booking.id, 'LANDLORD', { actorId: payment.booking.property.landlordId });
     else if (kind === 'ADMIN') {
-      await this.refundBooking(payment.booking.id, 'ADMIN', { actorId: adminId, reason: payment.refundReason ?? 'Retrying a refund that failed' });
+      await this.refunds.refundBooking(payment.booking.id, 'ADMIN', { actorId: adminId, reason: payment.refundReason ?? 'Retrying a refund that failed' });
     } else throw new BadRequestException('There is no failed refund to retry for this payment');
     return { status: 'REFUNDED' as const };
   }
@@ -1592,14 +1046,15 @@ export class PaymentsService {
       // Also confirms the stay that the earlier failure left unconfirmed.
       await this.releaseShortletInstant(payment, booking);
     } else {
-      await this.releasePaymentToRecipient(payment, {
+      await this.payouts.send(payment, {
         bankCode: landlord.bankCode,
         accountNumber: landlord.accountNumber,
         accountName: landlord.accountName,
         reason: `HomeServant payout — ${booking.property.title}`,
       });
       const naira = ((payment.amount - payment.platformFeeAmount) / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 });
-      await this.notifyAboutBooking(booking, 
+      await this.notices.notifyAboutBooking(
+      booking,
         landlord.id,
         landlord.email,
         NotificationType.BOOKING_STATUS,
@@ -1615,81 +1070,7 @@ export class PaymentsService {
   }
 
   /// For Platform Controls: how much is currently held.
-  async heldPayoutStats(): Promise<{ count: number; totalKobo: number; landlords: number }> {
-    const rows = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null } },
-      select: { amount: true, platformFeeAmount: true, booking: { select: { property: { select: { landlordId: true } } } } },
-    });
-    return {
-      count: rows.length,
-      totalKobo: rows.reduce((sum, r) => sum + r.amount - r.platformFeeAmount, 0),
-      landlords: new Set(rows.map((r) => r.booking?.property.landlordId)).size,
-    };
-  }
-
-  private fee(amountKobo: number, bps: number): number {
-    return Math.round((amountKobo * bps) / BPS_DENOMINATOR);
-  }
-
-  private generateReference(prefix: string): string {
-    return `${prefix}_${Date.now()}_${randomBytes(6).toString('hex')}`;
-  }
-
-  /// In-app notification + best-effort email, mirroring the pattern
-  /// already used across ChatService/AdminService/ReportsService. `email`
-  /// is optional purely so call sites that only have a userId handy (the
-  /// landlord/vendor id, not yet the fetched User row) don't need an extra
-  /// query just to skip the email half — MailService itself is already
-  /// best-effort and never throws.
-  /// The money has already moved by the time this runs, so a failure here
-  /// is logged rather than failing the refund/rejection itself.
-  private async postBookingSystemMessage(
-    booking: { tenantId: string; propertyId: string; property: { landlordId: string } },
-    body: string,
-    createIfMissing: boolean,
-  ): Promise<string | null> {
-    try {
-      return await this.chat.postBookingSystemMessage({
-        tenantId: booking.tenantId,
-        landlordId: booking.property.landlordId,
-        propertyId: booking.propertyId,
-        body,
-        createIfMissing,
-      });
-    } catch (err) {
-      this.logger.error(`Couldn't post the booking system message: ${err}`);
-      return null;
-    }
-  }
-
-  /// [notifyBoth] for a booking: its emails include the property's details.
-  private notifyAboutBooking(
-    booking: { property: EmailProperty },
-    userId: string,
-    email: string | undefined,
-    type: NotificationType,
-    title: string,
-    body: string,
-    threadId?: string,
-  ): Promise<void> {
-    return this.notifyBoth(userId, email, type, title, body, threadId, booking.property);
-  }
-
-  private async notifyBoth(
-    userId: string,
-    email: string | undefined,
-    type: NotificationType,
-    title: string,
-    body: string,
-    threadId?: string,
-    property?: EmailProperty,
-  ): Promise<void> {
-    await this.notifications.create(userId, type, title, body, threadId);
-    if (email) {
-      // Booking emails carry the property's details, so it's clear which
-      // listing they're about.
-      const details = property ? propertyEmailDetails(property) : null;
-      await this.mail.send(email, title, `<p>${escapeHtml(body)}</p>${details?.html ?? ''}`, body + (details?.text ?? ''));
-    }
+  heldPayoutStats(): Promise<{ count: number; totalKobo: number; landlords: number }> {
+    return this.payouts.heldStats();
   }
 }
