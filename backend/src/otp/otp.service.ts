@@ -5,7 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { OTP_PROVIDER } from './otp.constants';
 import { OtpProvider } from './otp-provider.interface';
 
-const CODE_TTL_MINUTES = 10;
+export const CODE_TTL_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
 /// How many of the most recent unexpired codes are accepted. Resending
 /// used to invalidate the earlier code, so someone typing the code from the

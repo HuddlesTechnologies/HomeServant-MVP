@@ -328,6 +328,14 @@ class AdminRepository {
     });
   }
 
+  /// Drops an invite sent by [requestAdmin] that won't be confirmed, so it
+  /// stops counting towards the Admins badge.
+  Future<void> cancelAdminInvite(String email) {
+    return _client.call(() async {
+      await _client.dio.post('/admin/admins/cancel', data: {'email': email});
+    });
+  }
+
   Future<void> setAdminLevel(String id, AdminLevel level) {
     return _client.call(() async {
       await _client.dio.patch('/admin/admins/$id/level', data: {'level': level.apiValue});

@@ -152,7 +152,9 @@ class _SignupRoleScreenState extends State<SignupRoleScreen> {
                     hint: 'Confirm password',
                     controller: _confirmPassword,
                     obscureText: true,
-                    autofillHints: kIsWeb ? null : const [AutofillHints.newPassword],
+                    // Keeps the browser from filling this with a generated
+                    // password on its own — see kConfirmPasswordAutofillHints.
+                    autofillHints: kConfirmPasswordAutofillHints,
                     errorColor: _role.errorColor,
                     validator: (value) {
                       if (value != _password.text) return "Passwords don't match";

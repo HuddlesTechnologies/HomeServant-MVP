@@ -132,6 +132,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     controller: _newPassword,
                     obscureText: _obscureNew,
                     autofillHints: const [AutofillHints.newPassword],
+                    enableSuggestions: false,
                     trailing: IconButton(
                       icon: Icon(
                         _obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined,
@@ -146,7 +147,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     hint: 'Confirm New Password',
                     controller: _confirmPassword,
                     obscureText: _obscureConfirm,
-                    autofillHints: const [AutofillHints.newPassword],
+                    // See kConfirmPasswordAutofillHints.
+                    autofillHints: kConfirmPasswordAutofillHints,
+                    enableSuggestions: false,
                     trailing: IconButton(
                       icon: Icon(
                         _obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,

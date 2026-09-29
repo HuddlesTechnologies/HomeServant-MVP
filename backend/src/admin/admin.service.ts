@@ -9,7 +9,7 @@ import { ChatService } from '../chat/chat.service';
 import { PresenceService } from '../chat/presence.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { OtpService } from '../otp/otp.service';
+import { CODE_TTL_MINUTES, OtpService } from '../otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { joinName } from '../common/admin-display-name';
 import { adminBookingHistorySelect, toAdminBookingHistory } from './booking-history';
@@ -129,7 +129,9 @@ export class AdminService {
     await this.prisma.pendingAdmin.upsert({
       where: { email: dto.email },
       create: { email: dto.email, ...names, level: dto.level, tempPasswordHash, invitedById },
-      update: { ...names, level: dto.level, tempPasswordHash, invitedById },
+      // A resend issues a fresh code, so the invite's clock restarts too
+      // (see [pendingAdminInvitesCount]).
+      update: { ...names, level: dto.level, tempPasswordHash, invitedById, createdAt: new Date() },
     });
 
     await this.mail.send(
@@ -1261,10 +1263,25 @@ export class AdminService {
     return threadsWithUnread + unclaimedSupportThreads;
   }
 
-  /// Backs the Admins nav badge — invites sent (via [requestAdminOtp]) but
-  /// never confirmed, i.e. genuinely "unattended".
-  pendingAdminInvitesCount(): Promise<number> {
+  /// Backs the Admins nav badge — invites sent (via [requestAdminOtp]) whose
+  /// code can still be entered. An invite past its code's lifetime can never
+  /// be confirmed (only re-requested, which recreates it), so it's dropped
+  /// here rather than keeping the badge lit forever — which is what an
+  /// invite abandoned at the code step used to do.
+  async pendingAdminInvitesCount(): Promise<number> {
+    const cutoff = new Date(Date.now() - CODE_TTL_MINUTES * 60_000);
+    await this.prisma.pendingAdmin.deleteMany({ where: { createdAt: { lt: cutoff } } });
     return this.prisma.pendingAdmin.count();
+  }
+
+  /// The console's Cancel on the "Enter Confirmation Code" step — drops the
+  /// pending invite so it stops counting towards the Admins badge. The
+  /// emailed code/temp password become useless: [confirmAdminOtp] needs
+  /// this row.
+  async cancelAdminInvite(email: string): Promise<{ cancelled: boolean }> {
+    const { count } = await this.prisma.pendingAdmin.deleteMany({ where: { email } });
+    if (count > 0) this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
+    return { cancelled: count > 0 };
   }
 }
 

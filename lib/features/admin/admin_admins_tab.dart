@@ -642,10 +642,17 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
     );
 
     if (confirmed == false) {
-      // Explicit Cancel — drop the local draft. Any server-side pending
-      // invite is left as-is; it's simply overwritten if this email is ever
-      // re-requested (see AdminService.requestAdminOtp).
+      // Explicit Cancel — drop the local draft and the server's pending
+      // invite. Leaving the invite behind kept the Admins badge at 1 (the
+      // server also expires it once its code runs out, as a backstop).
+      final admin = mounted ? context.read<AppState>().admin : null;
       await _clearAdminDraft();
+      if (admin == null) return;
+      try {
+        await admin.cancelAdminInvite(email);
+      } on ApiException {
+        // Not worth bothering the admin over — it expires on its own.
+      }
       return;
     }
     if (confirmed != true || !mounted) return;
