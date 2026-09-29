@@ -169,8 +169,6 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
     );
   }
 
-  String _naira(int kobo) => '₦${formatWithThousandsSeparator(kobo / 100)}';
-
   Future<void> _togglePay(bool pay) async {
     final s = _settings;
     if (s == null) return;
@@ -179,7 +177,7 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
       title: pay ? 'Pay unverified landlords again?' : 'Hold payouts to unverified landlords?',
       body: pay
           ? (s.heldPayoutCount > 0
-                ? 'The ${s.heldPayoutCount} payout${s.heldPayoutCount == 1 ? '' : 's'} held right now (${_naira(s.heldPayoutKobo)}) will be sent to '
+                ? 'The ${s.heldPayoutCount} payout${s.heldPayoutCount == 1 ? '' : 's'} held right now (${nairaLabelFromKobo(s.heldPayoutKobo)}) will be sent to '
                       '${s.heldPayoutLandlords == 1 ? 'the landlord' : 'those ${s.heldPayoutLandlords} landlords'} straight away, and future payouts go out as normal.'
                 : 'Future payouts go out to every landlord as normal, verified or not.')
           : 'From now on, when a tenant moves in, pays for a shortlet or renews with a landlord who is not verified, HomeServant keeps the money '
@@ -440,7 +438,7 @@ class _AdminPlatformControlsScreenState extends State<AdminPlatformControlsScree
                   'Held right now',
                   s.heldPayoutCount == 0
                       ? 'Nothing'
-                      : '${s.heldPayoutCount} payout${s.heldPayoutCount == 1 ? '' : 's'}, ${_naira(s.heldPayoutKobo)} '
+                      : '${s.heldPayoutCount} payout${s.heldPayoutCount == 1 ? '' : 's'}, ${nairaLabelFromKobo(s.heldPayoutKobo)} '
                             '(${s.heldPayoutLandlords} landlord${s.heldPayoutLandlords == 1 ? '' : 's'})',
                 ),
               ],

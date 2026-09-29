@@ -528,13 +528,13 @@ class _RatingStars extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: List.generate(5, (index) {
         final filled = rating != null && index < rating!.round();
-        return GestureDetector(
+        return Tooltip(message: 'Rate ${index + 1} of 5', child: Semantics(button: true, child: GestureDetector(
           onTap: () => onRate((index + 1).toDouble()),
           child: Padding(
             padding: const EdgeInsets.only(right: 2),
             child: Icon(Icons.star_rounded, color: filled ? color : color.withValues(alpha: 0.3), size: 22),
           ),
-        );
+        )));
       }),
     );
   }

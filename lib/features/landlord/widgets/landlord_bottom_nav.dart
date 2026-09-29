@@ -20,6 +20,7 @@ class LandlordBottomNav extends StatelessWidget {
       currentIndex: currentIndex,
       onTap: onTap,
       itemCount: 4,
+      labels: const ['Home', 'Messages', 'Bookings', 'Profile'],
       backgroundColor: AppColors.navy,
       selectedBackgroundColor: AppColors.gold,
       selectedColor: AppColors.navy,

@@ -30,6 +30,7 @@ import 'admin_properties_tab.dart';
 import 'admin_reports_tab.dart';
 import 'admin_users_tab.dart';
 import 'admin_vendors_tab.dart';
+import '../../core/log_out.dart';
 
 /// Auto-signs the console out after this long with no pointer activity —
 /// an unattended admin session is a much bigger blast radius than a
@@ -579,16 +580,7 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 
-  Future<void> _logOut(BuildContext context) async {
-    try {
-      await context.read<AppState>().logout();
-    } catch (_) {
-      // Local session is torn down in AppState.logout()'s finally block
-      // regardless; still navigate away rather than leaving the user
-      // stranded on a screen that thinks it's logged out.
-    }
-    if (context.mounted) context.go('/admin-login');
-  }
+  Future<void> _logOut(BuildContext context) => logOutAndGo(context, '/admin-login');
 
   @override
   Widget build(BuildContext context) {

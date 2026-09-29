@@ -133,6 +133,7 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                           ),
                         ),
                         IconButton(
+                          tooltip: 'Close',
                           icon: Icon(Icons.close_rounded, color: theme.foreground),
                           onPressed: () => setState(() {
                             _searching = false;
@@ -148,14 +149,14 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
                         Text('Messages', style: AppTextStyles.heading(color: theme.foreground, size: 22)),
                         Row(
                           children: [
-                            InkWell(
+                            Tooltip(message: 'Search', child: Semantics(button: true, child: InkWell(
                               customBorder: const CircleBorder(),
                               onTap: () => setState(() => _searching = true),
                               child: Padding(
                                 padding: const EdgeInsets.all(4),
                                 child: Icon(Icons.search_rounded, color: theme.foreground),
                               ),
-                            ),
+                            ))),
                             const SizedBox(width: 12),
                             PopupMenuButton<String>(
                               icon: Icon(Icons.menu_rounded, color: theme.foreground),

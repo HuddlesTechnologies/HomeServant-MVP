@@ -11,6 +11,7 @@ import '../../widgets/empty_state.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'models/order_options.dart';
 import 'widgets/order_item_thumbnail.dart';
+import '../../core/date_format.dart';
 
 /// Every order a customer has placed on the Marketplace, newest first.
 /// Reached from the cart/receipt icon on [MarketplaceHomeScreen]. Lets a
@@ -129,7 +130,7 @@ class _OrderCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_formatDate(order.createdAt), style: AppTextStyles.body(color: theme.foreground, size: 13.5, weight: FontWeight.w700)),
+              Text(formatShortDate(order.createdAt), style: AppTextStyles.body(color: theme.foreground, size: 13.5, weight: FontWeight.w700)),
               Text(order.paymentMethod.label, style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.55), size: 12)),
             ],
           ),
@@ -374,8 +375,3 @@ class _TrackingLine extends StatelessWidget {
   }
 }
 
-const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-String _formatDate(DateTime date) => '${date.day} ${_months[date.month - 1]} ${date.year}';

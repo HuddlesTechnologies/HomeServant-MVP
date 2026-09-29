@@ -8,6 +8,7 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeHtml } from '../common/escape-html';
 
 /// HomeServant's cut on a normal release (marketplace, rental move-in,
 /// rental renewal, shortlet instant release) — 5%, expressed in basis
@@ -1520,7 +1521,7 @@ export class PaymentsService {
   ): Promise<void> {
     await this.notifications.create(userId, type, title, body, threadId);
     if (email) {
-      await this.mail.send(email, title, `<p>${body}</p>`, body);
+      await this.mail.send(email, title, `<p>${escapeHtml(body)}</p>`, body);
     }
   }
 }

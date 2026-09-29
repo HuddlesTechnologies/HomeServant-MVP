@@ -85,6 +85,15 @@ export class BookingsController {
     return this.bookings.refund(id, user.sub);
   }
 
+  /// The tenancy agreement generated at move-in (see
+  /// PaymentsService, `tenancyAgreement.create`). The booking's tenant or
+  /// landlord only; 404 before move-in.
+  @Get(':id/tenancy-agreement')
+  @Roles(UserRole.TENANT, UserRole.LANDLORD)
+  tenancyAgreement(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.bookings.tenancyAgreement(id, user.sub);
+  }
+
   @Get(':id/renewal-quote')
   @Roles(UserRole.TENANT)
   renewalQuote(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {

@@ -94,7 +94,7 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GestureDetector(
+                  Semantics(button: true, label: 'View photos', child: GestureDetector(
                     onTap: images.isEmpty ? null : () => _openGallery(0),
                     child: AspectRatio(
                       aspectRatio: 4 / 3,
@@ -109,7 +109,7 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                             : _imageFallback(theme, product),
                       ),
                     ),
-                  ),
+                  )),
                   if (images.length > 1) ...[
                     const SizedBox(height: 10),
                     SizedBox(
@@ -118,13 +118,13 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                         scrollDirection: Axis.horizontal,
                         itemCount: images.length,
                         separatorBuilder: (_, _) => const SizedBox(width: 8),
-                        itemBuilder: (context, index) => GestureDetector(
+                        itemBuilder: (context, index) => Semantics(button: true, label: 'View photo', child: GestureDetector(
                           onTap: () => _openGallery(index),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
                             child: Image(image: images[index], width: 68, height: 68, fit: BoxFit.cover),
                           ),
-                        ),
+                        )),
                       ),
                     ),
                   ],
@@ -191,6 +191,7 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               IconButton(
+                                tooltip: 'Decrease quantity',
                                 onPressed: _quantity > 1 ? _decrement : null,
                                 icon: Icon(
                                   Icons.remove_rounded,
@@ -207,6 +208,7 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
                                 ),
                               ),
                               IconButton(
+                                tooltip: 'Increase quantity',
                                 onPressed: _quantity < product.stock ? _increment : null,
                                 icon: Icon(
                                   Icons.add_rounded,

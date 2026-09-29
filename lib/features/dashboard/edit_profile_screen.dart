@@ -264,7 +264,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
               children: [
                 Center(
-                  child: GestureDetector(
+                  child: Tooltip(message: 'Change profile photo', child: Semantics(button: true, child: GestureDetector(
                     onTap: _pickPhoto,
                     child: Stack(
                       children: [
@@ -311,7 +311,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ),
                       ],
                     ),
-                  ),
+                  ))),
                 ),
                 const SizedBox(height: 8),
                 Center(
@@ -529,7 +529,7 @@ class _EditableField extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            GestureDetector(
+            Tooltip(message: editable ? 'Done editing' : 'Edit', child: Semantics(button: true, child: GestureDetector(
               onTap: onToggleEdit,
               child: Container(
                 width: 44,
@@ -547,7 +547,7 @@ class _EditableField extends StatelessWidget {
                   size: 20,
                 ),
               ),
-            ),
+            ))),
           ],
         ),
       ],
@@ -619,11 +619,11 @@ class _BookingProfileSection extends StatelessWidget {
                     children: [
                       Text(hobby, style: AppTextStyles.body(color: theme.onSurface, size: 13, weight: FontWeight.w600)),
                       const SizedBox(width: 4),
-                      InkWell(
+                      Tooltip(message: 'Remove $hobby', child: Semantics(button: true, child: InkWell(
                         onTap: () => onRemoveHobby(hobby),
                         customBorder: const CircleBorder(),
                         child: Icon(Icons.close_rounded, size: 16, color: theme.onSurface),
-                      ),
+                      ))),
                     ],
                   ),
                 ),
@@ -642,7 +642,7 @@ class _BookingProfileSection extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 10),
-            GestureDetector(
+            Tooltip(message: 'Add hobby', child: Semantics(button: true, child: GestureDetector(
               onTap: onAddHobby,
               child: Container(
                 width: 44,
@@ -650,7 +650,7 @@ class _BookingProfileSection extends StatelessWidget {
                 decoration: BoxDecoration(color: theme.accent, shape: BoxShape.circle),
                 child: Icon(Icons.add_rounded, color: theme.onAccent, size: 22),
               ),
-            ),
+            ))),
           ],
         ),
       ],

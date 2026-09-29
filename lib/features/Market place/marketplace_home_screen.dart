@@ -182,6 +182,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                                       style: AppTextStyles.body(color: theme.onSurface, size: 13.5, weight: FontWeight.w700),
                                     ),
                                     IconButton(
+                                      tooltip: 'Remove from cart',
                                       onPressed: () {
                                         _removeFromCart(product.id);
                                         setSheetState(() {});
@@ -206,6 +207,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           IconButton(
+                                            tooltip: 'Decrease quantity',
                                             onPressed: (_cart[product.id] ?? 1) > 1
                                                 ? () => setSheetState(
                                                     () => _setCartQuantity(product, (_cart[product.id] ?? 1) - 1),
@@ -231,6 +233,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
                                             ),
                                           ),
                                           IconButton(
+                                            tooltip: 'Increase quantity',
                                             onPressed: (_cart[product.id] ?? 1) < product.stock
                                                 ? () => setSheetState(
                                                     () => _setCartQuantity(product, (_cart[product.id] ?? 1) + 1),
@@ -417,12 +420,14 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
         title: Text('Marketplace', style: AppTextStyles.heading(color: theme.foreground, size: 18)),
         actions: [
           IconButton(
+            tooltip: 'Messages',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => MessagesScreen(theme: theme, marketplaceOnly: true)),
             ),
             icon: Icon(Icons.chat_bubble_outline_rounded, color: theme.foreground),
           ),
           IconButton(
+            tooltip: 'My orders',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => OrderHistoryScreen(theme: theme)),
             ),
@@ -432,6 +437,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
             clipBehavior: Clip.none,
             children: [
               IconButton(
+                tooltip: 'Cart',
                 onPressed: _openCart,
                 icon: Icon(Icons.shopping_cart_outlined, color: theme.foreground),
               ),

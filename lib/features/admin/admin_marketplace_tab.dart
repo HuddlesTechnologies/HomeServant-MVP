@@ -155,6 +155,7 @@ class _AdminMarketplaceTabState extends State<AdminMarketplaceTab> {
                 ),
                 if (product.isAvailable && context.canModerate)
                   IconButton(
+                    tooltip: 'Remove product',
                     onPressed: () => _removeProduct(product),
                     icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                   ),

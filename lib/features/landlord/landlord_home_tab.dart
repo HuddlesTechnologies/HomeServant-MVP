@@ -124,7 +124,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
           children: [
             Row(
               children: [
-                InkWell(
+                Tooltip(message: 'Profile', child: Semantics(button: true, child: InkWell(
                   customBorder: const CircleBorder(),
                   onTap: widget.onOpenProfile,
                   child: Container(
@@ -141,7 +141,7 @@ class _LandlordHomeTabState extends State<LandlordHomeTab> {
                         ? Icon(Icons.person_rounded, color: theme.foreground.withValues(alpha: 0.6))
                         : null,
                   ),
-                ),
+                ))),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

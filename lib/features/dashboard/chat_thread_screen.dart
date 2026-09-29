@@ -1170,7 +1170,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      GestureDetector(
+                      Tooltip(message: 'Send', child: Semantics(button: true, child: GestureDetector(
                         onTap: _send,
                         child: Container(
                           padding: const EdgeInsets.all(16),
@@ -1184,7 +1184,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                             size: 20,
                           ),
                         ),
-                      ),
+                      ))),
                     ],
                   ),
                 ),
@@ -1331,12 +1331,12 @@ class _ImageMessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (url != null)
-            GestureDetector(
+            Semantics(button: true, label: 'View photo', child: GestureDetector(
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => PropertyGalleryScreen(images: [url], initialIndex: 0, title: 'Photo')),
               ),
               child: PropertyImage(path: url, height: 180, width: double.infinity, fit: BoxFit.cover),
-            ),
+            )),
           if (message.text.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),

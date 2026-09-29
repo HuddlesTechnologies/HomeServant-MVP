@@ -378,4 +378,19 @@ export class BookingsService {
   renewalQuote(id: string, tenantId: string) {
     return this.payments.renewalQuote(id, tenantId);
   }
+
+  /// The app has always called this, but the route was never added, so
+  /// tenants saw "isn't ready yet" even after moving in. Someone who isn't
+  /// the booking's tenant or landlord gets the same 404 as a missing
+  /// agreement, so booking ids can't be probed.
+  async tenancyAgreement(bookingId: string, userId: string) {
+    const agreement = await this.prisma.tenancyAgreement.findFirst({
+      where: {
+        bookingId,
+        booking: { OR: [{ tenantId: userId }, { property: { landlordId: userId } }] },
+      },
+    });
+    if (!agreement) throw new NotFoundException('No tenancy agreement for this booking yet');
+    return agreement;
+  }
 }

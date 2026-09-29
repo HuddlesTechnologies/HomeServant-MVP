@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../widgets/notification_offer.dart';
 import '../../state/app_state.dart';
@@ -9,6 +8,7 @@ import 'landlord_home_tab.dart';
 import 'landlord_messages_screen.dart';
 import 'landlord_profile_screen.dart';
 import 'widgets/landlord_bottom_nav.dart';
+import '../../core/log_out.dart';
 
 /// Landlord dashboard shell: four tabs (Home / Messages / Bookings /
 /// Profile Settings) switched by [LandlordBottomNav], matching the redesign
@@ -32,16 +32,7 @@ class _LandlordDashboardScreenState extends State<LandlordDashboardScreen> {
     });
   }
 
-  Future<void> _logOut(BuildContext context) async {
-    try {
-      await context.read<AppState>().logout();
-    } catch (_) {
-      // Local session is torn down in AppState.logout()'s finally block
-      // regardless; still navigate away rather than leaving the user
-      // stranded on a dashboard that thinks it's logged out.
-    }
-    if (context.mounted) context.go('/get-started');
-  }
+  Future<void> _logOut(BuildContext context) => logOutAndGo(context, '/get-started');
 
   @override
   Widget build(BuildContext context) {

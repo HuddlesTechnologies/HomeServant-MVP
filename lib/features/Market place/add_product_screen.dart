@@ -192,7 +192,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           ),
                         ),
                       if (_images.length < _maxImages)
-                        GestureDetector(
+                        Tooltip(message: 'Add photos', child: Semantics(button: true, child: GestureDetector(
                           onTap: _addImages,
                           child: Container(
                             width: 84,
@@ -204,7 +204,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                             ),
                             child: Icon(Icons.add_photo_alternate_outlined, color: theme.onSurface.withValues(alpha: 0.5), size: 26),
                           ),
-                        ),
+                        ))),
                     ],
                   ),
                 ),
@@ -248,6 +248,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           ),
                         ),
                         IconButton(
+                          tooltip: 'Close',
                           onPressed: () => setState(() => _video = null),
                           icon: Icon(Icons.close_rounded, color: theme.onSurface.withValues(alpha: 0.5), size: 18),
                         ),
@@ -410,14 +411,14 @@ class _PickedTile extends StatelessWidget {
           Positioned(
             top: -6,
             right: -6,
-            child: GestureDetector(
+            child: Tooltip(message: 'Remove photo', child: Semantics(button: true, child: GestureDetector(
               onTap: onRemove,
               child: Container(
                 padding: const EdgeInsets.all(3),
                 decoration: const BoxDecoration(color: Colors.black87, shape: BoxShape.circle),
                 child: const Icon(Icons.close_rounded, color: Colors.white, size: 14),
               ),
-            ),
+            ))),
           ),
         ],
       ),

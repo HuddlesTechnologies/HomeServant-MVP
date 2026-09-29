@@ -157,9 +157,9 @@ class LandlordAcceptRejectButtons extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _CircleIconButton(icon: Icons.check_rounded, color: const Color(0xFF3FBF6A), onTap: onAccept, tooltip: acceptTooltip),
+        _CircleIconButton(icon: Icons.check_rounded, color: const Color(0xFF3FBF6A), onTap: onAccept, tooltip: acceptTooltip ?? 'Accept'),
         const SizedBox(width: 8),
-        _CircleIconButton(icon: Icons.close_rounded, color: const Color(0xFFE0554F), onTap: onReject, tooltip: rejectTooltip),
+        _CircleIconButton(icon: Icons.close_rounded, color: const Color(0xFFE0554F), onTap: onReject, tooltip: rejectTooltip ?? 'Decline'),
       ],
     );
   }

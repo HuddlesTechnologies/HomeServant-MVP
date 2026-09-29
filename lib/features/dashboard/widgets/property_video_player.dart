@@ -72,7 +72,7 @@ class _PropertyVideoPlayerState extends State<PropertyVideoPlayer> {
     final aspectRatio = _controller.value.aspectRatio;
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
-      child: GestureDetector(
+      child: Tooltip(message: 'Play video', child: Semantics(button: true, child: GestureDetector(
         onTap: _togglePlay,
         child: AspectRatio(
           aspectRatio: aspectRatio > 0 ? aspectRatio : 16 / 9,
@@ -92,7 +92,7 @@ class _PropertyVideoPlayerState extends State<PropertyVideoPlayer> {
             ],
           ),
         ),
-      ),
+      ))),
     );
   }
 

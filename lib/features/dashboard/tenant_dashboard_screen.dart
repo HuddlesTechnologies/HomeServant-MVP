@@ -18,6 +18,7 @@ import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'widgets/bottom_nav.dart';
 import 'widgets/property_card.dart';
+import '../../core/log_out.dart';
 
 class TenantDashboardScreen extends StatefulWidget {
   const TenantDashboardScreen({super.key});
@@ -55,9 +56,13 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     // session, from another tab) wouldn't otherwise show up here until a
     // full app restart. Refreshing on entry means at least opening this
     // tab picks up anything new, on top of the pull-to-refresh below.
-    context.read<AppState>().loadProperties();
+    // After the first frame: loadProperties notifies listeners straight
+    // away (to show loading), which isn't allowed while this screen is
+    // still being built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) offerBrowserNotifications(context);
+      if (!mounted) return;
+      context.read<AppState>().loadProperties();
+      offerBrowserNotifications(context);
     });
   }
 
@@ -480,16 +485,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
     maxPriceController.dispose();
   }
 
-  Future<void> _logOut(BuildContext context) async {
-    try {
-      await context.read<AppState>().logout();
-    } catch (_) {
-      // Local session is torn down in AppState.logout()'s finally block
-      // regardless; still navigate away rather than leaving the user
-      // stranded on a dashboard that thinks it's logged out.
-    }
-    if (context.mounted) context.go('/get-started');
-  }
+  Future<void> _logOut(BuildContext context) => logOutAndGo(context, '/get-started');
 
   void _onNavTap(int index, DashboardTheme theme) {
     if (index == 1) {
@@ -574,7 +570,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                           const SizedBox(width: 12),
                           Row(
                             children: [
-                              GestureDetector(
+                              Tooltip(message: 'Messages', child: Semantics(button: true, child: GestureDetector(
                                 onTap:
                                     () => Navigator.of(context).push(
                                       MaterialPageRoute(
@@ -586,7 +582,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                   Icons.mail_outline_rounded,
                                   color: theme.foreground,
                                 ),
-                              ),
+                              ))),
                               const SizedBox(width: 16),
                               NotificationBell(
                                 color: theme.foreground,
@@ -659,7 +655,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                     ),
                                   ),
                                   if (_searchQuery.isNotEmpty)
-                                    GestureDetector(
+                                    Tooltip(message: 'Clear search', child: Semantics(button: true, child: GestureDetector(
                                       onTap: () {
                                         _searchController.clear();
                                         setState(() => _searchQuery = '');
@@ -669,13 +665,13 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                         color: AppColors.hintGrey,
                                         size: 20,
                                       ),
-                                    ),
+                                    ))),
                                 ],
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
-                          GestureDetector(
+                          Tooltip(message: 'Filters', child: Semantics(button: true, child: GestureDetector(
                             onTap: () => _openFilterSheet(theme),
                             child: Container(
                               padding: const EdgeInsets.all(17),
@@ -689,7 +685,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                 size: 20,
                               ),
                             ),
-                          ),
+                          ))),
                         ],
                       ),
                       const SizedBox(height: 22),

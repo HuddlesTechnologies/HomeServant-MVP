@@ -66,7 +66,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         await client.join(this.adminRoom());
       }
       this.presence.markOnline(payload.sub);
-    } catch {
+    } catch (error) {
+      // An expired or bad token is routine (the client refreshes and
+      // reconnects); anything else is a real fault worth seeing in the logs.
+      const name = (error as Error)?.name;
+      if (name !== 'TokenExpiredError' && name !== 'JsonWebTokenError' && name !== 'NotBeforeError') {
+        this.logger.warn(`Socket connection failed: ${error}`);
+      }
       client.disconnect();
     }
   }

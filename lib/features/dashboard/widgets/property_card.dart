@@ -47,7 +47,7 @@ class PropertyCard extends StatelessWidget {
                   Positioned(
                     top: 12,
                     right: 12,
-                    child: GestureDetector(
+                    child: Tooltip(message: favorited ? 'Remove from wishlist' : 'Save to wishlist', child: Semantics(button: true, child: GestureDetector(
                       onTap: () => context.read<AppState>().toggleFavorite(property.id),
                       child: CircleAvatar(
                         radius: 18,
@@ -58,7 +58,7 @@ class PropertyCard extends StatelessWidget {
                           size: 18,
                         ),
                       ),
-                    ),
+                    ))),
                   ),
                   Positioned(
                     bottom: 10,

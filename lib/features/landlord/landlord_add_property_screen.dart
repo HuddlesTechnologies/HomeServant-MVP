@@ -355,7 +355,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                         ),
                       ),
                     if (_images.length < _maxImages && !_photosLocked)
-                      GestureDetector(
+                      Tooltip(message: 'Add photos', child: Semantics(button: true, child: GestureDetector(
                         onTap: _addImages,
                         child: Container(
                           width: 84,
@@ -367,7 +367,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                           ),
                           child: const Icon(Icons.add_a_photo_outlined, color: AppColors.navy, size: 26),
                         ),
-                      ),
+                      ))),
                   ],
                 ),
               ),
@@ -511,14 +511,14 @@ class _VideoPicker extends StatelessWidget {
                 style: AppTextStyles.body(color: AppColors.navy, size: 13.5, weight: FontWeight.w600),
               ),
             ),
-            InkWell(
+            Tooltip(message: 'Remove file', child: Semantics(button: true, child: InkWell(
               onTap: onRemove,
               customBorder: const CircleBorder(),
               child: const Padding(
                 padding: EdgeInsets.all(4),
                 child: Icon(Icons.close_rounded, color: AppColors.hintGrey, size: 18),
               ),
-            ),
+            ))),
           ],
         ),
       );
@@ -645,14 +645,14 @@ class _PickedPhotoTile extends StatelessWidget {
             Positioned(
               top: -6,
               right: -6,
-              child: GestureDetector(
+              child: Tooltip(message: 'Remove photo', child: Semantics(button: true, child: GestureDetector(
                 onTap: onRemove,
                 child: Container(
                   padding: const EdgeInsets.all(3),
                   decoration: const BoxDecoration(color: Colors.black87, shape: BoxShape.circle),
                   child: const Icon(Icons.close_rounded, color: Colors.white, size: 14),
                 ),
-              ),
+              ))),
             ),
         ],
       ),

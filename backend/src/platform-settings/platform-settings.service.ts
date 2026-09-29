@@ -3,6 +3,7 @@ import { NotificationType, Prisma, UserRole, VerificationStatus } from '@prisma/
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeHtml } from '../common/escape-html';
 
 /// The single PlatformSettings row (id 1), created with defaults on first read.
 @Injectable()
@@ -152,6 +153,3 @@ export class PlatformSettingsService {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

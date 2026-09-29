@@ -31,8 +31,6 @@ String _stamp(DateTime at) {
 String _words(String raw) =>
     raw.toLowerCase().split('_').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
 
-String _naira(int amount) => '₦${formatWithThousandsSeparator(amount)}';
-
 /// The newest [_alwaysShown] bookings (newest at the top — the API sends
 /// them newest first) plus a Show all / Show fewer toggle for the rest.
 /// Each booking opens up to its full property details, images, payments
@@ -179,7 +177,7 @@ class _BookingTileState extends State<_BookingTile> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        '${_naira(booking.price)}/${booking.priceUnit.toLowerCase()}',
+                        '${nairaLabel(booking.price)}/${booking.priceUnit.toLowerCase()}',
                         style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 13),
                       ),
                       Icon(_open ? Icons.expand_less_rounded : Icons.expand_more_rounded, color: AppColors.navy),
@@ -232,7 +230,7 @@ class _BookingDetails extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 itemCount: property.images.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (context, index) => GestureDetector(
+                itemBuilder: (context, index) => Semantics(button: true, label: 'View photo', child: GestureDetector(
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => PropertyGalleryScreen(images: property.images, initialIndex: index, title: property.title),
@@ -242,14 +240,14 @@ class _BookingDetails extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     child: Image(image: imageProviderForPath(property.images[index]), width: 112, height: 84, fit: BoxFit.cover),
                   ),
-                ),
+                )),
               ),
             ),
           if (property != null) ...[
             _heading('Property'),
             _row('Category', _words(property.category)),
             _row('Rooms', '${property.bedrooms} bed · ${property.bathrooms} bath'),
-            _row('Listed price', '${_naira(property.price)}/${property.priceUnit.toLowerCase()}'),
+            _row('Listed price', '${nairaLabel(property.price)}/${property.priceUnit.toLowerCase()}'),
             if (property.rentDurationMonths != null) _row('Lease length', '${property.rentDurationMonths} months'),
             _row('Address', '${property.location}, ${property.state}'),
             if (property.unitAddress?.isNotEmpty == true || property.roomNumber?.isNotEmpty == true)
@@ -266,11 +264,11 @@ class _BookingDetails extends StatelessWidget {
           ],
           _heading('This booking'),
           _row('Status', booking.outcome ?? _words(booking.status)),
-          _row('Price charged', '${_naira(booking.price)}/${booking.priceUnit.toLowerCase()}'),
+          _row('Price charged', '${nairaLabel(booking.price)}/${booking.priceUnit.toLowerCase()}'),
           if (booking.payingMonthly)
             _row(
               'Payment plan',
-              'Monthly${booking.monthlyRent != null ? ' · ${_naira(booking.monthlyRent!)}/month' : ''}'
+              'Monthly${booking.monthlyRent != null ? ' · ${nairaLabel(booking.monthlyRent!)}/month' : ''}'
                   '${booking.rentPaidThrough != null ? ' · paid until ${formatShortDate(booking.rentPaidThrough!.toLocal())}' : ''}',
             ),
           if (booking.requestedDate != null)
@@ -290,7 +288,7 @@ class _BookingDetails extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${_naira(payment.amount ~/ 100)} · ${_words(payment.status)}',
+                            '${nairaLabel(payment.amount ~/ 100)} · ${_words(payment.status)}',
                             style: AppTextStyles.body(color: AppColors.navy, size: 12.5, weight: FontWeight.w700),
                           ),
                           Text(

@@ -168,6 +168,9 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
   /// which has no lease dates).
   String _rentSubtitle(api.Booking b) {
     final parts = <String>[];
+    // First, so the one-line subtitle never cuts it off. Same wording the
+    // tenant sees on their booking (HistoryScreen).
+    if (b.monthlyRentOverdue) parts.add('monthly rent overdue since ${formatShortDate(b.rentPaidThrough!)}');
     if (b.leaseStartDate != null) parts.add('since ${formatShortDate(b.leaseStartDate!)}');
     if (b.leaseEndDate != null) parts.add('expires ${formatShortDate(b.leaseEndDate!)}');
     if (b.lastPaidAt != null) parts.add('last paid ${formatShortDate(b.lastPaidAt!)}');
@@ -191,6 +194,14 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     // paid never showed up in "Rent" at all.
     const rentedStatuses = {api.BookingStatus.movedIn, api.BookingStatus.paid};
     final rentedBookings = allBookings.where((b) => rentedStatuses.contains(b.status)).toList();
+    // The Rent list shows who's renting now. A shortlet stays PAID after the
+    // guest leaves, so one whose stay has ended drops off here; it's still
+    // in "See all" (the Rent Roll) and in My Tenants as a former tenant.
+    // Long-term rentals are unaffected.
+    final now = DateTime.now();
+    final currentRentals = rentedBookings
+        .where((b) => !(b.shortletStayEnd?.isBefore(now) ?? false))
+        .toList();
     // A non-Shortlet rental between payment and move-in — this is where an
     // inspection date gets proposed/confirmed, and where the landlord's
     // distinct outright-rejection lever lives (see _rejectBooking).
@@ -404,7 +415,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 14),
-                  if (rentedBookings.isEmpty)
+                  if (currentRentals.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
                       child: Text(
@@ -413,7 +424,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                       ),
                     )
                   else
-                    for (final entry in rentedBookings.take(5))
+                    for (final entry in currentRentals.take(5))
                       Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),

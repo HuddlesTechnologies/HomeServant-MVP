@@ -52,7 +52,7 @@ class PinKeypad extends StatelessWidget {
           keys.map((key) {
             if (key.isEmpty) return const SizedBox.shrink();
             if (key == 'back') {
-              return IconButton(onPressed: onBackspace, icon: Icon(Icons.backspace_outlined, color: color));
+              return IconButton(tooltip: 'Delete digit', onPressed: onBackspace, icon: Icon(Icons.backspace_outlined, color: color));
             }
             return InkWell(
               borderRadius: BorderRadius.circular(40),

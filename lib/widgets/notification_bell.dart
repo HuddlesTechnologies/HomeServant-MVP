@@ -58,6 +58,6 @@ class NotificationBell extends StatelessWidget {
       ],
     );
     if (onTap == null) return icon;
-    return InkWell(customBorder: const CircleBorder(), onTap: onTap, child: icon);
+    return Tooltip(message: 'Notifications', child: InkWell(customBorder: const CircleBorder(), onTap: onTap, child: icon));
   }
 }

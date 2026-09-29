@@ -23,6 +23,7 @@ import { RequestAdminDto } from './dto/request-admin.dto';
 import { SetUserPasswordDto } from './dto/set-user-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserEmailDto } from './dto/update-user-email.dto';
+import { escapeHtml } from '../common/escape-html';
 
 /// Mirrors AdminLevelGuard's RANK map — declaration order in the Prisma
 /// schema is the rank (SUPPORT < MODERATOR < SUPER_ADMIN). Used here (not
@@ -137,7 +138,7 @@ export class AdminService {
     await this.mail.send(
       dto.email,
       'Your HomeServant admin invite',
-      `<p>You've been invited to the HomeServant admin console as <strong>${dto.level}</strong>.</p>` +
+      `<p>You've been invited to the HomeServant admin console as <strong>${escapeHtml(dto.level)}</strong>.</p>` +
         `<p>Confirmation code (give this to whoever is setting up your account):</p>` +
         `<p style="font-size:28px;font-weight:700;letter-spacing:4px;">${code}</p>` +
         `<p>Your one-time temporary password (sign in with this, then set your own — it only works until you do):</p>` +
@@ -766,10 +767,23 @@ export class AdminService {
       updated.email,
       'Your HomeServant account email was changed',
       `<p>A super admin or moderator changed the email on your HomeServant account to this address.</p>` +
-        `<p>Reason: ${dto.reason}</p>` +
+        `<p>Reason: ${escapeHtml(dto.reason)}</p>` +
         `<p>You've been signed out everywhere — sign back in with this email to continue.</p>`,
       `A super admin or moderator changed the email on your HomeServant account to this address.\n\nReason: ${dto.reason}\n\nYou've been signed out everywhere — sign back in with this email to continue.`,
     );
+    // The old address is usually the real owner's, so they hear about it
+    // too. Otherwise an account moved to someone else's email by mistake
+    // (or by an impostor talking an admin into it) would go unnoticed.
+    if (user.email.toLowerCase() !== updated.email.toLowerCase()) {
+      await this.mail.send(
+        user.email,
+        'The email on your HomeServant account was changed',
+        `<p>A super admin or moderator moved your HomeServant account from this address to another email address.</p>` +
+          `<p>Reason: ${escapeHtml(dto.reason)}</p>` +
+          `<p>If you didn't ask for this, contact HomeServant support straight away.</p>`,
+        `A super admin or moderator moved your HomeServant account from this address to another email address.\n\nReason: ${dto.reason}\n\nIf you didn't ask for this, contact HomeServant support straight away.`,
+      );
+    }
 
     return updated;
   }
@@ -809,7 +823,7 @@ export class AdminService {
       user.email,
       'Your HomeServant password was changed',
       `<p>A super admin or moderator changed your HomeServant account password.</p>` +
-        `<p>Reason: ${dto.reason}</p>` +
+        `<p>Reason: ${escapeHtml(dto.reason)}</p>` +
         `<p>You've been signed out everywhere — sign in with your new password and you'll be asked to set one only you know.</p>`,
       `A super admin or moderator changed your HomeServant account password.\n\nReason: ${dto.reason}\n\nYou've been signed out everywhere — sign in with your new password and you'll be asked to set one only you know.`,
     );
@@ -829,7 +843,7 @@ export class AdminService {
     await this.mail.send(
       user.email,
       'Two-factor authentication was disabled on your account',
-      `<p>A super admin disabled two-factor authentication on your HomeServant account.</p><p>Reason: ${reason}</p>` +
+      `<p>A super admin disabled two-factor authentication on your HomeServant account.</p><p>Reason: ${escapeHtml(reason)}</p>` +
         `<p>If you believe this was a mistake, contact HomeServant support.</p>`,
       `A super admin disabled two-factor authentication on your HomeServant account.\n\nReason: ${reason}\n\nIf you believe this was a mistake, contact HomeServant support.`,
     );
@@ -876,7 +890,7 @@ export class AdminService {
     await this.mail.send(
       vendor.user.email,
       'Your HomeServant shop has been approved',
-      `<p>Great news — <strong>${vendor.businessName}</strong> has been approved.</p><p>Your products are now visible to shoppers in the Marketplace.</p>`,
+      `<p>Great news — <strong>${escapeHtml(vendor.businessName)}</strong> has been approved.</p><p>Your products are now visible to shoppers in the Marketplace.</p>`,
       `Great news — ${vendor.businessName} has been approved. Your products are now visible to shoppers in the Marketplace.`,
     );
     // Keeps the Vendors nav badge (AdminShell._pendingVendorsCount) live
@@ -901,7 +915,7 @@ export class AdminService {
     await this.mail.send(
       vendor.user.email,
       'Your HomeServant vendor application',
-      `<p>Thanks for applying to sell on HomeServant. After review, <strong>${vendor.businessName}</strong> hasn't been approved: ${dto.reason}</p><p>You can update your shop details and this will be reviewed again.</p>`,
+      `<p>Thanks for applying to sell on HomeServant. After review, <strong>${escapeHtml(vendor.businessName)}</strong> hasn't been approved: ${escapeHtml(dto.reason)}</p><p>You can update your shop details and this will be reviewed again.</p>`,
       `Thanks for applying to sell on HomeServant. After review, ${vendor.businessName} hasn't been approved: ${dto.reason}\n\nYou can update your shop details and this will be reviewed again.`,
     );
     this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
@@ -978,7 +992,7 @@ export class AdminService {
     await this.mail.send(
       vendor.user.email,
       `Your shop "${vendor.businessName}" has been suspended`,
-      `<p>Your shop <strong>${vendor.businessName}</strong> has been suspended from the HomeServant Marketplace by an admin.</p><p>Reason: ${reason}</p>`,
+      `<p>Your shop <strong>${escapeHtml(vendor.businessName)}</strong> has been suspended from the HomeServant Marketplace by an admin.</p><p>Reason: ${escapeHtml(reason)}</p>`,
       `Your shop "${vendor.businessName}" has been suspended from the HomeServant Marketplace by an admin.\n\nReason: ${reason}`,
     );
     return updated;
@@ -997,7 +1011,7 @@ export class AdminService {
     await this.mail.send(
       vendor.user.email,
       `Your shop "${vendor.businessName}" has been reinstated`,
-      `<p>Your shop <strong>${vendor.businessName}</strong> has been reinstated on the HomeServant Marketplace by an admin.</p><p>Note: ${reason}</p>`,
+      `<p>Your shop <strong>${escapeHtml(vendor.businessName)}</strong> has been reinstated on the HomeServant Marketplace by an admin.</p><p>Note: ${escapeHtml(reason)}</p>`,
       `Your shop "${vendor.businessName}" has been reinstated on the HomeServant Marketplace by an admin.\n\nNote: ${reason}`,
     );
     return updated;
@@ -1113,7 +1127,7 @@ export class AdminService {
     await this.mail.send(
       property.landlord.email,
       `"${property.title}" is listed again`,
-      `<p>An admin has re-listed <strong>${property.title}</strong> — it's visible to renters again.</p>`,
+      `<p>An admin has re-listed <strong>${escapeHtml(property.title)}</strong> — it's visible to renters again.</p>`,
       `An admin has re-listed "${property.title}" — it's visible to renters again.`,
     );
   }
@@ -1128,7 +1142,7 @@ export class AdminService {
     await this.mail.send(
       property.landlord.email,
       `Your listing "${property.title}" was removed`,
-      `<p>Your listing <strong>${property.title}</strong> has been removed from HomeServant by an admin.</p><p>Reason: ${reason}</p>`,
+      `<p>Your listing <strong>${escapeHtml(property.title)}</strong> has been removed from HomeServant by an admin.</p><p>Reason: ${escapeHtml(reason)}</p>`,
       `Your listing "${property.title}" has been removed from HomeServant by an admin.\n\nReason: ${reason}`,
     );
   }
@@ -1170,7 +1184,7 @@ export class AdminService {
     await this.mail.send(
       product.vendor.user.email,
       `Your listing "${product.name}" was removed`,
-      `<p>Your listing <strong>${product.name}</strong> has been removed from the HomeServant Marketplace by an admin.</p><p>Reason: ${reason}</p>`,
+      `<p>Your listing <strong>${escapeHtml(product.name)}</strong> has been removed from the HomeServant Marketplace by an admin.</p><p>Reason: ${escapeHtml(reason)}</p>`,
       `Your listing "${product.name}" has been removed from the HomeServant Marketplace by an admin.\n\nReason: ${reason}`,
     );
   }
@@ -1285,6 +1299,3 @@ export class AdminService {
   }
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}

@@ -126,6 +126,7 @@ class _PillTextFieldState extends State<PillTextField> {
         fillColor: widget.fillColor,
         suffixIcon: showPasswordToggle
             ? IconButton(
+                tooltip: _obscured ? 'Show password' : 'Hide password',
                 onPressed: () => setState(() => _obscured = !_obscured),
                 icon: Icon(
                   _obscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,

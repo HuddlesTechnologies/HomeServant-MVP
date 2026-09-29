@@ -11,6 +11,7 @@ import '../../widgets/order_status_badge.dart';
 import '../dashboard/chat_thread_screen.dart';
 import 'models/order_options.dart';
 import 'widgets/order_item_thumbnail.dart';
+import '../../core/date_format.dart';
 
 /// Full detail on one item a vendor sold — reached from either the
 /// Notifications or Transaction History screen, so both stay a thin list
@@ -224,7 +225,7 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
               theme: theme,
               rows: [
                 _DetailRow(theme: theme, label: 'Order ID', value: item.orderId),
-                if (order != null) _DetailRow(theme: theme, label: 'Order Date', value: _formatDate(order.createdAt)),
+                if (order != null) _DetailRow(theme: theme, label: 'Order Date', value: formatShortDate(order.createdAt)),
                 if (order != null) _DetailRow(theme: theme, label: 'Payment Method', value: order.paymentMethod.label),
                 _DetailRow(theme: theme, label: 'Fulfillment', value: item.fulfillment.label),
                 _DetailRow(theme: theme, label: 'Item Total', value: '₦${formatWithThousandsSeparator(item.subtotal)}', showDivider: false),
@@ -260,7 +261,7 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                 theme: theme,
                 title: 'Shipping',
                 rows: [
-                  _DetailRow(theme: theme, label: 'Shipped', value: _formatDate(_shippedAt!)),
+                  _DetailRow(theme: theme, label: 'Shipped', value: formatShortDate(_shippedAt!)),
                   _DetailRow(theme: theme, label: 'Tracking number', value: _trackingNumber ?? '—', showDivider: false),
                 ],
               ),
@@ -396,8 +397,3 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-const _months = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-String _formatDate(DateTime date) => '${date.day} ${_months[date.month - 1]} ${date.year}';

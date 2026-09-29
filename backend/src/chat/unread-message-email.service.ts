@@ -4,6 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { MessageType, UserRole } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { escapeHtml } from '../common/escape-html';
 
 /// How long a message sits unread before its recipient is emailed.
 export const UNREAD_EMAIL_DELAY_MINUTES = 15;
@@ -11,9 +12,6 @@ export const UNREAD_EMAIL_DELAY_MINUTES = 15;
 /// the scan after downtime).
 const UNREAD_EMAIL_MAX_AGE_HOURS = 24;
 
-function escapeHtml(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
 
 /// Emails tenants, landlords and vendors about messages they haven't read
 /// after [UNREAD_EMAIL_DELAY_MINUTES] — one email per conversation per run,
