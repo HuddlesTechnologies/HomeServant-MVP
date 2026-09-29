@@ -280,7 +280,7 @@
 
 <h1>10. Web-specific setup</h1>
 <h2>Vercel build</h2>
-<p><code>vercel.json</code> clones Flutter, runs <code>flutter build web --release --dart-define=API_BASE_URL=...</code>, and serves <code>build/web</code>. Only <code>main</code> is built: <code>ignoreCommand</code> skips every other branch (Vercel skips the build when it exits 0), so pull requests get no preview deployment and old previews don't fill the Vercel plan's storage. Check a change locally (<code>flutter run -d chrome</code>) before merging.</p>
+<p><code>vercel.json</code> clones Flutter, runs <code>flutter build web --release --dart-define=API_BASE_URL=...</code>, and serves <code>build/web</code>. Only <code>main</code> (and a manual <code>vercel --prod</code> from the CLI, which has no branch) is built: <code>ignoreCommand</code> skips every other branch (Vercel skips the build when it exits 0), so pull requests get no preview deployment and old previews don't fill the Vercel plan's storage. Check a change locally (<code>flutter run -d chrome</code>) before merging.</p>
 <h2>Content-Security-Policy</h2>
 <p>The site sends a strict security policy. Anything the app loads from elsewhere must be listed in <code>vercel.json</code>; if something silently stops working on web, check here first.</p>
 <table>
