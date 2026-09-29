@@ -19,7 +19,7 @@ describeDb("tenant booking profile (real Postgres)", () => {
   beforeEach(async () => {
     await resetDb(prisma);
     users = new UsersService(prisma as never, {} as never, { create: async () => undefined } as never, {} as never, {} as never);
-    bookings = new BookingsService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never);
+    bookings = new BookingsService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never, { postBookingSystemMessage: async () => null } as never);
   });
 
   it('saves a background and tidied hobbies, and shows them to the landlord with the booking request', async () => {

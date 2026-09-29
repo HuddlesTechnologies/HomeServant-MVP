@@ -103,7 +103,7 @@ describeDb('eviction requests (real Postgres)', () => {
     const other = await makeProperty(prisma, landlord.id, { category: 'SHORTLET' });
     await prisma.booking.create({ data: { propertyId: other.id, tenantId: requester.id, status: 'PENDING' } });
 
-    const bookings = new BookingsService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never);
+    const bookings = new BookingsService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never, { postBookingSystemMessage: async () => null } as never);
     const rows = await bookings.findForLandlord(landlord.id);
     expect(rows.find((b) => b.tenantId === tenant.id)!.tenant.phoneNumber).toBe('08011112222');
     expect(rows.find((b) => b.tenantId === requester.id)!.tenant.phoneNumber).toBeNull();
@@ -115,7 +115,7 @@ describeDb('eviction requests (real Postgres)', () => {
     const rental = await makeProperty(prisma, landlord.id, { category: 'HOUSE' });
     const shortlet = await makeProperty(prisma, landlord.id, { category: 'SHORTLET' });
     const payments = { initiateBookingCharge: async () => ({ reference: 'r', authorizationUrl: 'https://pay' }) };
-    const bookings = new BookingsService(prisma as never, { create: async (userId: string, _t: unknown, title: string) => void notes.push({ userId, title }) } as never, payments as never, { requireVerifiedLandlords: async () => false } as never);
+    const bookings = new BookingsService(prisma as never, { create: async (userId: string, _t: unknown, title: string) => void notes.push({ userId, title }) } as never, payments as never, { requireVerifiedLandlords: async () => false } as never, { postBookingSystemMessage: async () => null } as never);
 
     const unpaid = await bookings.create(tenant.id, { propertyId: rental.id } as never);
     expect(notes.some((n) => n.userId === landlord.id)).toBe(false);
@@ -141,7 +141,7 @@ describeDb('eviction requests (real Postgres)', () => {
     const a = await prisma.booking.create({ data: { propertyId: mine.id, tenantId: tenant.id, status: 'PENDING' } });
     const b = await prisma.booking.create({ data: { propertyId: mine.id, tenantId: tenant.id, status: 'PENDING' } });
     const notMine = await prisma.booking.create({ data: { propertyId: theirs.id, tenantId: tenant.id, status: 'PENDING' } });
-    const bookings = new BookingsService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never);
+    const bookings = new BookingsService(prisma as never, {} as never, {} as never, { requireVerifiedLandlords: async () => false } as never, { postBookingSystemMessage: async () => null } as never);
 
     // Another landlord's booking can't be touched, even by id.
     expect(await bookings.setFeedCleared(landlord.id, true, [a.id, notMine.id])).toEqual({ count: 1 });

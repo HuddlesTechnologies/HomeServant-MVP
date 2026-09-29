@@ -116,10 +116,9 @@ class BookingsRepository {
   /// itself before the tenant pays. A non-Shortlet booking never sits
   /// PENDING waiting on this; its equivalents are [respondToInspection]
   /// and [rejectBooking].
-  Future<Booking> respond({required String id, required bool accepted}) {
+  Future<void> respond({required String id, required bool accepted}) {
     return _client.call(() async {
-      final response = await _client.dio.patch('/bookings/$id/respond', data: {'accepted': accepted});
-      return Booking.fromApi(response.data as Map<String, dynamic>);
+      await _client.dio.patch('/bookings/$id/respond', data: {'accepted': accepted});
     });
   }
 
@@ -134,25 +133,37 @@ class BookingsRepository {
     });
   }
 
+  // The six booking actions below return nothing: the server replies with
+  // the bare booking row (no property or tenant attached), which
+  // Booking.fromApi can't read. AppState reloads the list after each one
+  // instead. Reading the reply used to throw after the action had already
+  // succeeded, so the screen never updated and repeating the tap failed
+  // (e.g. "no pending inspection date" when accepting an inspection).
   /// Tenant proposes (or re-proposes, after a decline) an inspection date —
   /// only valid while the booking is PAID_AWAITING_INSPECTION, including
   /// much later than payment ("book later").
-  Future<Booking> proposeInspection({required String id, required DateTime requestedDate}) {
+  Future<void> proposeInspection({required String id, required DateTime requestedDate}) {
     return _client.call(() async {
-      final response = await _client.dio.post(
+      await _client.dio.post(
         '/bookings/$id/inspection',
         data: {'requestedDate': requestedDate.toIso8601String()},
       );
-      return Booking.fromApi(response.data as Map<String, dynamic>);
     });
   }
 
   /// Landlord accepts/declines the tenant's specific proposed inspection
   /// date — distinct from [rejectBooking], which ends the booking outright.
-  Future<Booking> respondToInspection({required String id, required bool accepted}) {
+  Future<void> respondToInspection({required String id, required bool accepted}) {
     return _client.call(() async {
-      final response = await _client.dio.patch('/bookings/$id/inspection/respond', data: {'accepted': accepted});
-      return Booking.fromApi(response.data as Map<String, dynamic>);
+      await _client.dio.patch('/bookings/$id/inspection/respond', data: {'accepted': accepted});
+    });
+  }
+
+  /// Landlord sets (or changes) the inspection date themselves — whether or
+  /// not the tenant has proposed one. Confirms it straight away.
+  Future<void> scheduleInspection({required String id, required DateTime date}) {
+    return _client.call(() async {
+      await _client.dio.post('/bookings/$id/inspection/schedule', data: {'requestedDate': date.toIso8601String()});
     });
   }
 
@@ -160,27 +171,24 @@ class BookingsRepository {
   /// any pre-move-in, post-payment state. Full refund, no platform fee
   /// withheld (contrast with the tenant's own [refund], which keeps a 0.2%
   /// cut).
-  Future<Booking> rejectBooking(String id) {
+  Future<void> rejectBooking(String id) {
     return _client.call(() async {
-      final response = await _client.dio.post('/bookings/$id/reject');
-      return Booking.fromApi(response.data as Map<String, dynamic>);
+      await _client.dio.post('/bookings/$id/reject');
     });
   }
 
   /// Releases the held payment to the landlord and generates the persisted
   /// tenancy agreement.
-  Future<Booking> markMovedIn(String id) {
+  Future<void> markMovedIn(String id) {
     return _client.call(() async {
-      final response = await _client.dio.post('/bookings/$id/moved-in');
-      return Booking.fromApi(response.data as Map<String, dynamic>);
+      await _client.dio.post('/bookings/$id/moved-in');
     });
   }
 
   /// Refunds the tenant (minus fees) — only valid before "moved in".
-  Future<Booking> refund(String id) {
+  Future<void> refund(String id) {
     return _client.call(() async {
-      final response = await _client.dio.post('/bookings/$id/refund');
-      return Booking.fromApi(response.data as Map<String, dynamic>);
+      await _client.dio.post('/bookings/$id/refund');
     });
   }
 

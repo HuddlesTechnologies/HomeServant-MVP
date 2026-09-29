@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { escapeHtml } from '../common/escape-html';
+import { EmailProperty, propertyEmailDetails } from '../common/property-email';
 
 /// HomeServant's cut on a normal release (marketplace, rental move-in,
 /// rental renewal, shortlet instant release) — 5%, expressed in basis
@@ -474,7 +475,7 @@ export class PaymentsService {
     const evicted = await this.prisma.evictionRequest.count({ where: { bookingId, status: 'APPROVED' } });
     if (evicted > 0) throw new BadRequestException('This tenancy was ended by an approved eviction');
     if (booking.rentPaidThrough.getTime() >= booking.leaseEndDate.getTime()) {
-      throw new BadRequestException('Every month of this lease is paid. Renew from your bookings to stay on.');
+      throw new BadRequestException('Every month of this lease is paid. Renew from your booking history to stay on.');
     }
     const daysUntilDue = (booking.rentPaidThrough.getTime() - Date.now()) / MS_PER_DAY;
     if (daysUntilDue > MONTHLY_PAY_WINDOW_DAYS) {
@@ -562,14 +563,14 @@ export class PaymentsService {
       return { outcome, updatedBooking };
     });
 
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Welcome home!',
-      `You've moved into ${booking.property.title}. Your tenancy agreement is ready in your bookings.`,
+      `You've moved into ${booking.property.title}. Your tenancy agreement is ready in your booking history.`,
     );
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
@@ -711,7 +712,7 @@ export class PaymentsService {
         `Refund initiated by the tenant for ${title}. Further messaging is no longer available unless the tenant books and pays again.`,
         false,
       );
-      await this.notifyBoth(booking.tenantId, booking.tenant.email, NotificationType.BOOKING_STATUS, 'Refund issued', `Your payment for ${title} has been refunded.`);
+      await this.notifyAboutBooking(booking, booking.tenantId, booking.tenant.email, NotificationType.BOOKING_STATUS, 'Refund issued', `Your payment for ${title} has been refunded.`);
       if (landlord) {
         await this.notifyBoth(
           landlord.id,
@@ -729,13 +730,14 @@ export class PaymentsService {
         `The landlord rejected this booking for ${title} and the tenant has been fully refunded. Further messaging is no longer available unless the tenant books and pays again.`,
         true,
       );
-      await this.notifyBoth(
+      await this.notifyAboutBooking(booking, 
         booking.tenantId,
         booking.tenant.email,
         NotificationType.BOOKING_STATUS,
         'Booking rejected',
         `The landlord was unable to proceed with your booking for ${title}. You've been fully refunded.`,
         threadId ?? undefined,
+
       );
     } else {
       const threadId = await this.postBookingSystemMessage(
@@ -743,13 +745,14 @@ export class PaymentsService {
         `HomeServant refunded the tenant in full for ${title}. Reason: ${opts.reason}. Further messaging is no longer available unless the tenant books and pays again.`,
         true,
       );
-      await this.notifyBoth(
+      await this.notifyAboutBooking(booking, 
         booking.tenantId,
         booking.tenant.email,
         NotificationType.BOOKING_STATUS,
         'You have been refunded',
         `HomeServant has refunded your payment for ${title} in full. Reason: ${opts.reason}`,
         threadId ?? undefined,
+
       );
       if (landlord) {
         await this.notifyBoth(
@@ -910,19 +913,30 @@ export class PaymentsService {
     }
 
     await this.prisma.booking.update({ where: { id: booking.id }, data: { status: BookingStatus.PAID_AWAITING_INSPECTION } });
-    await this.notifyBoth(
+    // Opens (or reuses) their chat so both notifications can go straight to
+    // it: the tenant can message the landlord from the payment notification.
+    const threadId = await this.postBookingSystemMessage(
+      booking,
+      `Payment confirmed for ${booking.property.title}. The money is held by HomeServant until the tenant moves in. You can now message each other to arrange the inspection.`,
+      true,
+    );
+    await this.notifyAboutBooking(booking, 
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Payment confirmed',
-      `Your payment for ${booking.property.title} is confirmed and held. Book an inspection whenever you're ready, or request a refund, from your bookings.`,
+      `Your payment for ${booking.property.title} is confirmed and held. Message the landlord, book an inspection whenever you're ready, or request a refund, from your booking history.`,
+      threadId ?? undefined,
+
     );
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       booking.property.landlordId,
       undefined,
       NotificationType.BOOKING_STATUS,
       'Tenant paid',
       `A tenant paid for ${booking.property.title}. Funds are held until an inspection is done and they confirm move-in.`,
+      threadId ?? undefined,
+
     );
   }
 
@@ -931,7 +945,7 @@ export class PaymentsService {
   /// held for verification or the transfer fails (e.g. a Paystack outage),
   /// the Payment stays PAID_HELD and shows on the admin Payouts screen for
   /// a safe retry, rather than leaving a paying guest unconfirmed.
-  private async releaseShortletInstant(payment: Payment, booking: { id: string; propertyId: string; requestedDate: Date | null; nights: number | null; property: { landlordId: string; title: string }; tenantId: string; tenant: { email: string } }): Promise<void> {
+  private async releaseShortletInstant(payment: Payment, booking: { id: string; propertyId: string; requestedDate: Date | null; nights: number | null; property: EmailProperty & { landlordId: string; title: string }; tenantId: string; tenant: { email: string } }): Promise<void> {
     if (!booking.requestedDate || !booking.nights) {
       this.logger.error(`Shortlet booking ${booking.id} paid but is missing requestedDate/nights`);
       return;
@@ -947,14 +961,21 @@ export class PaymentsService {
       data: { status: BookingStatus.PAID, leaseStartDate: leaseStart, leaseEndDate: leaseEnd },
     });
 
-    await this.notifyBoth(
+    const threadId = await this.postBookingSystemMessage(
+      booking,
+      `Payment confirmed for the stay at ${booking.property.title}. You can now message each other about check-in.`,
+      true,
+    );
+    await this.notifyAboutBooking(booking, 
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Booking confirmed',
-      `Your shortlet stay at ${booking.property.title} is confirmed and paid.`,
+      `Your shortlet stay at ${booking.property.title} is confirmed and paid. Message the landlord about check-in from here.`,
+      threadId ?? undefined,
+
     );
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
@@ -964,6 +985,8 @@ export class PaymentsService {
         : outcome === 'failed'
         ? `${booking.property.title} was booked and paid. ${DELAYED_PAYOUT_LINE}`
         : `${booking.property.title} was booked and your payout has been released.`,
+      threadId ?? undefined,
+
     );
   }
 
@@ -976,7 +999,7 @@ export class PaymentsService {
   /// renewal), and the rent is paid a month further.
   private async releaseMonthlyInstallment(
     payment: Payment,
-    booking: { id: string; rentPaidThrough: Date | null; leaseEndDate: Date | null; property: { landlordId: string; title: string }; tenantId: string; tenant: { email: string } },
+    booking: { id: string; rentPaidThrough: Date | null; leaseEndDate: Date | null; property: EmailProperty & { landlordId: string; title: string }; tenantId: string; tenant: { email: string } },
   ): Promise<void> {
     const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
     const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant monthly rent — ${booking.property.title}`);
@@ -987,14 +1010,14 @@ export class PaymentsService {
     });
     const until = paidThrough.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     const naira = `₦${Math.round(payment.amount / KOBO_PER_NAIRA).toLocaleString('en-US')}`;
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Monthly rent paid',
       `Thanks — your rent for ${booking.property.title} is paid until ${until}.`,
     );
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
@@ -1007,7 +1030,7 @@ export class PaymentsService {
     );
   }
 
-  private async releaseRenewal(payment: Payment, booking: { id: string; propertyId: string; leaseEndDate: Date | null; paymentPlan?: PaymentPlan; property: { landlordId: string; title: string; rentDurationMonths: number | null }; tenantId: string; tenant: { email: string } }): Promise<void> {
+  private async releaseRenewal(payment: Payment, booking: { id: string; propertyId: string; leaseEndDate: Date | null; paymentPlan?: PaymentPlan; property: EmailProperty & { landlordId: string; title: string; rentDurationMonths: number | null }; tenantId: string; tenant: { email: string } }): Promise<void> {
     if (!booking.leaseEndDate || !booking.property.rentDurationMonths) {
       this.logger.error(`Renewal payment ${payment.id} succeeded but booking ${booking.id} is missing leaseEndDate/rentDurationMonths`);
       return;
@@ -1054,14 +1077,14 @@ export class PaymentsService {
       }),
     ]);
 
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       booking.tenantId,
       booking.tenant.email,
       NotificationType.BOOKING_STATUS,
       'Lease renewed',
       `Your lease for ${booking.property.title} has been renewed until ${newLeaseEnd.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} at ${formatRent(rentPaid, priceUnit)}. Your tenancy agreement has been updated.`,
     );
-    await this.notifyBoth(
+    await this.notifyAboutBooking(booking, 
       landlord.id,
       landlord.email,
       NotificationType.BOOKING_STATUS,
@@ -1448,7 +1471,7 @@ export class PaymentsService {
         reason: `HomeServant payout — ${booking.property.title}`,
       });
       const naira = ((payment.amount - payment.platformFeeAmount) / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 });
-      await this.notifyBoth(
+      await this.notifyAboutBooking(booking, 
         landlord.id,
         landlord.email,
         NotificationType.BOOKING_STATUS,
@@ -1511,7 +1534,9 @@ export class PaymentsService {
     }
   }
 
-  private async notifyBoth(
+  /// [notifyBoth] for a booking: its emails include the property's details.
+  private notifyAboutBooking(
+    booking: { property: EmailProperty },
     userId: string,
     email: string | undefined,
     type: NotificationType,
@@ -1519,9 +1544,24 @@ export class PaymentsService {
     body: string,
     threadId?: string,
   ): Promise<void> {
+    return this.notifyBoth(userId, email, type, title, body, threadId, booking.property);
+  }
+
+  private async notifyBoth(
+    userId: string,
+    email: string | undefined,
+    type: NotificationType,
+    title: string,
+    body: string,
+    threadId?: string,
+    property?: EmailProperty,
+  ): Promise<void> {
     await this.notifications.create(userId, type, title, body, threadId);
     if (email) {
-      await this.mail.send(email, title, `<p>${escapeHtml(body)}</p>`, body);
+      // Booking emails carry the property's details, so it's clear which
+      // listing they're about.
+      const details = property ? propertyEmailDetails(property) : null;
+      await this.mail.send(email, title, `<p>${escapeHtml(body)}</p>${details?.html ?? ''}`, body + (details?.text ?? ''));
     }
   }
 }

@@ -264,7 +264,20 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
           ? 'Transferred to ${assigned.displayName}, who is handling it now.'
           : '${_capitalized(assigned.displayName)} is handling this conversation.';
     }
+    final other = _otherPersonName(summary);
+    if (!summary.isSupport && other != null) {
+      return summary.canReply ? 'You can message $other about this booking.' : "Messaging $other is closed for this booking.";
+    }
     return summary.canReply ? 'You can reply to this conversation.' : "You can't reply to this conversation.";
+  }
+
+  /// The tenant or landlord on the other side of a booking chat, if named.
+  String? _otherPersonName(ThreadSummary summary) {
+    for (final p in summary.otherParticipants) {
+      final name = p.fullName?.trim();
+      if (name != null && name.isNotEmpty) return name;
+    }
+    return null;
   }
 
   static String _capitalized(String text) => text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
@@ -357,7 +370,11 @@ class _NotificationDetailScreenState extends State<NotificationDetailScreen> {
             onPressed: () => _openThread(summary),
             icon: Icon(summary.canReply ? Icons.reply_rounded : Icons.visibility_outlined, color: theme.onAccent, size: 18),
             label: Text(
-              summary.canReply ? 'Reply' : 'View conversation',
+              !summary.canReply
+                  ? 'View conversation'
+                  : !summary.isSupport && _otherPersonName(summary) != null
+                  ? 'Message ${_otherPersonName(summary)}'
+                  : 'Reply',
               style: AppTextStyles.button(color: theme.onAccent, size: 15),
             ),
           ),

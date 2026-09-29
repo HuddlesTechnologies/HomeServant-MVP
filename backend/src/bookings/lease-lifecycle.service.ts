@@ -5,6 +5,7 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { escapeHtml } from '../common/escape-html';
+import { EMAIL_PROPERTY_SELECT, propertyEmailDetails } from '../common/property-email';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 /// Checked in ascending order — Array.find returns the first (smallest)
@@ -67,7 +68,7 @@ export class LeaseLifecycleService {
         leaseEndDate: { gt: now },
       },
       include: {
-        property: { select: { title: true, landlord: { select: { id: true, email: true } } } },
+        property: { select: { ...EMAIL_PROPERTY_SELECT, landlord: { select: { id: true, email: true } } } },
         tenant: { select: { id: true, email: true, fullName: true } },
       },
     });
@@ -82,19 +83,19 @@ export class LeaseLifecycleService {
 
       if (due.getTime() < now.getTime()) {
         if (sameMonth(booking.monthlyOverdueNotifiedFor)) continue;
-        const tenantBody = `Your monthly rent of ${amount} for ${booking.property.title} was due on ${dueText} and hasn't been paid. Pay it from your bookings to stay up to date.`;
+        const tenantBody = `Your monthly rent of ${amount} for ${booking.property.title} was due on ${dueText} and hasn't been paid. Pay it from your booking history to stay up to date.`;
         await this.notifications.create(booking.tenant.id, NotificationType.RENT_EXPIRY_REMINDER, 'Monthly rent overdue', tenantBody);
-        await this.mail.send(booking.tenant.email, 'Monthly rent overdue', `<p>${escapeHtml(tenantBody)}</p>`, tenantBody);
+        await this.mail.send(booking.tenant.email, 'Monthly rent overdue', `<p>${escapeHtml(tenantBody)}</p>${propertyEmailDetails(booking.property).html}`, tenantBody + propertyEmailDetails(booking.property).text);
         const name = booking.tenant.fullName?.trim() ? booking.tenant.fullName : 'Your tenant';
         const landlordBody = `${name} missed the monthly rent (${amount}) for ${booking.property.title} that was due on ${dueText}. We've reminded them.`;
         await this.notifications.create(booking.property.landlord.id, NotificationType.RENT_EXPIRY_REMINDER, 'Tenant missed a monthly payment', landlordBody);
-        await this.mail.send(booking.property.landlord.email, 'Tenant missed a monthly payment', `<p>${escapeHtml(landlordBody)}</p>`, landlordBody);
+        await this.mail.send(booking.property.landlord.email, 'Tenant missed a monthly payment', `<p>${escapeHtml(landlordBody)}</p>${propertyEmailDetails(booking.property).html}`, landlordBody + propertyEmailDetails(booking.property).text);
         await this.prisma.booking.update({ where: { id: booking.id }, data: { monthlyOverdueNotifiedFor: due } });
         flagged++;
       } else if ((due.getTime() - now.getTime()) / MS_PER_DAY <= MONTHLY_REMINDER_DAYS && !sameMonth(booking.monthlyReminderSentFor)) {
-        const body = `Your monthly rent of ${amount} for ${booking.property.title} is due on ${dueText}. You can pay it now from your bookings.`;
+        const body = `Your monthly rent of ${amount} for ${booking.property.title} is due on ${dueText}. You can pay it now from your booking history.`;
         await this.notifications.create(booking.tenant.id, NotificationType.RENT_EXPIRY_REMINDER, 'Monthly rent due soon', body);
-        await this.mail.send(booking.tenant.email, 'Monthly rent due soon', `<p>${escapeHtml(body)}</p>`, body);
+        await this.mail.send(booking.tenant.email, 'Monthly rent due soon', `<p>${escapeHtml(body)}</p>${propertyEmailDetails(booking.property).html}`, body + propertyEmailDetails(booking.property).text);
         await this.prisma.booking.update({ where: { id: booking.id }, data: { monthlyReminderSentFor: due } });
         reminded++;
       }
@@ -130,7 +131,7 @@ export class LeaseLifecycleService {
     const active = await this.prisma.booking.findMany({
       where: { status: BookingStatus.MOVED_IN, leaseEndDate: { gte: now } },
       include: {
-        property: { select: { title: true, landlord: { select: { id: true, email: true } } } },
+        property: { select: { ...EMAIL_PROPERTY_SELECT, landlord: { select: { id: true, email: true } } } },
         tenant: { select: { id: true, email: true, fullName: true } },
       },
     });
@@ -144,15 +145,15 @@ export class LeaseLifecycleService {
 
       const when = threshold === 0 ? 'today' : `in ${threshold} days`;
       const tenantTitle = 'Your lease is ending soon';
-      const tenantBody = `Your lease for ${booking.property.title} ends ${when}. Renew from your bookings to keep your stay.`;
+      const tenantBody = `Your lease for ${booking.property.title} ends ${when}. Renew from your booking history to keep your stay.`;
       await this.notifications.create(booking.tenant.id, NotificationType.RENT_EXPIRY_REMINDER, tenantTitle, tenantBody);
-      await this.mail.send(booking.tenant.email, tenantTitle, `<p>${escapeHtml(tenantBody)}</p>`, tenantBody);
+      await this.mail.send(booking.tenant.email, tenantTitle, `<p>${escapeHtml(tenantBody)}</p>${propertyEmailDetails(booking.property).html}`, tenantBody + propertyEmailDetails(booking.property).text);
 
       const tenantName = booking.tenant.fullName?.trim() ? booking.tenant.fullName : 'Your tenant';
       const landlordTitle = "A tenant's lease is ending soon";
       const landlordBody = `${tenantName}'s lease for ${booking.property.title} ends ${when}.`;
       await this.notifications.create(booking.property.landlord.id, NotificationType.RENT_EXPIRY_REMINDER, landlordTitle, landlordBody);
-      await this.mail.send(booking.property.landlord.email, landlordTitle, `<p>${escapeHtml(landlordBody)}</p>`, landlordBody);
+      await this.mail.send(booking.property.landlord.email, landlordTitle, `<p>${escapeHtml(landlordBody)}</p>${propertyEmailDetails(booking.property).html}`, landlordBody + propertyEmailDetails(booking.property).text);
 
       await this.prisma.booking.update({ where: { id: booking.id }, data: { lastRentReminderDaysOut: threshold } });
       sent++;

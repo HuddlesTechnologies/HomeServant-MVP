@@ -61,6 +61,13 @@ export class BookingsController {
     return this.bookings.proposeInspection(id, user.sub, dto);
   }
 
+  /// The landlord sets (or changes) the inspection date themselves.
+  @Post(':id/inspection/schedule')
+  @Roles(UserRole.LANDLORD)
+  scheduleInspection(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: ProposeInspectionDto) {
+    return this.bookings.scheduleInspection(id, user.sub, dto);
+  }
+
   @Patch(':id/inspection/respond')
   @Roles(UserRole.LANDLORD)
   respondToInspection(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: RespondBookingDto) {

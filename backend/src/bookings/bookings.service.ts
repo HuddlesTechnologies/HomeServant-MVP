@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { BookingStatus, NotificationType, PropertyCategory, VerificationStatus, PaymentPlan } from '@prisma/client';
+import { ChatService } from '../chat/chat.service';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -27,7 +28,26 @@ export class BookingsService {
     private readonly notifications: NotificationsService,
     private readonly payments: PaymentsService,
     private readonly platform: PlatformSettingsService,
+    private readonly chat: ChatService,
   ) {}
+
+  /// Posts an automatic note about this booking into the tenant–landlord
+  /// chat (started if they haven't chatted yet), so both see inspection
+  /// updates where they talk. Best-effort: a failure here never undoes the
+  /// booking change itself.
+  private async noteInChat(booking: { tenantId: string; propertyId: string; property: { landlordId: string } }, body: string) {
+    try {
+      await this.chat.postBookingSystemMessage({
+        tenantId: booking.tenantId,
+        landlordId: booking.property.landlordId,
+        propertyId: booking.propertyId,
+        body,
+        createIfMissing: true,
+      });
+    } catch {
+      // Nothing to do: the notification still reaches them.
+    }
+  }
 
   /// A Shortlet booking is unaffected by the pay/inspect reversal below —
   /// it still needs the landlord's accept/decline (date-conflict checked
@@ -295,19 +315,26 @@ export class BookingsService {
     if (booking.property.category === PropertyCategory.SHORTLET) {
       throw new BadRequestException('Shortlet stays have no inspection step');
     }
-    if (booking.status !== BookingStatus.PAID_AWAITING_INSPECTION) {
+    // Also while a proposed date is still waiting on the landlord, so the
+    // tenant can change it.
+    if (booking.status !== BookingStatus.PAID_AWAITING_INSPECTION && booking.status !== BookingStatus.INSPECTION_PROPOSED) {
       throw new BadRequestException('This booking is not awaiting an inspection date right now');
     }
 
+    const date = inspectionDate(dto.requestedDate);
     const updated = await this.prisma.booking.update({
       where: { id },
-      data: { requestedDate: new Date(dto.requestedDate), status: BookingStatus.INSPECTION_PROPOSED },
+      data: { requestedDate: date, status: BookingStatus.INSPECTION_PROPOSED },
     });
     await this.notifications.create(
       booking.property.landlordId,
       NotificationType.BOOKING_STATUS,
       'Inspection date proposed',
-      `A tenant proposed an inspection date for ${booking.property.title}.`,
+      `A tenant proposed ${formatInspectionDate(date)} to inspect ${booking.property.title}.`,
+    );
+    await this.noteInChat(
+      booking,
+      `Inspection date proposed for ${booking.property.title}: ${formatInspectionDate(date)}. The landlord can confirm it or pick another date.`,
     );
     return updated;
   }
@@ -333,14 +360,51 @@ export class BookingsService {
         ? { status: BookingStatus.INSPECTION_CONFIRMED, inspectionConfirmedAt: new Date() }
         : { status: BookingStatus.PAID_AWAITING_INSPECTION, requestedDate: null },
     });
+    const when = booking.requestedDate ? formatInspectionDate(booking.requestedDate) : 'the proposed date';
     await this.notifications.create(
       booking.tenantId,
       NotificationType.BOOKING_STATUS,
       accepted ? 'Inspection date confirmed' : 'Inspection date declined',
       accepted
-        ? `Your inspection date for ${booking.property.title} was confirmed.`
-        : `Your proposed inspection date for ${booking.property.title} was declined — propose another date whenever you're ready, from your bookings.`,
+        ? `Your inspection of ${booking.property.title} on ${when} was confirmed.`
+        : `Your proposed inspection date for ${booking.property.title} was declined — propose another date whenever you're ready, from your booking history.`,
     );
+    await this.noteInChat(
+      booking,
+      accepted
+        ? `The landlord confirmed the inspection of ${booking.property.title} on ${when}.`
+        : `The landlord declined ${when} for inspecting ${booking.property.title}. The tenant can propose another date, or the landlord can set one.`,
+    );
+    return updated;
+  }
+
+  /// `POST /bookings/:id/inspection/schedule` — the landlord sets the
+  /// inspection date themselves: when the tenant hasn't proposed one yet,
+  /// or instead of the date they proposed. Confirms it straight away.
+  async scheduleInspection(id: string, landlordId: string, dto: ProposeInspectionDto) {
+    const booking = await this.prisma.booking.findUnique({ where: { id }, include: { property: true } });
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.property.landlordId !== landlordId) {
+      throw new ForbiddenException('You do not own the property this booking is for');
+    }
+    if (booking.property.category === PropertyCategory.SHORTLET) {
+      throw new BadRequestException('Shortlet stays have no inspection step');
+    }
+    if (booking.status !== BookingStatus.PAID_AWAITING_INSPECTION && booking.status !== BookingStatus.INSPECTION_PROPOSED) {
+      throw new BadRequestException('This booking is not waiting on an inspection date');
+    }
+    const date = inspectionDate(dto.requestedDate);
+    const updated = await this.prisma.booking.update({
+      where: { id },
+      data: { requestedDate: date, status: BookingStatus.INSPECTION_CONFIRMED, inspectionConfirmedAt: new Date() },
+    });
+    await this.notifications.create(
+      booking.tenantId,
+      NotificationType.BOOKING_STATUS,
+      'Inspection date set',
+      `Your landlord set ${formatInspectionDate(date)} to inspect ${booking.property.title}. Message them if that doesn't work for you.`,
+    );
+    await this.noteInChat(booking, `The landlord set the inspection of ${booking.property.title} for ${formatInspectionDate(date)}.`);
     return updated;
   }
 
@@ -393,4 +457,22 @@ export class BookingsService {
     if (!agreement) throw new NotFoundException('No tenancy agreement for this booking yet');
     return agreement;
   }
+}
+
+/// An inspection date from the app ("YYYY-MM-DD" or an ISO timestamp),
+/// refused if it's before today.
+function inspectionDate(value: string): Date {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new BadRequestException('Choose a valid inspection date');
+  const startOfToday = new Date();
+  startOfToday.setUTCHours(0, 0, 0, 0);
+  if (date.getTime() < startOfToday.getTime() - 24 * 60 * 60 * 1000) {
+    throw new BadRequestException('Choose an inspection date from today onwards');
+  }
+  return date;
+}
+
+/// "Fri, 2 October 2026" — for notifications and chat notes.
+export function formatInspectionDate(date: Date): string {
+  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Africa/Lagos' });
 }

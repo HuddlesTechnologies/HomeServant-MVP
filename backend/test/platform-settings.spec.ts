@@ -34,7 +34,7 @@ describeDb('platform controls: only verified landlords (real Postgres)', () => {
     properties = new PropertiesService(prisma as never, reviews as never, {} as never, settings, { create: async () => undefined } as never);
     const notifications = { create: async () => undefined };
     const payments = { chargeBooking: async () => ({ reference: 'r', authorizationUrl: 'https://pay' }) };
-    bookings = new BookingsService(prisma as never, notifications as never, payments as never, settings);
+    bookings = new BookingsService(prisma as never, notifications as never, payments as never, settings, { postBookingSystemMessage: async () => null } as never);
   });
 
   async function setup() {

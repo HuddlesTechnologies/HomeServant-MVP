@@ -50,7 +50,7 @@ class ProfileScreen extends StatelessWidget {
         ),
         ProfileMenuItemSpec(
           icon: Icons.history_rounded,
-          label: 'History',
+          label: 'Booking History',
           onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => HistoryScreen(theme: theme))),
         ),
         ProfileMenuItemSpec(

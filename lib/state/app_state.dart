@@ -1008,9 +1008,8 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> respondToBooking(String id, {required bool accepted}) async {
-    final updated = await _bookingsRepo.respond(id: id, accepted: accepted);
-    landlordBookings = [for (final b in landlordBookings) if (b.id == id) updated else b];
-    notifyListeners();
+    await _bookingsRepo.respond(id: id, accepted: accepted);
+    await loadLandlordBookings();
   }
 
   /// For a Shortlet property, sends a booking request to the landlord
@@ -1042,15 +1041,13 @@ class AppState extends ChangeNotifier {
   Future<PaymentInitiation> payForBooking(String bookingId) => _bookingsRepo.pay(bookingId);
 
   Future<void> markBookingMovedIn(String bookingId) async {
-    final updated = await _bookingsRepo.markMovedIn(bookingId);
-    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.markMovedIn(bookingId);
+    await loadMyBookings();
   }
 
   Future<void> refundBooking(String bookingId) async {
-    final updated = await _bookingsRepo.refund(bookingId);
-    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.refund(bookingId);
+    await loadMyBookings();
   }
 
   Future<RenewalQuote> renewalQuote(String bookingId) => _bookingsRepo.renewalQuote(bookingId);
@@ -1068,25 +1065,29 @@ class AppState extends ChangeNotifier {
   /// PAID_AWAITING_INSPECTION booking — reachable any time from history,
   /// including right after paying ("book later") or much later.
   Future<void> proposeInspection(String bookingId, DateTime requestedDate) async {
-    final updated = await _bookingsRepo.proposeInspection(id: bookingId, requestedDate: requestedDate);
-    myBookings = [for (final b in myBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.proposeInspection(id: bookingId, requestedDate: requestedDate);
+    await loadMyBookings();
   }
 
   /// Landlord accepts/declines the tenant's specific proposed inspection
   /// date — distinct from [rejectBooking], which ends the booking outright.
   Future<void> respondToInspection(String bookingId, {required bool accepted}) async {
-    final updated = await _bookingsRepo.respondToInspection(id: bookingId, accepted: accepted);
-    landlordBookings = [for (final b in landlordBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.respondToInspection(id: bookingId, accepted: accepted);
+    await loadLandlordBookings();
+  }
+
+  /// Landlord sets the inspection date themselves (no tenant proposal
+  /// needed, or instead of the one proposed).
+  Future<void> scheduleInspection(String bookingId, DateTime date) async {
+    await _bookingsRepo.scheduleInspection(id: bookingId, date: date);
+    await loadLandlordBookings();
   }
 
   /// Landlord's distinct "reject this booking outright" lever — full
   /// refund, no platform fee withheld.
   Future<void> rejectBooking(String bookingId) async {
-    final updated = await _bookingsRepo.rejectBooking(bookingId);
-    landlordBookings = [for (final b in landlordBookings) if (b.id == bookingId) updated else b];
-    notifyListeners();
+    await _bookingsRepo.rejectBooking(bookingId);
+    await loadLandlordBookings();
   }
 
   Future<void> loadMyReviews() async {
