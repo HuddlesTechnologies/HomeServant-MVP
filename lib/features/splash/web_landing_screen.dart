@@ -304,6 +304,7 @@ class _MobileNavDrawer extends StatelessWidget {
                 children: [
                   Image.asset('assets/icons/logo6.png', height: 30),
                   IconButton(
+                    tooltip: 'Close',
                     onPressed: () => Navigator.of(context).pop(),
                     icon: Icon(Icons.close_rounded, color: AppColors.navy),
                   ),
@@ -435,14 +436,14 @@ class _HeroSection extends StatelessWidget {
             right: 0,
             bottom: 28,
             child: Center(
-              child: InkWell(
+              child: Tooltip(message: 'Scroll down', child: Semantics(button: true, child: InkWell(
                 onTap: onScrollCue,
                 borderRadius: BorderRadius.circular(20),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
                   child: Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.white.withValues(alpha: 0.7), size: 28),
                 ),
-              ),
+              ))),
             ),
           ),
         ],

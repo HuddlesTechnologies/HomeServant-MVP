@@ -141,11 +141,13 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
+                tooltip: 'Fewer nights',
                 onPressed: nights > 1 ? () => setSheetState(() => nights--) : null,
                 icon: const Icon(Icons.remove_circle_outline_rounded),
               ),
               Text('$nights', style: AppTextStyles.heading(color: widget.theme.foreground, size: 22)),
               IconButton(
+                tooltip: 'More nights',
                 onPressed: () => setSheetState(() => nights++),
                 icon: const Icon(Icons.add_circle_outline_rounded),
               ),
@@ -404,7 +406,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 for (var i = 0; i < property.galleryImages.length; i++)
                                   Padding(
                                     padding: const EdgeInsets.only(right: 10),
-                                    child: GestureDetector(
+                                    child: Semantics(button: true, label: 'View photo', child: GestureDetector(
                                       // Gallery index 0 is the hero photo, so the
                                       // preview strip's photos start at index 1.
                                       onTap: () => _openGallery(i + 1),
@@ -412,7 +414,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                         borderRadius: BorderRadius.circular(14),
                                         child: PropertyImage(path: property.galleryImages[i], width: 72, height: 72),
                                       ),
-                                    ),
+                                    )),
                                   ),
                               ],
                             ),
@@ -725,14 +727,15 @@ class _Hero extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          GestureDetector(onTap: onOpenGallery, child: PropertyImage(path: property.image)),
-          Positioned(top: 16, left: 16, child: _CircleButton(icon: Icons.arrow_back_ios_new_rounded, onTap: onBack)),
+          Semantics(button: true, label: 'View photos', child: GestureDetector(onTap: onOpenGallery, child: PropertyImage(path: property.image))),
+          Positioned(top: 16, left: 16, child: _CircleButton(icon: Icons.arrow_back_ios_new_rounded, label: 'Back', onTap: onBack)),
           if (showFavorite)
             Positioned(
               top: 16,
               right: 16,
               child: _CircleButton(
                 icon: favorited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                label: favorited ? 'Remove from wishlist' : 'Save to wishlist',
                 iconColor: favorited ? Colors.redAccent : Colors.white,
                 onTap: onToggleFavorite,
               ),
@@ -744,20 +747,27 @@ class _Hero extends StatelessWidget {
 }
 
 class _CircleButton extends StatelessWidget {
-  const _CircleButton({required this.icon, required this.onTap, this.iconColor = Colors.white});
+  const _CircleButton({required this.icon, required this.label, required this.onTap, this.iconColor = Colors.white});
 
   final IconData icon;
+  final String label;
   final VoidCallback onTap;
   final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: CircleAvatar(
-        radius: 18,
-        backgroundColor: Colors.black.withValues(alpha: 0.35),
-        child: Icon(icon, color: iconColor, size: 18),
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        button: true,
+        child: GestureDetector(
+          onTap: onTap,
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: Colors.black.withValues(alpha: 0.35),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+        ),
       ),
     );
   }

@@ -203,6 +203,7 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                               ),
                             if (context.canModerate)
                               IconButton(
+                                tooltip: 'Remove listing',
                                 onPressed: () => _remove(property),
                                 icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                               ),

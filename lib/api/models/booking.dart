@@ -211,6 +211,17 @@ class Booking {
 
   bool get isShortlet => property.category == 'Shortlet';
 
+  /// When a shortlet stay ends: its start date plus the nights booked (or
+  /// the lease end, where one was recorded). Null if unknown or not a
+  /// shortlet.
+  DateTime? get shortletStayEnd {
+    if (!isShortlet) return null;
+    if (leaseEndDate != null) return leaseEndDate;
+    final start = requestedDate;
+    if (start == null || nights == null) return null;
+    return start.add(Duration(days: nights!));
+  }
+
   /// Computed client-side from [tenantDateOfBirth] — null if that's null.
   int? get tenantAge {
     final dob = tenantDateOfBirth;

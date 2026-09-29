@@ -15,6 +15,7 @@ import '../dashboard/notifications_screen.dart';
 import 'vendor_order_detail_screen.dart';
 import 'widgets/vendor_bottom_nav.dart';
 import 'widgets/vendor_tab_route.dart';
+import '../../core/date_format.dart';
 
 /// The signed-in vendor's home base — a snapshot of their shop's products,
 /// orders and revenue. Reached once the signed-in account has a vendor
@@ -138,6 +139,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                           clipBehavior: Clip.none,
                           children: [
                             IconButton(
+                              tooltip: 'Notifications',
                               onPressed: _openNotifications,
                               icon: Icon(Icons.notifications_none_rounded, color: theme.foreground),
                             ),
@@ -159,6 +161,7 @@ class _VendorDashboardScreenState extends State<VendorDashboardScreen> {
                           ],
                         ),
                         IconButton(
+                          tooltip: 'Messages',
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute(builder: (_) => VendorMessagesScreen(theme: theme)),
                           ),
@@ -365,7 +368,4 @@ class _OrderTile extends StatelessWidget {
   }
 }
 
-String _formatDate(DateTime date) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return '${date.day} ${months[date.month - 1]}';
-}
+String _formatDate(DateTime date) => '${date.day} ${monthAbbreviations[date.month - 1]}';

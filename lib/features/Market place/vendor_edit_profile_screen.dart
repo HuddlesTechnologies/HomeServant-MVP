@@ -167,7 +167,7 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
             children: [
               Center(
-                child: GestureDetector(
+                child: Tooltip(message: 'Change shop logo', child: Semantics(button: true, child: GestureDetector(
                   onTap: _pickLogo,
                   child: Stack(
                     children: [
@@ -196,7 +196,7 @@ class _VendorEditProfileScreenState extends State<VendorEditProfileScreen> {
                       ),
                     ],
                   ),
-                ),
+                ))),
               ),
               const SizedBox(height: 8),
               Center(

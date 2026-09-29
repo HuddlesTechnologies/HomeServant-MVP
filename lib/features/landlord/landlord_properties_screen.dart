@@ -155,6 +155,7 @@ class _LandlordPropertiesScreenState extends State<LandlordPropertiesScreen> {
                       suffixIcon: _search.text.isEmpty
                           ? null
                           : IconButton(
+                              tooltip: 'Close',
                               icon: Icon(Icons.close_rounded, color: theme.onSurface.withValues(alpha: 0.6)),
                               onPressed: () => setState(_search.clear),
                             ),

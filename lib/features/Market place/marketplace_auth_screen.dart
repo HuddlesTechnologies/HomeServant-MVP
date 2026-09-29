@@ -106,6 +106,7 @@ class _MarketplaceAuthScreenState extends State<MarketplaceAuthScreen> {
               top: 4,
               left: 8,
               child: IconButton(
+                tooltip: 'Back',
                 onPressed: () => context.pop(),
                 icon: Icon(Icons.arrow_back_ios_new_rounded, color: theme.foreground, size: 20),
               ),

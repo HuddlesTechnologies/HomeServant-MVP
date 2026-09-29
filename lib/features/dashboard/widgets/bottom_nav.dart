@@ -27,6 +27,7 @@ class DashboardBottomNav extends StatelessWidget {
       currentIndex: currentIndex,
       onTap: onTap,
       itemCount: _icons.length,
+      labels: const ['Home', 'Marketplace', 'Tenancy agreements', 'Profile'],
       backgroundColor: theme.navigatorColor,
       selectedBackgroundColor: theme.background,
       selectedColor: theme.accent,

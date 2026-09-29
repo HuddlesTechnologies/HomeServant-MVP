@@ -136,6 +136,7 @@ class _PasswordFieldState extends State<_PasswordField> {
         labelText: widget.label,
         labelStyle: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
         suffixIcon: IconButton(
+          tooltip: _obscured ? 'Show password' : 'Hide password',
           onPressed: () => setState(() => _obscured = !_obscured),
           icon: Icon(
             _obscured ? Icons.visibility_off_outlined : Icons.visibility_outlined,

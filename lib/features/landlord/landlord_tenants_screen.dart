@@ -147,13 +147,13 @@ class _LandlordTenantsScreenState extends State<LandlordTenantsScreen> {
                           ),
                         ),
                         if (_query.isNotEmpty)
-                          GestureDetector(
+                          Tooltip(message: 'Clear search', child: Semantics(button: true, child: GestureDetector(
                             onTap: () {
                               _search.clear();
                               setState(() => _query = '');
                             },
                             child: const Icon(Icons.close_rounded, color: AppColors.hintGrey, size: 20),
-                          ),
+                          ))),
                       ],
                     ),
                   ),

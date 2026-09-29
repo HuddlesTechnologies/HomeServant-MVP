@@ -885,6 +885,7 @@ class _AdminAdminsTabState extends State<AdminAdminsTab> {
                           ),
                         if (isSuperAdmin && !isSelf)
                           IconButton(
+                            tooltip: 'Remove admin',
                             onPressed: () => _remove(admin),
                             icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
                           ),

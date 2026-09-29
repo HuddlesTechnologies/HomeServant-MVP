@@ -22,6 +22,7 @@ class VendorBottomNav extends StatelessWidget {
       currentIndex: currentIndex,
       onTap: onTap,
       itemCount: _icons.length,
+      labels: const ['Overview', 'Products', 'Shop profile'],
       backgroundColor: theme.navigatorColor,
       selectedBackgroundColor: theme.background,
       selectedColor: theme.accent,

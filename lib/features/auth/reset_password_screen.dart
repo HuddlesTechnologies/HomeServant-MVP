@@ -134,6 +134,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     autofillHints: const [AutofillHints.newPassword],
                     enableSuggestions: false,
                     trailing: IconButton(
+                      tooltip: _obscureNew ? 'Show password' : 'Hide password',
                       icon: Icon(
                         _obscureNew ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                         color: role.foreground.withValues(alpha: 0.6),
@@ -151,6 +152,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                     autofillHints: kConfirmPasswordAutofillHints,
                     enableSuggestions: false,
                     trailing: IconButton(
+                      tooltip: _obscureConfirm ? 'Show password' : 'Hide password',
                       icon: Icon(
                         _obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                         color: role.foreground.withValues(alpha: 0.6),

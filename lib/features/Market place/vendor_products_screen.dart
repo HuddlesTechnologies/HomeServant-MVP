@@ -207,6 +207,7 @@ class _VendorProductTile extends StatelessWidget {
           ),
           if (product.isAvailable)
             IconButton(
+              tooltip: 'Delete product',
               onPressed: onRemove,
               icon: Icon(Icons.delete_outline_rounded, color: Colors.redAccent.withValues(alpha: 0.8), size: 20),
             )

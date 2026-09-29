@@ -25,3 +25,9 @@ class ThousandsSeparatorInputFormatter extends TextInputFormatter {
     return TextEditingValue(text: formatted, selection: TextSelection.collapsed(offset: formatted.length));
   }
 }
+
+/// "₦1,200,000" from a naira amount.
+String nairaLabel(num naira) => '₦${formatWithThousandsSeparator(naira)}';
+
+/// "₦1,200,000" from a kobo amount (payments are stored in kobo).
+String nairaLabelFromKobo(int kobo) => nairaLabel(kobo / 100);

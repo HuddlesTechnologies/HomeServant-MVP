@@ -49,8 +49,6 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
     }
   }
 
-  String _naira(int kobo) => '₦${formatWithThousandsSeparator(kobo / 100)}';
-
   Future<void> _run(StuckPayment p, Future<String> Function() action) async {
     final messenger = ScaffoldMessenger.of(context);
     setState(() => _busy.add(p.paymentId));
@@ -68,7 +66,7 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
   Future<void> _retryPayout(StuckPayment p) async {
     final ok = await showAdminConfirmSheet(
       context,
-      title: 'Send ${_naira(p.amountKobo)} to ${p.landlordName}?',
+      title: 'Send ${nairaLabelFromKobo(p.amountKobo)} to ${p.landlordName}?',
       body: 'HomeServant first checks with Paystack whether this payout already went out. If it did, it is simply marked as paid; '
           'nothing is sent twice.',
       actionLabel: 'Send payout',
@@ -86,7 +84,7 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
     final ok = await showAdminConfirmSheet(
       context,
       title: 'Retry the refund to ${p.tenantName ?? 'the tenant'}?',
-      body: 'The same refund that failed is tried again (${_naira(p.amountKobo)}). HomeServant first checks with Paystack whether it '
+      body: 'The same refund that failed is tried again (${nairaLabelFromKobo(p.amountKobo)}). HomeServant first checks with Paystack whether it '
           'already went through, so the tenant is never refunded twice.',
       actionLabel: 'Retry refund',
       destructive: false,
@@ -103,7 +101,7 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
     final reason = await showAdminReasonSheet(
       context,
       title: 'Refund ${p.tenantName ?? 'the tenant'} in full?',
-      body: 'The tenant gets the full ${_naira(p.amountKobo)} back and the booking ends as Refunded. The landlord is not paid for it. '
+      body: 'The tenant gets the full ${nairaLabelFromKobo(p.amountKobo)} back and the booking ends as Refunded. The landlord is not paid for it. '
           'The tenant can no longer request a refund themselves, and it can never be refunded twice.',
       actionLabel: 'Refund tenant',
       hint: 'Reason (the tenant and landlord see it)',
@@ -178,7 +176,7 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
             children: [
               Expanded(
                 child: Text(
-                  '${isRefund ? 'Refund to tenant' : 'Payout to landlord'} · ${_naira(p.amountKobo)}',
+                  '${isRefund ? 'Refund to tenant' : 'Payout to landlord'} · ${nairaLabelFromKobo(p.amountKobo)}',
                   style: AppTextStyles.body(color: AppColors.navy, size: 15, weight: FontWeight.w700),
                 ),
               ),

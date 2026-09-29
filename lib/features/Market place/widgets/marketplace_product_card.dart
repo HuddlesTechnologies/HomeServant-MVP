@@ -160,7 +160,7 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _StepperButton(theme: theme, icon: Icons.remove_rounded, onTap: _quantity > 1 ? _decrement : null),
+                      _StepperButton(theme: theme, icon: Icons.remove_rounded, label: 'Decrease quantity', onTap: _quantity > 1 ? _decrement : null),
                       SizedBox(
                         width: 22,
                         child: Text(
@@ -172,6 +172,7 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
                       _StepperButton(
                         theme: theme,
                         icon: Icons.add_rounded,
+                        label: 'Increase quantity',
                         onTap: _quantity < product.stock ? _increment : null,
                       ),
                     ],
@@ -211,21 +212,25 @@ class _MarketplaceProductCardState extends State<MarketplaceProductCard> {
 }
 
 class _StepperButton extends StatelessWidget {
-  const _StepperButton({required this.theme, required this.icon, required this.onTap});
+  const _StepperButton({required this.theme, required this.icon, required this.label, required this.onTap});
 
   final DashboardTheme theme;
   final IconData icon;
+  final String label;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
-    return InkWell(
-      onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Padding(
-        padding: const EdgeInsets.all(5),
-        child: Icon(icon, size: 14, color: enabled ? theme.onSurface.withValues(alpha: 0.8) : theme.onSurface.withValues(alpha: 0.25)),
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(5),
+          child: Icon(icon, size: 14, color: enabled ? theme.onSurface.withValues(alpha: 0.8) : theme.onSurface.withValues(alpha: 0.25)),
+        ),
       ),
     );
   }

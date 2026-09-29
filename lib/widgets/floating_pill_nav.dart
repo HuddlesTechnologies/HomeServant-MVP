@@ -15,6 +15,7 @@ class FloatingPillNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     required this.itemCount,
+    required this.labels,
     required this.iconBuilder,
     required this.backgroundColor,
     required this.selectedBackgroundColor,
@@ -25,6 +26,11 @@ class FloatingPillNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
   final int itemCount;
+
+  /// What each icon is called ("Home", "Messages"...). Read out by screen
+  /// readers and shown as a tooltip on hover — without it an icon-only nav
+  /// is announced as just "button".
+  final List<String> labels;
 
   /// Builds the icon for [index], already tinted the right colour for its
   /// selected/unselected state.
@@ -50,16 +56,23 @@ class FloatingPillNav extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: List.generate(itemCount, (index) {
           final selected = index == currentIndex;
-          return GestureDetector(
-            onTap: () => onTap(index),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: selected ? selectedBackgroundColor : Colors.transparent,
-                shape: BoxShape.circle,
+          return Tooltip(
+            message: labels[index],
+            child: Semantics(
+              button: true,
+              selected: selected,
+              child: GestureDetector(
+                onTap: () => onTap(index),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: selected ? selectedBackgroundColor : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: iconBuilder(index, selected ? selectedColor : unselectedColor),
+                ),
               ),
-              child: iconBuilder(index, selected ? selectedColor : unselectedColor),
             ),
           );
         }),
