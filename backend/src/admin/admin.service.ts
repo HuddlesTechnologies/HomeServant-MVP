@@ -11,6 +11,8 @@ import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OtpService } from '../otp/otp.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { joinName } from '../common/admin-display-name';
+import { adminBookingHistorySelect, toAdminBookingHistory } from './booking-history';
 import { ConfirmAdminDto } from './dto/confirm-admin.dto';
 import { ConfirmAdminResetDto } from './dto/confirm-admin-reset.dto';
 import { CreateAdminDto } from './dto/create-admin.dto';
@@ -33,10 +35,28 @@ const RANK: Record<AdminLevel, number> = {
   SUPER_ADMIN: 2,
 };
 
+/// First, last and full name for a new admin account. The console sends
+/// first and last name; a bare full name (older console builds, the
+/// bootstrap script) is split on its first space.
+function splitAdminName(dto: { firstName?: string; lastName?: string; fullName?: string }) {
+  let firstName = dto.firstName?.trim() || null;
+  let lastName = dto.lastName?.trim() || null;
+  if (!firstName && !lastName && dto.fullName?.trim()) {
+    const [first, ...rest] = dto.fullName.trim().split(/\s+/);
+    firstName = first;
+    lastName = rest.join(' ') || null;
+  }
+  const fullName = joinName(firstName, lastName, dto.fullName);
+  if (!fullName) throw new BadRequestException("Enter the admin's first and last name");
+  return { firstName, lastName, fullName };
+}
+
 const adminSelect = {
   id: true,
   email: true,
   fullName: true,
+  firstName: true,
+  lastName: true,
   role: true,
   adminLevel: true,
   twoFactorEnabled: true,
@@ -84,7 +104,7 @@ export class AdminService {
         passwordHash,
         role: 'ADMIN',
         adminLevel: level,
-        fullName: dto.fullName,
+        ...splitAdminName(dto),
         emailVerifiedAt: new Date(),
       },
       select: adminSelect,
@@ -105,10 +125,11 @@ export class AdminService {
     const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
     const code = await this.otp.generate(dto.email, OtpPurpose.ADMIN_CREATE);
 
+    const names = splitAdminName(dto);
     await this.prisma.pendingAdmin.upsert({
       where: { email: dto.email },
-      create: { email: dto.email, fullName: dto.fullName, level: dto.level, tempPasswordHash, invitedById },
-      update: { fullName: dto.fullName, level: dto.level, tempPasswordHash, invitedById },
+      create: { email: dto.email, ...names, level: dto.level, tempPasswordHash, invitedById },
+      update: { ...names, level: dto.level, tempPasswordHash, invitedById },
     });
 
     await this.mail.send(
@@ -149,6 +170,8 @@ export class AdminService {
         role: 'ADMIN',
         adminLevel: pending.level,
         fullName: pending.fullName,
+        firstName: pending.firstName,
+        lastName: pending.lastName,
         emailVerifiedAt: new Date(),
         mustChangePassword: true,
         createdByAdminId: pending.invitedById ?? confirmingAdminId,
@@ -493,6 +516,7 @@ export class AdminService {
       ...(query.role === 'VENDOR' ? { vendorProfile: { isNot: null } } : {}),
       ...(query.role === 'ADMIN' ? { id: { in: [] } } : {}),
       ...(query.deactivatedOnly ? { deactivatedAt: { not: null } } : {}),
+      ...(query.bannedOnly ? { bannedAt: { not: null } } : {}),
       ...(query.search
         ? {
             OR: [
@@ -516,6 +540,7 @@ export class AdminService {
           profilePhotoUrl: true,
           emailVerifiedAt: true,
           deactivatedAt: true,
+          bannedAt: true,
           createdAt: true,
           // Lets the console badge a non-vendor role (typically TENANT)
           // that's *also* running a shop — see the role=='VENDOR' filter
@@ -552,17 +577,9 @@ export class AdminService {
           select: { id: true, listingNumber: true, title: true, price: true, priceUnit: true, isOccupied: true, imageUrl: true, createdAt: true },
           orderBy: { createdAt: 'desc' },
         },
-        bookings: {
-          select: {
-            id: true,
-            propertyId: true,
-            status: true,
-            requestedDate: true,
-            createdAt: true,
-            property: { select: { title: true, price: true, priceUnit: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        },
+        // Newest first — the console always shows the latest three and
+        // folds the rest away.
+        bookings: { select: adminBookingHistorySelect, orderBy: { createdAt: 'desc' } },
         marketplaceOrders: {
           select: {
             id: true,
@@ -590,16 +607,7 @@ export class AdminService {
       ...rest,
       isOnline: this.presence.isOnline(user.id),
       properties: user.role === 'LANDLORD' ? properties : [],
-      bookings: bookings.map((b) => ({
-        id: b.id,
-        propertyId: b.propertyId,
-        propertyTitle: b.property.title,
-        price: b.property.price,
-        priceUnit: b.property.priceUnit,
-        status: b.status,
-        requestedDate: b.requestedDate,
-        createdAt: b.createdAt,
-      })),
+      bookings: bookings.map(toAdminBookingHistory),
       marketplaceOrders: marketplaceOrders.map((o) => ({
         id: o.id,
         createdAt: o.createdAt,
@@ -661,6 +669,68 @@ export class AdminService {
     await this.requireUser(id);
     await this.activityLog.log(ActivityLogType.ADMIN_USER_DELETED, { actorId, targetId: id, reason });
     await this.auth.deleteAccount(id, reason);
+  }
+
+  /// Moderator+. A permanent ban — for someone posting suspicious
+  /// listings, for example. Unlike deactivation it can't be undone by
+  /// logging back in and the account is never auto-deleted: every session
+  /// is signed out at once (live sessions are told over the socket, and
+  /// sign-in/refresh refuse with the reason — see assertNotBanned), their
+  /// listings leave browse/search and can't be booked, and a vendor shop
+  /// is taken off the marketplace. They're told by email and notification,
+  /// with the reason. Only a super admin can lift it ([unbanUser]).
+  async banUser(id: string, reason: string, actorId: string): Promise<void> {
+    const user = await this.requireUser(id);
+    if (user.bannedAt) throw new BadRequestException('This account is already banned');
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id }, data: { bannedAt: now, banReason: reason.trim(), bannedById: actorId } }),
+      this.prisma.refreshToken.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: now } }),
+    ]);
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_BANNED, { actorId, targetId: id, reason: reason.trim() });
+    await this.notifications.create(
+      id,
+      NotificationType.ACCOUNT_BANNED,
+      'Your account has been permanently banned',
+      `HomeServant has permanently banned your account. Reason: ${reason.trim()}. If you believe this is a mistake, contact HomeServant support.`,
+    );
+    // Any open app or browser tab signs out straight away.
+    this.chatGateway.emitToUser(id, 'account:banned', { reason: reason.trim() });
+    const text =
+      `Your HomeServant account has been permanently banned.\n\nReason: ${reason.trim()}\n\n` +
+      "You can no longer sign in, and your listings (if any) are no longer shown. If you believe this is a mistake, contact HomeServant support and we'll review it.";
+    await this.mail.send(
+      user.email,
+      'Your HomeServant account has been permanently banned',
+      `<p>Hi${user.fullName ? ` ${escapeHtml(user.fullName)}` : ''},</p>` +
+        `<p>Your HomeServant account has been <strong>permanently banned</strong>.</p>` +
+        `<p>Reason: ${escapeHtml(reason.trim())}</p>` +
+        `<p>You can no longer sign in, and your listings (if any) are no longer shown. If you believe this is a mistake, contact HomeServant support and we'll review it.</p>`,
+      text,
+    );
+  }
+
+  /// Super admin only. Lifts a permanent ban: they can sign in again and
+  /// their listings/shop return. They're told by email and notification.
+  async unbanUser(id: string, reason: string, actorId: string): Promise<void> {
+    const actor = await this.prisma.user.findUnique({ where: { id: actorId }, select: { adminLevel: true } });
+    if (actor?.adminLevel !== AdminLevel.SUPER_ADMIN) throw new ForbiddenException('Only a super admin can lift a ban');
+    const user = await this.requireUser(id);
+    if (!user.bannedAt) throw new BadRequestException("This account isn't banned");
+    await this.prisma.user.update({ where: { id }, data: { bannedAt: null, banReason: null, bannedById: null } });
+    await this.activityLog.log(ActivityLogType.ADMIN_USER_UNBANNED, { actorId, targetId: id, reason: reason.trim() });
+    await this.notifications.create(
+      id,
+      NotificationType.ACCOUNT_UNBANNED,
+      'Your account ban has been lifted',
+      'HomeServant has lifted the ban on your account. You can sign in and use HomeServant again.',
+    );
+    await this.mail.send(
+      user.email,
+      'Your HomeServant account ban has been lifted',
+      `<p>Hi${user.fullName ? ` ${escapeHtml(user.fullName)}` : ''},</p><p>HomeServant has lifted the ban on your account. You can sign in and use HomeServant again.</p>`,
+      'HomeServant has lifted the ban on your account. You can sign in and use HomeServant again.',
+    );
   }
 
   private async requireUser(id: string) {
@@ -956,14 +1026,26 @@ export class AdminService {
     const [items, total] = await Promise.all([
       this.prisma.property.findMany({
         where,
-        include: { landlord: { select: { id: true, fullName: true, email: true } } },
+        include: {
+          landlord: { select: { id: true, fullName: true, email: true } },
+          promotions: { where: { status: 'ACTIVE', endsAt: { gt: new Date() } }, select: { startsAt: true } },
+        },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
       this.prisma.property.count({ where }),
     ]);
-    return { items, total, page, pageSize };
+    const now = new Date();
+    return {
+      items: items.map(({ promotions, ...p }) => ({
+        ...p,
+        featured: promotions.some((promo) => promo.startsAt && promo.startsAt <= now),
+      })),
+      total,
+      page,
+      pageSize,
+    };
   }
 
   /// Full listing — everything `findProperties` already fetches via
@@ -975,10 +1057,44 @@ export class AdminService {
       include: {
         landlord: { select: { id: true, fullName: true, email: true, phoneNumber: true } },
         _count: { select: { bookings: true, favorites: true, reviews: true } },
+        // Paid "Featured" ads, newest first.
+        promotions: {
+          where: { status: 'ACTIVE' },
+          orderBy: { createdAt: 'desc' },
+          select: { id: true, days: true, amountKobo: true, paidAt: true, startsAt: true, endsAt: true },
+        },
       },
     });
     if (!property) throw new NotFoundException('Property not found');
-    return property;
+    const now = new Date();
+    const live = property.promotions.filter((p) => p.startsAt && p.endsAt && p.startsAt <= now && p.endsAt > now);
+    const featuredUntil = live.length
+      ? property.promotions.reduce<Date | null>((max, p) => (p.endsAt && (!max || p.endsAt > max) ? p.endsAt : max), null)
+      : null;
+    return { ...property, featured: live.length > 0, featuredUntil };
+  }
+
+  /// Moderator+. Search ranking for a listing (e.g. a popular shortlet):
+  /// [level] 0 = normal, 1 = boosted, 2 = top, for [days] days or until
+  /// changed (null). It only ever moves a listing up among bookable
+  /// listings and into the limited promoted slots — never above an
+  /// available listing when it's unavailable itself (see
+  /// listing-ranking.ts). Logged with the reason.
+  async setPropertyBoost(id: string, level: number, days: number | null | undefined, reason: string, actorId: string) {
+    const property = await this.prisma.property.findUnique({ where: { id }, select: { id: true, landlordId: true } });
+    if (!property) throw new NotFoundException('Property not found');
+    const until = level > 0 && days ? new Date(Date.now() + days * 24 * 60 * 60 * 1000) : null;
+    const updated = await this.prisma.property.update({
+      where: { id },
+      data: { adminBoost: level, adminBoostUntil: until },
+      select: { id: true, adminBoost: true, adminBoostUntil: true },
+    });
+    await this.activityLog.log(ActivityLogType.ADMIN_PROPERTY_BOOSTED, {
+      actorId,
+      targetId: property.landlordId,
+      reason: `${['Normal', 'Boosted', 'Top'][level]}${until ? ` until ${until.toDateString()}` : ''} — ${reason.trim()}`,
+    });
+    return updated;
   }
 
   /// A landlord can't re-list their own occupied property (a tenant's
@@ -1150,4 +1266,8 @@ export class AdminService {
   pendingAdminInvitesCount(): Promise<number> {
     return this.prisma.pendingAdmin.count();
   }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

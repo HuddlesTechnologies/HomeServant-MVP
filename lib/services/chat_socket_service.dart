@@ -26,6 +26,7 @@ class ChatSocketService {
   final _readController = StreamController<String>.broadcast();
   final _claimedController = StreamController<String>.broadcast();
   final _badgesChangedController = StreamController<void>.broadcast();
+  final _bannedController = StreamController<String?>.broadcast();
   final _accessRevokedController = StreamController<String>.broadcast();
   final _reconnectedController = StreamController<void>.broadcast();
   final _threadsChangedController = StreamController<void>.broadcast();
@@ -76,6 +77,10 @@ class ChatSocketService {
   /// startup. No payload: cheaper to just refetch the handful of COUNT
   /// queries than to keep track of which specific badge changed.
   Stream<void> get onAdminBadgesChanged => _badgesChangedController.stream;
+
+  /// This account was just permanently banned (the ban reason, if given) —
+  /// AppState signs out and explains.
+  Stream<String?> get onAccountBanned => _bannedController.stream;
 
   /// Fires with a thread id when the server removes this socket from that
   /// thread's live room because the user lost access to it (another admin
@@ -144,6 +149,7 @@ class ChatSocketService {
       }
     });
     socket.on('admin:badges-changed', (_) => _badgesChangedController.add(null));
+    socket.on('account:banned', (data) => _bannedController.add(data is Map ? data['reason'] as String? : null));
     socket.on('thread:access-revoked', (data) {
       if (data is Map) {
         final threadId = data['threadId'] as String?;

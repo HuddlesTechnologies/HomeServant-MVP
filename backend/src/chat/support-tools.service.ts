@@ -1,5 +1,6 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { SupportPriority, SupportTopic, UserRole } from '@prisma/client';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ActivityLogType, SupportPriority, SupportTopic, UserRole } from '@prisma/client';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatGateway } from './chat.gateway';
 import { ChatService } from './chat.service';
@@ -16,7 +17,64 @@ export class SupportToolsService {
     private readonly chat: ChatService,
     private readonly gateway: ChatGateway,
     private readonly presence: PresenceService,
+    private readonly activityLog: ActivityLogService,
   ) {}
+
+  // --- Phone calls -------------------------------------------------------------
+
+  /// Who in [threadId] an admin may phone, after checking the admin may act
+  /// on it: on a support conversation, the admin handling it (or anyone
+  /// while unclaimed) and super admins; on any other console chat, an admin
+  /// who is part of it.
+  private async callableCustomer(threadId: string, adminId: string) {
+    const thread = await this.prisma.thread.findUnique({
+      where: { id: threadId },
+      select: {
+        isSupport: true,
+        participants: { select: { user: { select: { id: true, role: true, fullName: true, phoneNumber: true } } } },
+      },
+    });
+    if (!thread) throw new NotFoundException('Conversation not found');
+    if (thread.isSupport) {
+      // Handling admin (or anyone while unclaimed) and super admins.
+      await this.chat.assertAdminCanUseSupportThread(threadId, adminId, true);
+    } else if (!thread.participants.some((p) => p.user.id === adminId)) {
+      throw new ForbiddenException('You are not part of this conversation');
+    }
+    const customer = thread.participants.find((p) => p.user.role !== UserRole.ADMIN)?.user;
+    if (!customer) throw new NotFoundException('No customer on this conversation');
+    return customer;
+  }
+
+  /// Records that an admin is phoning the customer on [threadId] and why —
+  /// the reason is required and kept with the conversation (and in the
+  /// activity log) — and hands back the number to dial. The call itself is
+  /// placed by the admin's device.
+  async logCall(threadId: string, adminId: string, reason: string) {
+    const customer = await this.callableCustomer(threadId, adminId);
+    const phoneNumber = customer.phoneNumber?.trim();
+    if (!phoneNumber) throw new BadRequestException("This customer hasn't added a phone number to their account");
+    const log = await this.prisma.supportCallLog.create({
+      data: { threadId, adminId, customerId: customer.id, phoneNumber, reason: reason.trim() },
+      include: { admin: { select: { id: true, fullName: true } } },
+    });
+    await this.activityLog.log(ActivityLogType.SUPPORT_CUSTOMER_CALLED, {
+      actorId: adminId,
+      targetId: customer.id,
+      reason: reason.trim(),
+    });
+    return { phoneNumber, customerName: customer.fullName, call: log };
+  }
+
+  /// Every call placed from [threadId], newest first.
+  async listCalls(threadId: string, adminId: string) {
+    await this.callableCustomer(threadId, adminId);
+    return this.prisma.supportCallLog.findMany({
+      where: { threadId },
+      orderBy: { createdAt: 'desc' },
+      include: { admin: { select: { id: true, fullName: true } } },
+    });
+  }
 
   // --- Internal notes ------------------------------------------------------
 

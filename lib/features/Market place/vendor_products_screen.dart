@@ -66,6 +66,18 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
     }
   }
 
+  Future<void> _restoreProduct(MarketplaceProductApi product) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().marketplaceProducts.restore(product.id);
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text('${product.name} is back on sale')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
@@ -128,6 +140,7 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
                     theme: theme,
                     product: products[index],
                     onRemove: () => _removeProduct(products[index]),
+                    onRestore: () => _restoreProduct(products[index]),
                   ),
                 ),
               ),
@@ -139,11 +152,12 @@ class _VendorProductsScreenState extends State<VendorProductsScreen> {
 }
 
 class _VendorProductTile extends StatelessWidget {
-  const _VendorProductTile({required this.theme, required this.product, required this.onRemove});
+  const _VendorProductTile({required this.theme, required this.product, required this.onRemove, required this.onRestore});
 
   final DashboardTheme theme;
   final MarketplaceProductApi product;
   final VoidCallback onRemove;
+  final VoidCallback onRestore;
 
   @override
   Widget build(BuildContext context) {
@@ -195,6 +209,11 @@ class _VendorProductTile extends StatelessWidget {
             IconButton(
               onPressed: onRemove,
               icon: Icon(Icons.delete_outline_rounded, color: Colors.redAccent.withValues(alpha: 0.8), size: 20),
+            )
+          else
+            TextButton(
+              onPressed: onRestore,
+              child: Text('Put back on sale', style: AppTextStyles.body(color: theme.onSurface, size: 12.5, weight: FontWeight.w700)),
             ),
         ],
       ),

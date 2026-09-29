@@ -47,6 +47,13 @@ data model, every endpoint and job, configuration). The source is
    **private** bucket for ID documents (`homeservant-private`, the
    `SUPABASE_PRIVATE_BUCKET` default) is created by the API on startup;
    if you create it yourself, it must NOT be public.
+   Leave the public bucket's **Allowed MIME types** empty (it then takes
+   every type), or include `image/*` and `video/mp4`, `video/quicktime`,
+   `video/x-m4v`, `video/webm` (listing walkthrough videos). The API checks
+   this on startup and logs any type the bucket would refuse. Videos are
+   capped at 50 MB in the app (the Free plan's per-file limit); if you raise
+   the project's upload limit, raise `_maxVideoBytes` in
+   `lib/features/landlord/landlord_add_property_screen.dart` to match.
 4. `npm install`
 5. `npm run prisma:migrate` — creates or upgrades the database schema.
 6. `npm run start:dev` — the API is at `http://localhost:3000/api` and

@@ -26,6 +26,8 @@ class UsersRepository {
     Gender? gender,
     String? occupation,
     MaritalStatus? maritalStatus,
+    String? bio,
+    List<String>? hobbies,
   }) {
     return _client.call(() async {
       final response = await _client.dio.patch(
@@ -43,6 +45,8 @@ class UsersRepository {
           if (gender != null) 'gender': gender.apiValue,
           if (occupation != null) 'occupation': occupation,
           if (maritalStatus != null) 'maritalStatus': maritalStatus.apiValue,
+          if (bio != null) 'bio': bio,
+          if (hobbies != null) 'hobbies': hobbies,
         },
       );
       return AuthUser.fromApi(response.data as Map<String, dynamic>);

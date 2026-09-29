@@ -47,3 +47,10 @@ export class RateSupportThreadDto {
   @MaxLength(1000)
   comment?: string;
 }
+
+export class LogCallDto {
+  @IsString()
+  @MinLength(10, { message: 'Give a bit more detail (at least 10 characters) — the reason is logged with this chat' })
+  @MaxLength(500)
+  reason!: string;
+}

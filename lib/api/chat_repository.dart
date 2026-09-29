@@ -28,13 +28,13 @@ class ChatRepository {
   /// Finds-or-creates the caller's own "Contact Support" thread — see
   /// backend ChatService.openSupportThread. Unlike [openThread], there's no
   /// recipient to pick; any admin can pick it up from the shared queue.
-  Future<ChatThread> openSupportThread({SupportTopic? topic}) {
+  /// Returns just the thread's id: the chat screen needs nothing else, and
+  /// re-fetching the whole inbox here used to hold up opening Live Chat.
+  Future<String> openSupportThread({SupportTopic? topic}) {
     return _client.call(() async {
       final response = await _client.dio.post('/threads/support', data: {if (topic != null) 'topic': topic.apiValue});
-      final threadId = response.data['id'] as String;
-      final threads = await myThreads();
       onLocalChange?.call();
-      return threads.firstWhere((t) => t.id == threadId);
+      return response.data['id'] as String;
     });
   }
 

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Logger, Patch, UseGuards } from '@nestjs/common';
 import { AdminLevel, UserRole } from '@prisma/client';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { MinAdminLevel } from '../common/decorators/min-admin-level.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -20,6 +20,36 @@ class UpdatePlatformSettingsDto {
   @IsOptional()
   @IsBoolean()
   payUnverifiedLandlords?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  maxListingImageChanges?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(180)
+  listingImageLockDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(100)
+  @Max(10_000_000)
+  featuredListingFeeNaira?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  featuredListingDays?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(20)
+  promotedSlotEvery?: number;
 }
 
 /// Platform Controls in the admin console — SUPER_ADMIN only.

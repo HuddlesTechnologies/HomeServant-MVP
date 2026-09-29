@@ -29,6 +29,17 @@ class Property {
     this.shortletUnavailableUntil,
     this.landlordVerified = false,
     this.hiddenUntilLandlordVerified = false,
+    this.hiddenByLandlord = false,
+    this.imageChangesLeft,
+    this.imageChangesAllowed,
+    this.imagesLockedUntil,
+    this.imageLockDays,
+    this.featured = false,
+    this.featuredUntil,
+    this.adminBoost = 0,
+    this.adminBoostUntil,
+    this.bookingsCount,
+    this.allowMonthlyPayment = false,
   });
 
   /// Builds a [Property] from a `GET /properties` / `GET /properties/:id`
@@ -56,6 +67,7 @@ class Property {
       landlordId: (json['landlord'] as Map<String, dynamic>?)?['id'] as String? ?? json['landlordId'] as String?,
       listingNumber: json['listingNumber'] as int?,
       galleryImages: ((json['galleryUrls'] as List?)?.cast<String>()) ?? const [],
+      videoPath: json['videoUrl'] as String?,
       isOccupied: json['isOccupied'] as bool? ?? false,
       rentDurationMonths: json['rentDurationMonths'] as int?,
       messagingEnabled: json['messagingEnabled'] as bool? ?? true,
@@ -73,6 +85,17 @@ class Property {
           false,
       landlordVerified: json['landlordVerified'] as bool? ?? false,
       hiddenUntilLandlordVerified: json['hiddenUntilLandlordVerified'] as bool? ?? false,
+      hiddenByLandlord: json['hiddenByLandlord'] as bool? ?? (json['hiddenByLandlordAt'] != null),
+      imageChangesLeft: json['imageChangesLeft'] as int?,
+      imageChangesAllowed: json['imageChangesAllowed'] as int?,
+      imagesLockedUntil: _parseDate(json['imagesLockedUntil']),
+      imageLockDays: json['imageLockDays'] as int?,
+      featured: json['featured'] as bool? ?? false,
+      featuredUntil: _parseDate(json['featuredUntil']),
+      adminBoost: json['adminBoost'] as int? ?? 0,
+      adminBoostUntil: _parseDate(json['adminBoostUntil']),
+      bookingsCount: (json['_count'] as Map<String, dynamic>?)?['bookings'] as int?,
+      allowMonthlyPayment: json['allowMonthlyPayment'] as bool? ?? false,
       shortletUnavailableUntil: _parseDate(json['availableAgainAt']) ??
           _parseDate(json['shortletUnavailableUntil']) ??
           _parseDate(json['unavailableUntil']),
@@ -97,21 +120,29 @@ class Property {
     'description': description,
     if (!image.startsWith('assets/')) 'imageUrl': image,
     if (galleryImages.isNotEmpty) 'galleryUrls': galleryImages,
+    // Only an uploaded video (a local pick is uploaded first, see
+    // LandlordAddPropertyScreen).
+    if (videoPath != null && videoPath!.startsWith('http')) 'videoUrl': videoPath,
     'messagingEnabled': messagingEnabled,
     if (category == 'Shortlet') ...{
       if (unitAddress != null) 'unitAddress': unitAddress,
       if (roomNumber != null) 'roomNumber': roomNumber,
     } else ...{
       if (rentDurationMonths != null) 'rentDurationMonths': rentDurationMonths,
+      'allowMonthlyPayment': allowMonthlyPayment,
     },
   };
 
   /// Body for `PATCH /properties/:id` — same shape as [toCreateJson] since
   /// there's no narrower UpdatePropertyDto documented; the backend is
   /// expected to accept a partial version of the same fields.
-  Map<String, dynamic> toUpdateJson() => toCreateJson();
+  /// An empty videoUrl removes a video the landlord took off the listing.
+  Map<String, dynamic> toUpdateJson() => {...toCreateJson(), if (videoPath == null) 'videoUrl': ''};
 
+  /// [clearVideo] removes the walkthrough video ([videoPath] null alone
+  /// means "leave it as it is").
   Property copyWith({
+    bool clearVideo = false,
     String? title,
     String? location,
     String? state,
@@ -126,6 +157,7 @@ class Property {
     String? videoPath,
     int? rentDurationMonths,
     bool? messagingEnabled,
+    bool? allowMonthlyPayment,
     String? unitAddress,
     String? roomNumber,
   }) => Property(
@@ -143,7 +175,7 @@ class Property {
     bathrooms: bathrooms ?? this.bathrooms,
     description: description ?? this.description,
     landlordName: landlordName,
-    videoPath: videoPath ?? this.videoPath,
+    videoPath: clearVideo ? null : videoPath ?? this.videoPath,
     landlordId: landlordId,
     reviewCount: reviewCount,
     isOccupied: isOccupied,
@@ -155,6 +187,17 @@ class Property {
     shortletUnavailableUntil: shortletUnavailableUntil,
     landlordVerified: landlordVerified,
     hiddenUntilLandlordVerified: hiddenUntilLandlordVerified,
+    hiddenByLandlord: hiddenByLandlord,
+    imageChangesLeft: imageChangesLeft,
+    imageChangesAllowed: imageChangesAllowed,
+    imagesLockedUntil: imagesLockedUntil,
+    imageLockDays: imageLockDays,
+    featured: featured,
+    featuredUntil: featuredUntil,
+    adminBoost: adminBoost,
+    adminBoostUntil: adminBoostUntil,
+    bookingsCount: bookingsCount,
+    allowMonthlyPayment: allowMonthlyPayment ?? this.allowMonthlyPayment,
   );
 
   static String _categoryFromApi(String value) => switch (value) {
@@ -183,6 +226,45 @@ class Property {
   /// from browsing because its landlord isn't verified. A tenant who already
   /// booked or saved it still sees it, with this explained.
   final bool hiddenUntilLandlordVerified;
+
+  /// The landlord has hidden this (unoccupied) listing themselves: it's out
+  /// of browse and search and can't be booked until they show it again.
+  final bool hiddenByLandlord;
+
+  /// Landlord's own view: how many more times the photos can be changed
+  /// before they lock, out of [imageChangesAllowed] — null from an older API.
+  final int? imageChangesLeft;
+  final int? imageChangesAllowed;
+
+  /// Set while the photos are locked after the last allowed change.
+  final DateTime? imagesLockedUntil;
+
+  /// How many days the photos lock for once the last change is used.
+  final int? imageLockDays;
+
+  /// A paid "Featured" ad is running (shown to tenants as "Featured"),
+  /// until [featuredUntil] (including any extension already paid for).
+  final bool featured;
+  final DateTime? featuredUntil;
+
+  /// Admin search ranking (admin console only): 0 normal, 1 boosted, 2 top,
+  /// until [adminBoostUntil] (null = until changed).
+  final int adminBoost;
+  final DateTime? adminBoostUntil;
+
+  /// Admin console only: how many bookings this listing has had.
+  final int? bookingsCount;
+
+  /// The landlord lets tenants pay this (non-Shortlet) rental monthly.
+  final bool allowMonthlyPayment;
+
+  /// A month's rent on the monthly plan: a twelfth of the yearly price,
+  /// rounded up (matches the server).
+  int get monthlyPrice => (price / 12).ceil();
+
+  bool get adminBoostActive => adminBoost > 0 && (adminBoostUntil == null || adminBoostUntil!.isAfter(DateTime.now()));
+
+  bool get imagesLocked => imagesLockedUntil != null && imagesLockedUntil!.isAfter(DateTime.now());
 
   final String id;
 

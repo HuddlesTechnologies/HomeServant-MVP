@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -73,32 +75,88 @@ Future<void> _openLiveChat(BuildContext context, DashboardTheme theme) async {
   // before reading a word. Dismissing the picker cancels.
   final topic = await _pickTopic(context, theme);
   if (topic == null || !context.mounted) return;
+  // Opening the conversation can take a while (a slow network, or the
+  // server waking up) — show that it's working so nobody taps again and
+  // again thinking nothing happened. The spinner can't be dismissed; it
+  // closes itself once the chat is ready or the request fails.
+  final navigator = Navigator.of(context);
+  var spinnerOpen = true;
+  unawaited(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(canPop: false, child: _OpeningChatDialog(theme: theme)),
+    ).whenComplete(() => spinnerOpen = false),
+  );
+  void closeSpinner() {
+    if (spinnerOpen) navigator.pop();
+  }
+
   try {
-    final thread = await context.read<AppState>().chat.openSupportThread(topic: topic);
+    final threadId = await context.read<AppState>().chat.openSupportThread(topic: topic);
+    closeSpinner();
     if (!context.mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ChatThreadScreen(
-          theme: theme,
-          contactName: 'HomeServant Support',
-          threadId: thread.id,
+    unawaited(
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => ChatThreadScreen(
+            theme: theme,
+            contactName: 'HomeServant Support',
+            threadId: threadId,
+          ),
         ),
       ),
     );
   } on ApiException catch (e) {
+    closeSpinner();
     messenger.showSnackBar(SnackBar(content: Text(e.message)));
   }
 }
 
+/// "Connecting you to support…" while the live chat opens.
+/// theme.surface/onSurface: a fixed light-surface/navy-text pair.
+class _OpeningChatDialog extends StatelessWidget {
+  const _OpeningChatDialog({required this.theme});
+
+  final DashboardTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: theme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 3, color: theme.onSurface)),
+            const SizedBox(width: 18),
+            Flexible(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Connecting you to support…',
+                    style: AppTextStyles.body(color: theme.onSurface, size: 15, weight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'This can take a few seconds.',
+                    style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.65), size: 12.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 Future<SupportTopic?> _pickTopic(BuildContext context, DashboardTheme theme) {
-  const hints = {
-    SupportTopic.payments: 'Charges, refunds, payouts',
-    SupportTopic.booking: 'Requests, inspections, moving in',
-    SupportTopic.account: 'Signing in, profile, verification',
-    SupportTopic.listing: 'A property listing',
-    SupportTopic.marketplace: 'Orders and vendors',
-    SupportTopic.other: 'Something else',
-  };
   // theme.surface/onSurface: a fixed light-surface/navy-text pair.
   return showModalBottomSheet<SupportTopic>(
     context: context,
@@ -119,7 +177,7 @@ Future<SupportTopic?> _pickTopic(BuildContext context, DashboardTheme theme) {
                 contentPadding: EdgeInsets.zero,
                 title: Text(topic.label, style: AppTextStyles.body(color: theme.onSurface, size: 15, weight: FontWeight.w600)),
                 subtitle: Text(
-                  hints[topic]!,
+                  topic.hint,
                   style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.6), size: 12.5),
                 ),
                 trailing: Icon(Icons.chevron_right_rounded, color: theme.onSurface.withValues(alpha: 0.5)),

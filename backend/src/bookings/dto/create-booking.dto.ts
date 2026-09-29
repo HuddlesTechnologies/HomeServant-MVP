@@ -1,4 +1,5 @@
-import { IsDateString, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { PaymentPlan } from '@prisma/client';
+import { IsDateString, IsEnum, IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
 
 export class CreateBookingDto {
   @IsUUID()
@@ -23,4 +24,11 @@ export class CreateBookingDto {
   @IsOptional()
   @IsString()
   message?: string;
+
+  /// MONTHLY pays one month now and the rest month by month — only for a
+  /// non-Shortlet listing whose landlord allows it. FULL (default) pays
+  /// the whole period up front.
+  @IsOptional()
+  @IsEnum(PaymentPlan)
+  paymentPlan?: PaymentPlan;
 }

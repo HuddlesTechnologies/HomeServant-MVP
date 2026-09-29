@@ -25,7 +25,13 @@ class AdminRepository {
     });
   }
 
-  Future<AdminPage<AdminUser>> findUsers({String? role, String? search, int page = 1, bool deactivatedOnly = false}) {
+  Future<AdminPage<AdminUser>> findUsers({
+    String? role,
+    String? search,
+    int page = 1,
+    bool deactivatedOnly = false,
+    bool bannedOnly = false,
+  }) {
     return _client.call(() async {
       final response = await _client.dio.get(
         '/admin/users',
@@ -33,6 +39,7 @@ class AdminRepository {
           if (role != null) 'role': role,
           if (search != null && search.isNotEmpty) 'search': search,
           if (deactivatedOnly) 'deactivatedOnly': true,
+          if (bannedOnly) 'bannedOnly': true,
           'page': page,
         },
       );
@@ -72,6 +79,20 @@ class AdminRepository {
   }
 
   /// [reason] is required — it's written to the admin activity log.
+  /// Moderator+. Permanent ban — [reason] is emailed to them and logged.
+  Future<void> banUser(String id, {required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/users/$id/ban', data: {'reason': reason});
+    });
+  }
+
+  /// Super admin only. Lifts a permanent ban.
+  Future<void> unbanUser(String id, {required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/users/$id/unban', data: {'reason': reason});
+    });
+  }
+
   Future<void> deactivateUser(String id, {required String reason}) {
     return _client.call(() async {
       await _client.dio.patch('/admin/users/$id/deactivate', data: {'reason': reason});
@@ -184,6 +205,14 @@ class AdminRepository {
     });
   }
 
+  /// Moderator+. Search ranking: [level] 0 normal, 1 boosted, 2 top, for
+  /// [days] days (null = until changed).
+  Future<void> setPropertyBoost(String id, {required int level, int? days, required String reason}) {
+    return _client.call(() async {
+      await _client.dio.patch('/admin/properties/$id/boost', data: {'level': level, if (days != null) 'days': days, 'reason': reason});
+    });
+  }
+
   Future<void> removeProperty(String id, {required String reason}) {
     return _client.call(() async {
       await _client.dio.delete('/admin/properties/$id', data: {'reason': reason});
@@ -277,11 +306,18 @@ class AdminRepository {
   /// Step 1 of the invite flow — sends a confirmation code and one-time
   /// temporary password to [email] in a single email. Call [confirmAdmin]
   /// with that code to actually create the account.
-  Future<void> requestAdmin({required String email, required String fullName, required AdminLevel level}) {
+  /// First and last name are sent separately — customers are only ever
+  /// shown an admin's first name.
+  Future<void> requestAdmin({
+    required String email,
+    required String firstName,
+    required String lastName,
+    required AdminLevel level,
+  }) {
     return _client.call(() async {
       await _client.dio.post(
         '/admin/admins/request',
-        data: {'email': email, 'fullName': fullName, 'level': level.apiValue},
+        data: {'email': email, 'firstName': firstName, 'lastName': lastName, 'level': level.apiValue},
       );
     });
   }

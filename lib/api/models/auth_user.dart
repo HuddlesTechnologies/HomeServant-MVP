@@ -27,6 +27,8 @@ class AuthUser {
     this.gender,
     this.occupation,
     this.maritalStatus,
+    this.bio,
+    this.hobbies = const [],
     this.hasFullProfile = false,
     this.profileCompleted = true,
   });
@@ -53,6 +55,11 @@ class AuthUser {
   final Gender? gender;
   final String? occupation;
   final MaritalStatus? maritalStatus;
+
+  /// Booking profile — background and hobbies a landlord reads with a
+  /// booking request (full profile shape only).
+  final String? bio;
+  final List<String> hobbies;
 
   /// True for a `GET /users/me`/`PATCH /users/me`/`PATCH /users/me/bank-
   /// details` response (all select the full `profileSelect` shape, always
@@ -126,6 +133,8 @@ class AuthUser {
     gender: _genderFromApi(json['gender'] as String?),
     occupation: json['occupation'] as String?,
     maritalStatus: _maritalStatusFromApi(json['maritalStatus'] as String?),
+    bio: json['bio'] as String?,
+    hobbies: (json['hobbies'] as List?)?.cast<String>() ?? const [],
     hasFullProfile: json.containsKey('houseAddress'),
     profileCompleted: !json.containsKey('profileCompletedAt') || json['profileCompletedAt'] != null,
   );

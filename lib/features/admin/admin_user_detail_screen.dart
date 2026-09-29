@@ -18,13 +18,20 @@ import 'widgets/admin_badge.dart';
 import '../../widgets/verified_badge.dart';
 import '../../api/models/verification.dart';
 import 'widgets/admin_verification_card.dart';
+import 'widgets/admin_booking_history.dart';
 
 /// Full account detail for a single user — reached by tapping a row in
 /// AdminUsersTab. Shows every field the backend will hand back (see
 /// AdminService.findUserDetail) rather than the trimmed-down list-row
 /// shape, and is where "Message" (start a console-to-user chat) lives.
 class AdminUserDetailScreen extends StatefulWidget {
-  const AdminUserDetailScreen({super.key, required this.userId, this.asPopup = false, this.title = 'User Details'});
+  const AdminUserDetailScreen({
+    super.key,
+    required this.userId,
+    this.asPopup = false,
+    this.title = 'User Details',
+    this.showMessageAction = true,
+  });
 
   final String userId;
 
@@ -32,6 +39,10 @@ class AdminUserDetailScreen extends StatefulWidget {
   /// the back arrow becomes a close button.
   final bool asPopup;
   final String title;
+
+  /// False when opened from inside a chat with this user — "Message" would
+  /// only open the same conversation again.
+  final bool showMessageAction;
 
   @override
   State<AdminUserDetailScreen> createState() => _AdminUserDetailScreenState();
@@ -323,6 +334,51 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     }
   }
 
+  /// Moderator+. A permanent ban (e.g. for suspicious listings): they're
+  /// signed out everywhere, can't sign in again, their listings/shop are
+  /// hidden, and they're emailed and notified with the reason. Only a
+  /// super admin can lift it.
+  Future<void> _ban(AdminUserDetail user) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Permanently ban ${user.email}?',
+      body:
+          "They'll be signed out everywhere and can't sign in again. Their listings and shop are hidden and can't be "
+          'booked or bought from. They are emailed and notified with the reason you give. Only a super admin can lift a ban.',
+      actionLabel: 'Ban permanently',
+      hint: 'Reason (sent to them and recorded in the activity log)',
+    );
+    if (reason == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.banUser(user.id, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text('${user.email} has been permanently banned')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// Super admin only.
+  Future<void> _unban(AdminUserDetail user) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Lift the ban on ${user.email}?',
+      body: 'They can sign in again and their listings and shop return. They are emailed and notified.',
+      actionLabel: 'Lift ban',
+      hint: 'Why (recorded in the activity log)',
+    );
+    if (reason == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<AppState>().admin.unbanUser(user.id, reason: reason);
+      messenger.showSnackBar(SnackBar(content: Text('Ban lifted for ${user.email}')));
+      _load();
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _delete(AdminUserDetail user) async {
     final reason = await showAdminReasonSheet(
       context,
@@ -368,11 +424,12 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               icon: const Icon(Icons.edit_outlined, color: Colors.white),
               tooltip: 'Edit',
             ),
-            IconButton(
-              onPressed: () => _message(user),
-              icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
-              tooltip: 'Message',
-            ),
+            if (widget.showMessageAction)
+              IconButton(
+                onPressed: () => _message(user),
+                icon: const Icon(Icons.chat_bubble_outline_rounded, color: Colors.white),
+                tooltip: 'Message',
+              ),
           ],
         ],
       ),
@@ -425,10 +482,27 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                                 if (user.role != UserRole.vendor && user.vendorBusinessName != null)
                                   const AdminBadge(text: 'Also a Vendor', color: Colors.teal),
                                 if (user.isDeactivated) const AdminBadge(text: 'Deactivated', color: Colors.redAccent),
+                                if (user.isBanned) const AdminBadge(text: 'Banned', color: Color(0xFFB42318)),
                               ],
                             ),
                           ],
                         ),
+                        if (user.isBanned) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFB42318).withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'Permanently banned ${formatShortDate(user.bannedAt!.toLocal())}'
+                              '${user.banReason?.isNotEmpty == true ? ' · Reason: ${user.banReason}' : ''}',
+                              style: AppTextStyles.body(color: const Color(0xFF912018), size: 12.5, weight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         LabeledValueRow('Email', user.email),
                         LabeledValueRow('Phone Number', user.phoneNumber ?? '—'),
@@ -578,45 +652,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                   ],
                   if (user.bookings.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Booking History', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 14)),
-                          const SizedBox(height: 10),
-                          ...user.bookings.map(
-                            (booking) => Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(booking.propertyTitle, style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600, size: 13)),
-                                        Text(
-                                          booking.requestedDate != null
-                                              ? 'Requested ${formatShortDate(booking.requestedDate!)} · ${booking.status}'
-                                              : booking.status,
-                                          style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Text(
-                                    '₦${formatWithThousandsSeparator(booking.price)}/${booking.priceUnit.toLowerCase()}',
-                                    style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w700, size: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    AdminBookingHistoryCard(bookings: user.bookings),
                   ],
                   if (user.marketplaceOrders.isNotEmpty) ...[
                     const SizedBox(height: 12),
@@ -728,6 +764,32 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                       ),
                       child: Text('Deactivate Account', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
                     ),
+                  if (context.canModerate && !user.isBanned) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => _ban(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: Color(0xFFB42318)),
+                        foregroundColor: const Color(0xFFB42318),
+                      ),
+                      icon: const Icon(Icons.block_rounded, color: Color(0xFFB42318), size: 20),
+                      label: Text('Ban Permanently', style: AppTextStyles.button(color: const Color(0xFFB42318), size: 14)),
+                    ),
+                  ],
+                  if (context.isSuperAdmin && user.isBanned) ...[
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: () => _unban(user),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        side: const BorderSide(color: AppColors.navy),
+                        foregroundColor: AppColors.navy,
+                      ),
+                      icon: const Icon(Icons.lock_open_rounded, color: AppColors.navy, size: 20),
+                      label: Text('Lift Ban', style: AppTextStyles.button(color: AppColors.navy, size: 14)),
+                    ),
+                  ],
                   if (context.canModerate) ...[
                     const SizedBox(height: 10),
                     OutlinedButton(
@@ -751,7 +813,12 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
 /// The full user profile (every detail and every action the admin's level
 /// allows, exactly as on the Users screen) in a pop-up over the current
 /// page. Used by the property detail page's "View profile" button.
-Future<void> showAdminUserProfilePopup(BuildContext context, {required String userId, String title = 'User Details'}) {
+Future<void> showAdminUserProfilePopup(
+  BuildContext context, {
+  required String userId,
+  String title = 'User Details',
+  bool showMessageAction = true,
+}) {
   return showDialog<void>(
     context: context,
     builder: (dialogContext) {
@@ -766,7 +833,7 @@ Future<void> showAdminUserProfilePopup(BuildContext context, {required String us
           child: SizedBox(
             width: size.width,
             height: size.height * 0.9,
-            child: AdminUserDetailScreen(userId: userId, asPopup: true, title: title),
+            child: AdminUserDetailScreen(userId: userId, asPopup: true, title: title, showMessageAction: showMessageAction),
           ),
         ),
       );

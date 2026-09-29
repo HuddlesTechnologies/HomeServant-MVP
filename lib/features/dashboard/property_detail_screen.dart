@@ -10,12 +10,14 @@ import '../../state/app_state.dart';
 import '../../widgets/eviction_widgets.dart';
 import '../landlord/landlord_add_property_screen.dart';
 import 'chat_thread_screen.dart';
+import 'edit_profile_screen.dart';
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
 import 'widgets/property_video_player.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/hidden_listing_notice.dart';
+import '../../widgets/report_sheet.dart';
 import 'widgets/shortlet_unavailable_countdown.dart';
 
 /// Every [BookingStatus] from the moment a tenant's payment clears onward —
@@ -87,6 +89,47 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
 
   /// For a Shortlet, the number of nights is required by `POST /bookings` —
   /// prompted with a small stepper dialog before the request is sent.
+  /// Pay the year in full, or monthly (first month now). Null = cancelled.
+  /// theme.surface/onSurface is a fixed light-surface/navy-text pair.
+  Future<bool?> _pickPaymentPlan(Property property) {
+    final theme = widget.theme;
+    Widget option({required String title, required String subtitle, required bool monthly}) => ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(title, style: AppTextStyles.body(color: theme.onSurface, size: 15, weight: FontWeight.w700)),
+      subtitle: Text(subtitle, style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.7), size: 12.5)),
+      trailing: Icon(Icons.chevron_right_rounded, color: theme.onSurface.withValues(alpha: 0.6)),
+      onTap: () => Navigator.of(context).pop(monthly),
+    );
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: theme.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('How would you like to pay?', style: AppTextStyles.heading(color: theme.onSurface, size: 18)),
+              const SizedBox(height: 8),
+              option(
+                title: 'Pay in full · ₦${formatNaira(property.price)}',
+                subtitle: 'The whole year now, held safely until you move in.',
+                monthly: false,
+              ),
+              option(
+                title: 'Pay monthly · ₦${formatNaira(property.monthlyPrice)}/month',
+                subtitle: "The first month now, held until you move in; then each month as it's due. We'll remind you.",
+                monthly: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<int?> _pickNights() async {
     var nights = 1;
     return showDialog<int>(
@@ -256,9 +299,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                             ],
                           ),
                           const SizedBox(height: 26),
-                          if (property.hiddenUntilLandlordVerified) ...[
+                          if (property.hiddenUntilLandlordVerified || property.hiddenByLandlord) ...[
                             HiddenListingNotice(
                               ownerView: isOwner,
+                              byLandlord: property.hiddenByLandlord && !property.hiddenUntilLandlordVerified,
                               isShortlet: property.category == 'Shortlet',
                               hasBooking: context.watch<AppState>().myBookings.any(
                                 (b) =>
@@ -326,6 +370,11 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                     property.priceLabel,
                                     style: AppTextStyles.body(color: theme.foreground, size: 16, weight: FontWeight.w700),
                                   ),
+                                  if (property.allowMonthlyPayment && property.category != 'Shortlet')
+                                    Text(
+                                      'or ₦${formatNaira(property.monthlyPrice)}/month',
+                                      style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.75), size: 12.5, weight: FontWeight.w600),
+                                    ),
                                 ],
                               ),
                             ],
@@ -452,10 +501,15 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                               child: ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: theme.accent,
+                                  // Disabled (busy, or hidden by the landlord) keeps the accent so
+                                  // the onAccent label still contrasts — not Material's grey.
+                                  disabledBackgroundColor: theme.accent,
                                   padding: const EdgeInsets.symmetric(vertical: 18),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                                 ),
-                                onPressed: _bookingBusy
+                                // A listing its landlord has hidden can't be
+                                // booked (the server refuses too).
+                                onPressed: _bookingBusy || property.hiddenByLandlord
                                     ? null
                                     : () async {
                                         final messenger = ScaffoldMessenger.of(context);
@@ -465,12 +519,21 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                           nights = await _pickNights();
                                           if (nights == null || !mounted) return;
                                         }
+                                        // The landlord allows monthly: pay in
+                                        // full, or the first month now.
+                                        var payMonthly = false;
+                                        if (!isShortlet && property.allowMonthlyPayment) {
+                                          final choice = await _pickPaymentPlan(property);
+                                          if (choice == null || !mounted) return;
+                                          payMonthly = choice;
+                                        }
                                         setState(() => _bookingBusy = true);
                                         try {
                                           final result = await appState.recordRentalOrBooking(
                                             property.id,
                                             isShortlet: isShortlet,
                                             nights: nights,
+                                            payMonthly: payMonthly,
                                           );
                                           if (!mounted) return;
                                           final payment = result.payment;
@@ -508,9 +571,41 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                         child: CircularProgressIndicator(strokeWidth: 2.4, color: theme.onAccent),
                                       )
                                     : Text(
-                                        isShortlet ? 'Book Now' : 'Rent Now',
+                                        property.hiddenByLandlord
+                                            ? 'Not available right now'
+                                            : isShortlet
+                                            ? 'Book Now'
+                                            : 'Rent Now',
                                         style: AppTextStyles.button(color: theme.onAccent),
                                       ),
+                              ),
+                            ),
+                          // Tenants who haven't told landlords anything about
+                          // themselves yet: a nudge to fill in their booking
+                          // profile (theme.foreground on theme.background).
+                          if (!property.hiddenByLandlord &&
+                              (context.watch<AppState>().bio?.trim().isEmpty ?? true) &&
+                              context.watch<AppState>().hobbies.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: InkWell(
+                                onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const EditProfileScreen())),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.person_pin_outlined, color: theme.foreground, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Tip: add a little about yourself and your hobbies so the landlord gets to know you. Edit profile',
+                                          style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.85), size: 12.5)
+                                              .copyWith(decoration: TextDecoration.underline, decorationColor: theme.foreground),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           const SizedBox(height: 12),
@@ -558,6 +653,26 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.5), size: 12.5),
                               ),
                             ),
+                          // Something wrong with the listing (a scam, misleading
+                          // photos, a request to pay off-platform) goes to
+                          // HomeServant's team. theme.foreground on background.
+                          const SizedBox(height: 8),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: () => showReportSheet(
+                                context,
+                                theme: theme,
+                                target: ReportTarget.property,
+                                targetId: property.id,
+                                targetName: property.title,
+                              ),
+                              icon: Icon(Icons.flag_outlined, color: theme.foreground.withValues(alpha: 0.8), size: 18),
+                              label: Text(
+                                'Report this listing',
+                                style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.8), size: 13, weight: FontWeight.w600),
+                              ),
+                            ),
+                          ),
                           ],
                         ],
                       ),

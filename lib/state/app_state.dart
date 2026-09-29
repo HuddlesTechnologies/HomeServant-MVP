@@ -22,6 +22,7 @@ import '../api/evictions_repository.dart';
 import '../api/models/eviction.dart';
 import '../api/push_repository.dart';
 import '../api/verification_repository.dart';
+import '../api/reports_repository.dart';
 import '../api/models/verification.dart';
 import '../services/browser_notifications.dart';
 import '../api/support_tools_repository.dart';
@@ -65,6 +66,7 @@ class AppState extends ChangeNotifier {
     _pushRepo = PushRepository(_apiClient);
     _evictionsRepo = EvictionsRepository(_apiClient);
     _verificationRepo = VerificationRepository(_apiClient);
+    _reportsRepo = ReportsRepository(_apiClient);
     _uploadsRepo = UploadsRepository(_apiClient);
     _vendorsRepo = VendorsRepository(_apiClient);
     _marketplaceProductsRepo = MarketplaceProductsRepository(_apiClient);
@@ -83,6 +85,13 @@ class AppState extends ChangeNotifier {
     // reconnects under the hood across login/logout, so this stays valid
     // the same way NotificationBannerOverlay's own subscription does.
     _chatSocket.onNotification.listen(_handleRealtimeNotification);
+    _chatSocket.onAccountBanned.listen(
+      (reason) => _handleSessionExpired(
+        'This account has been permanently banned from HomeServant.'
+        '${reason?.trim().isNotEmpty == true ? ' Reason: ${reason!.trim()}' : ''} '
+        'If you believe this is a mistake, contact HomeServant support.',
+      ),
+    );
     _chatRepo.onLocalChange = _chatSocket.notifyThreadsChanged;
     _chatRepo.onThreadRead = _markThreadNotificationsReadLocally;
     // Notifications created while the socket was down never arrived live.
@@ -106,6 +115,7 @@ class AppState extends ChangeNotifier {
   late final PushRepository _pushRepo;
   late final EvictionsRepository _evictionsRepo;
   late final VerificationRepository _verificationRepo;
+  late final ReportsRepository _reportsRepo;
   late final UploadsRepository _uploadsRepo;
   late final VendorsRepository _vendorsRepo;
   late final MarketplaceProductsRepository _marketplaceProductsRepo;
@@ -127,6 +137,12 @@ class AppState extends ChangeNotifier {
   AdminRepository get admin => _adminRepo;
   EvictionsRepository get evictionsRepo => _evictionsRepo;
   VerificationRepository get verification => _verificationRepo;
+
+  /// Reporting a listing or marketplace item, and the user's own reports.
+  ReportsRepository get reports => _reportsRepo;
+
+  /// Listing calls not covered by the cached lists (e.g. featured ads).
+  PropertiesRepository get listings => _propertiesRepo;
 
   /// True once [load] has finished restoring (or found nothing to restore).
   /// AppLockGate waits for this before deciding whether a cold start should
@@ -150,13 +166,20 @@ class AppState extends ChangeNotifier {
   /// deliberate [logout] — only by [_handleSessionExpired].
   bool sessionExpired = false;
 
+  /// Set together with [sessionExpired] when the session ended because the
+  /// account was permanently banned: the server's explanation, with the
+  /// reason. SessionExpiredGate shows it instead of "session expired".
+  String? bannedMessage;
+
   void acknowledgeSessionExpired() {
     sessionExpired = false;
+    bannedMessage = null;
     notifyListeners();
   }
 
-  void _handleSessionExpired() {
+  void _handleSessionExpired([String? banned]) {
     sessionExpired = true;
+    bannedMessage = banned;
     // Unlike deactivateAccount()/deleteAccount(), this used to leave the
     // now-dead refresh token sitting in secure storage until the next cold
     // start's load() happened to clear it — harmless in practice (the
@@ -175,6 +198,10 @@ class AppState extends ChangeNotifier {
   DateTime? dateOfBirth;
   Gender? gender;
   String? occupation;
+
+  /// Booking profile (see AuthUser.bio/hobbies).
+  String? bio;
+  List<String> hobbies = const [];
   MaritalStatus? maritalStatus;
 
   /// True for an admin still signed in with the one-time temp password
@@ -371,8 +398,12 @@ class AppState extends ChangeNotifier {
     Gender? gender,
     String? occupation,
     MaritalStatus? maritalStatus,
+    String? bio,
+    List<String>? hobbies,
   }) async {
     final user = await _usersRepo.updateProfile(
+      bio: bio,
+      hobbies: hobbies,
       fullName: fullName,
       phoneNumber: phoneNumber,
       houseAddress: houseAddress,
@@ -468,6 +499,8 @@ class AppState extends ChangeNotifier {
     if (user.gender != null || user.hasFullProfile) gender = user.gender;
     if (user.occupation != null || user.hasFullProfile) occupation = user.occupation;
     if (user.maritalStatus != null || user.hasFullProfile) maritalStatus = user.maritalStatus;
+    if (user.bio != null || user.hasFullProfile) bio = user.bio;
+    if (user.hobbies.isNotEmpty || user.hasFullProfile) hobbies = user.hobbies;
     twoFactorEnabled = user.twoFactorEnabled;
     mustChangePassword = user.mustChangePassword;
     profileCompleted = user.profileCompleted;
@@ -500,6 +533,8 @@ class AppState extends ChangeNotifier {
     gender = null;
     occupation = null;
     maritalStatus = null;
+    bio = null;
+    hobbies = const [];
     profilePhotoPath = null;
     twoFactorEnabled = false;
     mustChangePassword = false;
@@ -783,6 +818,17 @@ class AppState extends ChangeNotifier {
     return updated;
   }
 
+  /// Hides an unoccupied listing from browse, search and booking (or shows
+  /// it again) — `PATCH /properties/:id` with `isHidden`. The server
+  /// refuses to hide an occupied listing, with the reason.
+  Future<Property> setLandlordPropertyHidden(String id, bool hidden) async {
+    final updated = await _propertiesRepo.update(id, {'isHidden': hidden});
+    _landlordProperties = [for (final p in _landlordProperties) if (p.id == updated.id) updated else p];
+    if (hidden) properties = [for (final p in properties) if (p.id != id) p];
+    notifyListeners();
+    return updated;
+  }
+
   /// `DELETE /properties/:id`. The server refuses while the property is
   /// occupied or a tenant's payment is in play (PropertiesService
   /// .deletionBlockReason) — that ApiException's message says why.
@@ -945,8 +991,18 @@ class AppState extends ChangeNotifier {
   /// immediately starts its Paystack charge — [BookingCreationResult.payment]
   /// is set in that case; open its `authorizationUrl` right away. [nights]
   /// is required only when [isShortlet].
-  Future<BookingCreationResult> recordRentalOrBooking(String propertyId, {required bool isShortlet, int? nights}) async {
-    final result = await _bookingsRepo.create(propertyId: propertyId, isShortlet: isShortlet, nights: isShortlet ? nights : null);
+  Future<BookingCreationResult> recordRentalOrBooking(
+    String propertyId, {
+    required bool isShortlet,
+    int? nights,
+    bool payMonthly = false,
+  }) async {
+    final result = await _bookingsRepo.create(
+      propertyId: propertyId,
+      isShortlet: isShortlet,
+      nights: isShortlet ? nights : null,
+      payMonthly: payMonthly,
+    );
     myBookings = [result.booking, ...myBookings];
     notifyListeners();
     return result;
@@ -970,6 +1026,9 @@ class AppState extends ChangeNotifier {
   }
 
   Future<RenewalQuote> renewalQuote(String bookingId) => _bookingsRepo.renewalQuote(bookingId);
+
+  /// Monthly plan: pay next month's rent (opens checkout).
+  Future<PaymentInitiation> payNextMonth(String bookingId) => _bookingsRepo.payNextMonth(bookingId);
 
   /// Starts the renewal payment for the amount in [quote]; the lease is
   /// extended once Paystack confirms it (the bookings list refreshes then).

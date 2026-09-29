@@ -7,6 +7,7 @@ import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
 import '../../api/models/chat.dart' show HandoffKind, MessageType, ThreadHandlingHistory, ThreadHandoff, ThreadParticipant, ThreadPersonRef;
 import '../../api/models/marketplace_api.dart';
+import '../../api/models/support_tools.dart' show SupportTopic;
 import '../../core/date_format.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_colors.dart';
@@ -21,6 +22,7 @@ import '../../widgets/upload_picker.dart';
 import '../Market place/models/order_options.dart';
 import '../admin/widgets/support_tool_sheets.dart';
 import '../admin/chat_transcript_pdf.dart';
+import '../admin/admin_user_detail_screen.dart' show showAdminUserProfilePopup;
 import 'models/property.dart';
 import 'property_gallery_screen.dart';
 import 'widgets/property_image.dart';
@@ -186,6 +188,11 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   /// applicable (or not allowed) — the history UI is simply not shown.
   ThreadHandlingHistory? _history;
 
+  /// Admin side of a support chat: what the customer said it's about when
+  /// they opened it (or what an admin has since set it to).
+  SupportTopic? _supportTopic;
+  bool _isSupportThread = false;
+
   /// Customer side: this resolved support chat can still be rated.
   bool _canRate = false;
 
@@ -235,8 +242,59 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       final summary = await context.read<AppState>().chat.summary(threadId);
       if (!mounted) return;
       await showTriageSheet(context, threadId, topic: summary.supportTopic, priority: summary.priority);
+      // The topic may have just changed — keep the banner in step.
+      if (mounted) unawaited(_refreshAccess());
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  /// The admin's tools for this chat, in app-bar order: calling and editing
+  /// the customer (any admin chat with a customer on it), then the support
+  /// tools (handling admin and super admins only — see [_history]).
+  List<({String id, String label, IconData icon})> get _adminTools {
+    if (!context.read<AppState>().role.isAdmin) return const [];
+    final customerId = widget.adminViewOfUserId;
+    return [
+      if (customerId != null && !widget.readOnly)
+        (id: 'call', label: 'Call customer', icon: Icons.call_outlined),
+      // Oversight views can't call, but can see the calls made.
+      if (widget.readOnly) (id: 'calls', label: 'Calls from this chat', icon: Icons.phone_callback_outlined),
+      if (customerId != null && !widget.readOnly)
+        (id: 'edit', label: 'Edit customer details', icon: Icons.manage_accounts_outlined),
+      if (_history != null) ...[
+        (id: 'customer', label: 'Customer details', icon: Icons.badge_outlined),
+        (id: 'notes', label: 'Internal notes', icon: Icons.sticky_note_2_outlined),
+        (id: 'triage', label: 'Topic & priority', icon: Icons.flag_outlined),
+        (id: 'history', label: 'Handling history', icon: Icons.history_rounded),
+      ],
+    ];
+  }
+
+  Future<void> _runAdminTool(String id) async {
+    final threadId = widget.threadId!;
+    switch (id) {
+      case 'call':
+        await showCallCustomerSheet(context, threadId, customerName: widget.contactName);
+      case 'calls':
+        await showCallCustomerSheet(context, threadId, customerName: widget.contactName, canCall: false);
+      case 'edit':
+        // The full profile, with exactly the edits this admin's level allows
+        // (the server enforces the same levels).
+        await showAdminUserProfilePopup(context, userId: widget.adminViewOfUserId!, title: 'Customer Details', showMessageAction: false);
+        // A name or phone change should show in the info panel right away.
+        if (mounted && _recipientDetail != null) {
+          setState(() => _recipientDetail = null);
+          if (_infoPanelOpen) unawaited(_loadRecipientDetail());
+        }
+      case 'customer':
+        await showCustomerContextSheet(context, threadId);
+      case 'notes':
+        await showSupportNotesSheet(context, threadId);
+      case 'triage':
+        await _openTriage();
+      default:
+        _showHistorySheet();
     }
   }
 
@@ -283,7 +341,10 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                 ),
               // Conversations claimed before claims were recorded start
               // with a transfer — say who had it first.
-              if (history.entries.isNotEmpty && history.entries.first.kind != HandoffKind.claim && history.firstHandler != null)
+              if (history.entries.isNotEmpty &&
+                  history.entries.first.kind != HandoffKind.claim &&
+                  history.entries.first.kind != HandoffKind.autoAssign &&
+                  history.firstHandler != null)
                 _HistoryRow(
                   text: '${_capitalise(_personName(history.firstHandler, myId))} took up this conversation',
                   time: null,
@@ -378,6 +439,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         setState(() {
           _canRate = summary.canRate;
           _canEndSupport = !isAdmin && summary.isSupport && !summary.resolved;
+          _isSupportThread = summary.isSupport;
+          _supportTopic = summary.supportTopic;
         });
       }
       if (!isAdmin && summary.isSupport && summary.resolved) {
@@ -512,8 +575,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
 
   Future<void> _toggleInfoPanel() async {
     setState(() => _infoPanelOpen = !_infoPanelOpen);
+    if (_infoPanelOpen) await _loadRecipientDetail();
+  }
+
+  Future<void> _loadRecipientDetail() async {
     final userId = widget.adminViewOfUserId;
-    if (!_infoPanelOpen || userId == null || _recipientDetail != null || _loadingRecipientDetail) return;
+    if (userId == null || _recipientDetail != null || _loadingRecipientDetail) return;
     setState(() {
       _loadingRecipientDetail = true;
       _recipientDetailError = null;
@@ -783,51 +850,36 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
               child: Text('End chat', style: AppTextStyles.body(color: theme.foreground, size: 14, weight: FontWeight.w700)),
             ),
           // Support tools — shown to the admin handling a support chat and
-          // to super admins (the same people the handling history is for).
-          if (_history != null && widget.threadId != null && MediaQuery.of(context).size.width < 700)
-            // Phone width: one menu instead of four icons. The menu is a
+          // to super admins (the same people the handling history is for) —
+          // plus calling and editing the customer, for any admin chat.
+          if (widget.threadId != null && _adminTools.isNotEmpty && MediaQuery.of(context).size.width < 700)
+            // Phone width: one menu instead of a row of icons. The menu is a
             // light Material surface, so items use onSurface (fixed navy).
             PopupMenuButton<String>(
               icon: Icon(Icons.support_agent_rounded, color: theme.foreground),
               tooltip: 'Support tools',
-              onSelected: (action) => switch (action) {
-                'customer' => showCustomerContextSheet(context, widget.threadId!),
-                'notes' => showSupportNotesSheet(context, widget.threadId!),
-                'triage' => _openTriage(),
-                _ => Future.sync(_showHistorySheet),
-              },
+              onSelected: _runAdminTool,
               itemBuilder: (_) => [
-                for (final (value, label) in const [
-                  ('customer', 'Customer details'),
-                  ('notes', 'Internal notes'),
-                  ('triage', 'Topic & priority'),
-                  ('history', 'Handling history'),
-                ])
-                  PopupMenuItem(value: value, child: Text(label, style: AppTextStyles.body(color: theme.onSurface, size: 14))),
+                for (final tool in _adminTools)
+                  PopupMenuItem(
+                    value: tool.id,
+                    child: Row(
+                      children: [
+                        Icon(tool.icon, color: theme.onSurface, size: 20),
+                        const SizedBox(width: 12),
+                        Text(tool.label, style: AppTextStyles.body(color: theme.onSurface, size: 14)),
+                      ],
+                    ),
+                  ),
               ],
             )
-          else if (_history != null && widget.threadId != null) ...[
-            IconButton(
-              onPressed: () => showCustomerContextSheet(context, widget.threadId!),
-              icon: Icon(Icons.badge_outlined, color: theme.foreground),
-              tooltip: 'Customer details',
-            ),
-            IconButton(
-              onPressed: () => showSupportNotesSheet(context, widget.threadId!),
-              icon: Icon(Icons.sticky_note_2_outlined, color: theme.foreground),
-              tooltip: 'Internal notes',
-            ),
-            IconButton(
-              onPressed: _openTriage,
-              icon: Icon(Icons.flag_outlined, color: theme.foreground),
-              tooltip: 'Topic & priority',
-            ),
-            IconButton(
-              onPressed: _showHistorySheet,
-              icon: Icon(Icons.history_rounded, color: theme.foreground),
-              tooltip: 'Handling history',
-            ),
-          ],
+          else if (widget.threadId != null)
+            for (final tool in _adminTools)
+              IconButton(
+                onPressed: () => _runAdminTool(tool.id),
+                icon: Icon(tool.icon, color: theme.foreground),
+                tooltip: tool.label,
+              ),
           if (widget.adminViewOfUserId != null)
             IconButton(
               onPressed: _toggleInfoPanel,
@@ -883,6 +935,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   loading: _loadingRecipientDetail,
                   error: _recipientDetailError,
                 ),
+              if (context.read<AppState>().role.isAdmin && _isSupportThread)
+                _SupportTopicBanner(theme: theme, topic: _supportTopic),
               if (_history != null && _history!.lastHandoff != null)
                 _HandoffBanner(
                   theme: theme,
@@ -1385,10 +1439,52 @@ String _describeHandoff(ThreadHandoff entry, String? myId) {
     HandoffKind.claim => '${_capitalise(to)} took up this conversation',
     HandoffKind.transfer => '${_capitalise(from)} transferred it to $to',
     HandoffKind.reassign => '${_capitalise(by)} (super admin) reassigned it from $from to $to',
+    HandoffKind.autoAssign => 'Auto assigned to $to by system admin',
   };
 }
 
 String _capitalise(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
+
+/// Admins only: what the customer is contacting support about, as they
+/// picked it when opening the chat. theme.surface/onSurface is a fixed
+/// light-surface/navy-text pair in every theme.
+class _SupportTopicBanner extends StatelessWidget {
+  const _SupportTopicBanner({required this.theme, required this.topic});
+
+  final DashboardTheme theme;
+  final SupportTopic? topic;
+
+  @override
+  Widget build(BuildContext context) {
+    final topic = this.topic;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: theme.surface, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        children: [
+          Icon(Icons.flag_outlined, color: theme.onSurface, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: topic == null
+                    ? [const TextSpan(text: "The customer didn't pick a topic for this conversation.")]
+                    : [
+                        const TextSpan(text: 'Contacting support about: '),
+                        TextSpan(text: topic.label, style: const TextStyle(fontWeight: FontWeight.w800)),
+                        TextSpan(text: ' · ${topic.hint}'),
+                      ],
+              ),
+              style: AppTextStyles.body(color: theme.onSurface, size: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Shown above the messages once a support conversation has changed
 /// hands: who moved it to whom, and who first took it up.
@@ -1408,10 +1504,15 @@ class _HandoffBanner extends StatelessWidget {
     final current = history.currentAdmin;
     final handlingIt = current != null && current.id == myId;
     final headline = handlingIt
-        ? last.kind == HandoffKind.reassign
-            ? 'Reassigned to you by ${_personName(last.by, myId)}'
-            : 'Transferred to you by ${_personName(last.from, myId)}'
+        ? switch (last.kind) {
+            HandoffKind.reassign => 'Reassigned to you by ${_personName(last.by, myId)}',
+            // Nobody handed it over — the system picked this admin.
+            HandoffKind.autoAssign => 'Auto Assigned to you by system admin',
+            _ => 'Transferred to you by ${_personName(last.from, myId)}',
+          }
         : 'Now handled by ${_personName(current, myId)}';
+    // "First taken up by" only adds anything once it has changed hands.
+    final showFirst = first != null && !(last.kind == HandoffKind.autoAssign && history.entries.length == 1);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -1429,7 +1530,7 @@ class _HandoffBanner extends StatelessWidget {
                   '$headline · ${_handoffTime(last.at)}',
                   style: AppTextStyles.body(color: theme.onSurface, size: 13, weight: FontWeight.w700),
                 ),
-                if (first != null)
+                if (showFirst)
                   Text(
                     'First taken up by ${_personName(first, myId)}',
                     style: AppTextStyles.body(color: theme.onSurface.withValues(alpha: 0.7), size: 12),

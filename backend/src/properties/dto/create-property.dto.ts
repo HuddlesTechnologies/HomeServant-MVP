@@ -1,4 +1,4 @@
-import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUrl, Max, Min, MinLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, IsUrl, Max, Min, MinLength, ValidateIf } from 'class-validator';
 import { PriceUnit, PropertyCategory } from '@prisma/client';
 
 export class CreatePropertyDto {
@@ -67,6 +67,19 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsBoolean()
   messagingEnabled?: boolean;
+
+  /// The walkthrough video's public URL (see Property.videoUrl). On an
+  /// update, an empty string removes it.
+  @IsOptional()
+  @ValidateIf((o: { videoUrl?: string }) => o.videoUrl !== '')
+  @IsUrl()
+  videoUrl?: string;
+
+  /// Lets tenants pay this rental month by month (ignored for a Shortlet,
+  /// which is always paid per stay). See Property.allowMonthlyPayment.
+  @IsOptional()
+  @IsBoolean()
+  allowMonthlyPayment?: boolean;
 
   /// Shortlet-only (the app sends them only for a Shortlet listing): the
   /// exact unit address and room number, stored on Property.

@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsPhoneNumber, IsString, IsUrl, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsDateString, IsEnum, IsOptional, IsPhoneNumber, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 import { Gender, MaritalStatus } from '@prisma/client';
 
 export class UpdateProfileDto {
@@ -46,6 +46,21 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsEnum(MaritalStatus)
   maritalStatus?: MaritalStatus;
+
+  /// Booking profile: a little background landlords read with a booking
+  /// request. Empty string clears it.
+  @IsOptional()
+  @IsString()
+  @MaxLength(600)
+  bio?: string;
+
+  /// Booking profile: up to 10 short hobbies/interests.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(40, { each: true })
+  hobbies?: string[];
 
   @IsOptional()
   @IsBoolean()

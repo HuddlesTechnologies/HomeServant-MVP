@@ -22,8 +22,15 @@ class UploadsRepository {
 
   final ApiClient _client;
 
-  Future<String> upload({required PickedUpload file, required String folder}) =>
-      _upload(file: file, signPath: '/uploads/sign', signBody: (name) => {'fileName': name, 'folder': folder}, resultKey: 'publicUrl');
+  /// [maxBytes] refuses a bigger file up front with a clear message, rather
+  /// than letting storage reject it mid-upload.
+  Future<String> upload({required PickedUpload file, required String folder, int? maxBytes}) => _upload(
+    file: file,
+    signPath: '/uploads/sign',
+    signBody: (name) => {'fileName': name, 'folder': folder},
+    resultKey: 'publicUrl',
+    maxBytes: maxBytes,
+  );
 
   /// Identity documents (IDs, ownership certificates): photos or a PDF, into
   /// the PRIVATE bucket. Returns the object path to save — there is no
@@ -36,6 +43,7 @@ class UploadsRepository {
     required String signPath,
     required Map<String, dynamic> Function(String fileName) signBody,
     required String resultKey,
+    int? maxBytes,
   }) {
     return _client.call(() async {
       final Uint8List bytes;
@@ -47,6 +55,10 @@ class UploadsRepository {
         // when it didn't, this surfaced as a misleading "Could not reach
         // the server".
         throw ApiException(0, "Couldn't read the selected file. Please pick it again.");
+      }
+      if (maxBytes != null && bytes.length > maxBytes) {
+        final mb = (maxBytes / (1024 * 1024)).round();
+        throw ApiException(0, 'That file is too large — the limit is $mb MB. Please choose a shorter or smaller one.');
       }
       // Sniff the real type from the file's first bytes when the name alone
       // doesn't say (e.g. a web blob name with no extension) — the sign
@@ -84,9 +96,13 @@ class UploadsRepository {
     'image/heic': '.heic',
     'image/heif': '.heif',
     'application/pdf': '.pdf',
+    'video/mp4': '.mp4',
+    'video/quicktime': '.mov',
+    'video/x-m4v': '.m4v',
+    'video/webm': '.webm',
   };
 
-  static final _hasImageExtension = RegExp(r'\.(jpe?g|png|webp|heic|heif|gif|pdf)$', caseSensitive: false);
+  static final _hasImageExtension = RegExp(r'\.(jpe?g|png|webp|heic|heif|gif|pdf|mp4|mov|m4v|webm)$', caseSensitive: false);
 
   String _withExtension(String fileName, String contentType) {
     if (_hasImageExtension.hasMatch(fileName)) return fileName;

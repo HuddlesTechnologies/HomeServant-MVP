@@ -40,6 +40,17 @@ export interface TokenPair {
   refreshToken: string;
 }
 
+/// A permanently banned account can't sign in or refresh a session — the
+/// person is told it's a ban, why, and that support can review it. See
+/// AdminService.banUser.
+export function assertNotBanned(user: Pick<User, 'bannedAt' | 'banReason'>): void {
+  if (!user.bannedAt) return;
+  const reason = user.banReason?.trim() ? ` Reason: ${user.banReason.trim()}` : '';
+  throw new ForbiddenException(
+    `This account has been permanently banned from HomeServant.${reason} If you believe this is a mistake, contact HomeServant support.`,
+  );
+}
+
 @Injectable()
 export class AuthService {
   private readonly googleClient = new OAuth2Client();
@@ -121,6 +132,8 @@ export class AuthService {
     // Each sign-in page takes only its own kind of account. (Safe to say
     // after the password check: only the account's owner learns its role.)
     assertPortalAllows(dto.portal, user.role);
+    // Also only after the password check, so only the owner learns of it.
+    assertNotBanned(user);
     if (!user.emailVerifiedAt) {
       // Used to be a dead end: a 403 with no way to get a new code, while
       // signup refused the email as taken. The password is already proven
@@ -175,6 +188,7 @@ export class AuthService {
   async verifyLoginOtp(dto: VerifyOtpDto, ip?: string): Promise<TokenPair & { user: PublicUser }> {
     await this.otp.verify(dto.email, OtpPurpose.LOGIN_2FA, dto.code);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { email: dto.email } });
+    assertNotBanned(user);
     const tokens = await this.issueTokens(user);
     if (user.role === 'ADMIN') {
       await this.activityLog.log(ActivityLogType.ADMIN_LOGIN, { actorId: user.id, targetId: user.id, ip });
@@ -191,7 +205,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const record = await this.prisma.refreshToken.findUnique({ where: { id: payload.jti } });
+    const record = await this.prisma.refreshToken.findUnique({
+      where: { id: payload.jti },
+      include: { user: { select: { bannedAt: true, banReason: true } } },
+    });
+    // Checked before "revoked" (a ban revokes every token) so an open app
+    // learns it was a ban, and why, rather than just "session expired".
+    if (record) assertNotBanned(record.user);
     if (!record || record.revokedAt || record.expiresAt < new Date()) {
       throw new UnauthorizedException('Refresh token expired or already used');
     }
@@ -287,6 +307,8 @@ export class AuthService {
         },
       });
     }
+
+    assertNotBanned(user);
 
     if (user.deactivatedAt) {
       // The verified Google ID token already proves identity here (same

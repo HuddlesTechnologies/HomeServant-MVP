@@ -362,6 +362,15 @@ class _AdminShellState extends State<AdminShell> {
   /// The sidebar's own expand/collapse choice; null follows the screen
   /// width (full sidebar on desktop, icons only on tablets).
   bool? _sidebarExpanded;
+
+  /// Wide screens: the content area beside the sidebar has its own
+  /// navigator, so a chat, a user's details or any other page opened from
+  /// a console page opens *beside* the sidebar instead of covering it —
+  /// the sidebar stays on screen for quick jumps to any other page.
+  final _contentNavigator = GlobalKey<NavigatorState>();
+
+  /// Back to the chosen page itself, closing anything opened on top of it.
+  void _closeOpenedPages() => _contentNavigator.currentState?.popUntil((route) => route.isFirst);
   int _usersTabEpoch = 0;
   VendorApplicationStatus? _vendorsInitialStatusFilter;
   int _vendorsTabEpoch = 0;
@@ -388,6 +397,7 @@ class _AdminShellState extends State<AdminShell> {
       _index = 1;
       _openPage = null;
     });
+    _closeOpenedPages();
   }
 
   void _goToVendors({VendorApplicationStatus? statusFilter}) {
@@ -397,6 +407,7 @@ class _AdminShellState extends State<AdminShell> {
       _index = 2;
       _openPage = null;
     });
+    _closeOpenedPages();
   }
 
   void _handleDashboardNavigate(AdminDashboardDestination destination) {
@@ -431,6 +442,7 @@ class _AdminShellState extends State<AdminShell> {
   /// phones it's pushed as its own screen with a back button.
   void _openMoreItem(_MoreItem item) {
     if (_usesSidebar(context)) {
+      _closeOpenedPages();
       setState(() => _openPage = item);
     } else {
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => _MoreScreen(item: item)));
@@ -608,7 +620,9 @@ class _AdminShellState extends State<AdminShell> {
           count: context.watch<AppState>().unreadNotificationCount,
           onTap: () {
             context.read<AppState>().markAllNotificationsRead();
-            Navigator.of(context).push(
+            // Beside the sidebar on wide screens, full screen on phones.
+            final navigator = _usesSidebar(context) ? _contentNavigator.currentState : null;
+            (navigator ?? Navigator.of(context)).push(
               MaterialPageRoute(builder: (_) => const NotificationsScreen(theme: DashboardTheme.classic)),
             );
           },
@@ -675,35 +689,60 @@ class _AdminShellState extends State<AdminShell> {
             sections: _sidebarSections(canSeeAdmins, isSuperAdmin),
             expanded: expanded,
             isSelected: (entry) => entry.page != null ? openPage?.label == entry.label : openPage == null && index == entry.tabIndex,
-            onSelect: (entry) => setState(() {
-              if (entry.page != null) {
-                _openPage = entry.page;
-              } else {
-                _openPage = null;
-                _index = entry.tabIndex!;
-              }
-            }),
+            onSelect: (entry) {
+              // Picking a page (even the one already chosen) closes any chat
+              // or detail page opened on top of it.
+              _closeOpenedPages();
+              setState(() {
+                if (entry.page != null) {
+                  _openPage = entry.page;
+                } else {
+                  _openPage = null;
+                  _index = entry.tabIndex!;
+                }
+              });
+            },
             onToggle: () => setState(() => _sidebarExpanded = !expanded),
           ),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 18, 24, 6),
-                  child: Text(title, style: AppTextStyles.heading(color: AppColors.navy, size: 20)),
-                ),
-                Expanded(
-                  // The primary tabs stay alive (filters, scroll) while a
-                  // sidebar page is open, as with the phone's bottom nav.
-                  child: Stack(
-                    children: [
-                      Offstage(offstage: openPage != null, child: IndexedStack(index: index, children: _primaryTabs)),
-                      if (openPage != null) KeyedSubtree(key: ValueKey('admin-page-${openPage.label}'), child: openPage.builder()),
-                    ],
+            // Back (browser or system) closes a page opened beside the
+            // sidebar before it leaves the console.
+            child: NavigatorPopHandler(
+              onPopWithResult: (_) => _contentNavigator.currentState?.maybePop(),
+              child: Navigator(
+                key: _contentNavigator,
+                // A single page that is rebuilt whenever the chosen page
+                // changes; chats and details opened from it are pushed on top.
+                pages: [
+                  MaterialPage<void>(
+                    key: const ValueKey('admin-content'),
+                    child: ColoredBox(
+                      color: AppColors.offWhite,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 18, 24, 6),
+                            child: Text(title, style: AppTextStyles.heading(color: AppColors.navy, size: 20)),
+                          ),
+                          Expanded(
+                            // The primary tabs stay alive (filters, scroll) while a
+                            // sidebar page is open, as with the phone's bottom nav.
+                            child: Stack(
+                              children: [
+                                Offstage(offstage: openPage != null, child: IndexedStack(index: index, children: _primaryTabs)),
+                                if (openPage != null)
+                                  KeyedSubtree(key: ValueKey('admin-page-${openPage.label}'), child: openPage.builder()),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+                onDidRemovePage: (_) {},
+              ),
             ),
           ),
         ],
@@ -845,12 +884,17 @@ class _AdminSidebar extends StatelessWidget {
     );
   }
 
+  /// The page the admin is on (including while a chat or detail page is
+  /// open on top of it) is marked three ways: a solid navy bar on its left
+  /// edge, a navy tint behind it, and a bold label — readable at a glance
+  /// whether the sidebar is expanded or icons-only.
   Widget _tile(_NavEntry entry) {
     final selected = isSelected(entry);
     final icon = Icon(entry.icon, color: AppColors.navy, size: 22);
     final tile = Material(
-      color: selected ? AppColors.navy.withValues(alpha: 0.09) : Colors.transparent,
+      color: selected ? AppColors.navy.withValues(alpha: 0.12) : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => onSelect(entry),
@@ -884,9 +928,28 @@ class _AdminSidebar extends StatelessWidget {
         ),
       ),
     );
+    final marked = Stack(
+      children: [
+        tile,
+        if (selected)
+          Positioned(
+            left: 0,
+            top: 8,
+            bottom: 8,
+            child: Container(
+              width: 4,
+              decoration: BoxDecoration(color: AppColors.navy, borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+      ],
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 2),
-      child: expanded ? tile : Tooltip(message: entry.label, child: tile),
+      child: Semantics(
+        selected: selected,
+        button: true,
+        child: expanded ? marked : Tooltip(message: selected ? '${entry.label} (current page)' : entry.label, child: marked),
+      ),
     );
   }
 }

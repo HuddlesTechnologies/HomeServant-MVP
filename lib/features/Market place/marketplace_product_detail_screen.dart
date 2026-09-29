@@ -4,6 +4,7 @@ import '../../api/models/vendor.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/dashboard_theme.dart';
+import '../../widgets/report_sheet.dart';
 import '../../widgets/pill_button.dart';
 import '../../widgets/upload_picker.dart';
 import 'widgets/marketplace_product_gallery_screen.dart';
@@ -68,6 +69,21 @@ class _MarketplaceProductDetailScreenState extends State<MarketplaceProductDetai
         backgroundColor: theme.background,
         elevation: 0,
         iconTheme: IconThemeData(color: theme.foreground),
+        actions: [
+          // Buyers can report an item that wasn't as described, never
+          // arrived, etc. (the server checks they bought it).
+          IconButton(
+            onPressed: () => showReportSheet(
+              context,
+              theme: theme,
+              target: ReportTarget.product,
+              targetId: product.id,
+              targetName: product.name,
+            ),
+            icon: Icon(Icons.flag_outlined, color: theme.foreground),
+            tooltip: 'Report this item',
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

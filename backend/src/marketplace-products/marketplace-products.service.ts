@@ -25,7 +25,8 @@ export class MarketplaceProductsService {
   async findMany(query: QueryProductsDto) {
     const where: Prisma.ProductWhereInput = {
       isAvailable: true,
-      vendor: { isActive: true, suspendedAt: null, status: 'APPROVED' },
+      // A banned owner's shop is off the marketplace (AdminService.banUser).
+      vendor: { isActive: true, suspendedAt: null, status: 'APPROVED', user: { bannedAt: null } },
       category: query.category,
       vendorId: query.vendorId,
       ...(query.search

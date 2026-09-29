@@ -296,6 +296,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                                   ),
+                                  TenantIntroLine(booking: booking),
                                 ],
                               ),
                             ),
@@ -522,6 +523,7 @@ class _ActiveRentalTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.6), size: 11.5),
                     ),
+                    TenantIntroLine(booking: booking),
                   ],
                 ),
               ),
@@ -648,6 +650,37 @@ class _HistoryTile extends StatelessWidget {
             child: Text(label, style: AppTextStyles.body(color: color, size: 11, weight: FontWeight.w700)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// One line from the tenant's booking profile under a request — their
+/// "About me" (or, failing that, hobbies) so a landlord gets a feel for who
+/// is asking before opening the full profile. White text on the navy
+/// request card, like the lines above it. Nothing when they've left both
+/// empty.
+class TenantIntroLine extends StatelessWidget {
+  const TenantIntroLine({super.key, required this.booking});
+
+  final api.Booking booking;
+
+  @override
+  Widget build(BuildContext context) {
+    final bio = booking.tenantBio?.trim();
+    final text = bio != null && bio.isNotEmpty
+        ? '“$bio”'
+        : booking.tenantHobbies.isNotEmpty
+        ? 'Enjoys ${booking.tenantHobbies.take(4).join(', ')}'
+        : null;
+    if (text == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Text(
+        text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: AppTextStyles.body(color: Colors.white.withValues(alpha: 0.85), size: 11.5).copyWith(fontStyle: FontStyle.italic),
       ),
     );
   }

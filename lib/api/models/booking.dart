@@ -97,6 +97,8 @@ class Booking {
     this.tenantProfilePhotoUrl,
     this.tenantGender,
     this.tenantOccupation,
+    this.tenantBio,
+    this.tenantHobbies = const [],
     this.tenantMaritalStatus,
     this.tenantDateOfBirth,
     this.requestedDate,
@@ -108,7 +110,35 @@ class Booking {
     this.leaseStartDate,
     this.leaseEndDate,
     this.lastPaidAt,
+    this.payingMonthly = false,
+    this.monthlyRent,
+    this.rentPaidThrough,
   });
+
+  /// Paying this rental month by month (the landlord allows it): the first
+  /// month was paid up front; each later month is paid from the booking.
+  final bool payingMonthly;
+
+  /// The agreed monthly rent, in naira.
+  final int? monthlyRent;
+
+  /// How far the monthly rent is paid (monthly plan, after move-in).
+  final DateTime? rentPaidThrough;
+
+  /// Months of the current lease still to pay (monthly plan, moved in).
+  bool get hasMonthsLeftToPay =>
+      payingMonthly &&
+      status == BookingStatus.movedIn &&
+      rentPaidThrough != null &&
+      leaseEndDate != null &&
+      rentPaidThrough!.isBefore(leaseEndDate!);
+
+  /// The next month's rent is overdue.
+  bool get monthlyRentOverdue => hasMonthsLeftToPay && rentPaidThrough!.isBefore(DateTime.now());
+
+  /// The next month can be paid now (from 7 days before it's due).
+  bool get canPayNextMonth =>
+      hasMonthsLeftToPay && rentPaidThrough!.difference(DateTime.now()) <= const Duration(days: 7);
 
   final String id;
   final Property property;
@@ -136,6 +166,11 @@ class Booking {
   final String? tenantProfilePhotoUrl;
   final TenantGender? tenantGender;
   final String? tenantOccupation;
+
+  /// The tenant's booking profile — a little background and their hobbies
+  /// (landlord's view of a booking only).
+  final String? tenantBio;
+  final List<String> tenantHobbies;
   final TenantMaritalStatus? tenantMaritalStatus;
   final DateTime? tenantDateOfBirth;
 
@@ -205,6 +240,8 @@ class Booking {
       tenantProfilePhotoUrl: tenant?['profilePhotoUrl'] as String?,
       tenantGender: _genderFromApi(tenant?['gender'] as String?),
       tenantOccupation: tenant?['occupation'] as String?,
+      tenantBio: tenant?['bio'] as String?,
+      tenantHobbies: (tenant?['hobbies'] as List?)?.cast<String>() ?? const [],
       tenantMaritalStatus: _maritalStatusFromApi(tenant?['maritalStatus'] as String?),
       tenantDateOfBirth: _parseDate(tenant?['dateOfBirth']),
       requestedDate: _parseDate(json['requestedDate']),
@@ -216,6 +253,9 @@ class Booking {
       leaseStartDate: _parseDate(json['leaseStartDate']),
       leaseEndDate: _parseDate(json['leaseEndDate']),
       lastPaidAt: _parseDate(json['lastPaidAt']),
+      payingMonthly: json['paymentPlan'] == 'MONTHLY',
+      monthlyRent: json['monthlyRent'] as int?,
+      rentPaidThrough: _parseDate(json['rentPaidThrough']),
     );
   }
 

@@ -39,6 +39,9 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
   String _search = '';
   late UserRole? _roleFilter = widget.initialRoleFilter;
   late bool _deactivatedOnly = widget.initialShowDeactivatedOnly;
+
+  /// "Banned" filter — where a super admin finds accounts to lift bans on.
+  bool _bannedOnly = false;
   String? _error;
 
   @override
@@ -53,6 +56,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
         role: _roleFilter?.apiValue,
         search: _search,
         deactivatedOnly: _deactivatedOnly,
+        bannedOnly: _bannedOnly,
       );
       if (!mounted) return;
       setState(() {
@@ -156,15 +160,17 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             children: [
-              AdminFilterChip(label: 'All', selected: _roleFilter == null && !_deactivatedOnly, onTap: () => setState(() { _roleFilter = null; _deactivatedOnly = false; _load(); })),
+              AdminFilterChip(label: 'All', selected: _roleFilter == null && !_deactivatedOnly && !_bannedOnly, onTap: () => setState(() { _roleFilter = null; _deactivatedOnly = false; _bannedOnly = false; _load(); })),
               const SizedBox(width: 8),
-              AdminFilterChip(label: 'Tenants', selected: _roleFilter == UserRole.tenant, onTap: () => setState(() { _roleFilter = UserRole.tenant; _deactivatedOnly = false; _load(); })),
+              AdminFilterChip(label: 'Tenants', selected: _roleFilter == UserRole.tenant, onTap: () => setState(() { _roleFilter = UserRole.tenant; _deactivatedOnly = false; _bannedOnly = false; _load(); })),
               const SizedBox(width: 8),
-              AdminFilterChip(label: 'Landlords', selected: _roleFilter == UserRole.landlord, onTap: () => setState(() { _roleFilter = UserRole.landlord; _deactivatedOnly = false; _load(); })),
+              AdminFilterChip(label: 'Landlords', selected: _roleFilter == UserRole.landlord, onTap: () => setState(() { _roleFilter = UserRole.landlord; _deactivatedOnly = false; _bannedOnly = false; _load(); })),
               const SizedBox(width: 8),
-              AdminFilterChip(label: 'Vendors', selected: _roleFilter == UserRole.vendor, onTap: () => setState(() { _roleFilter = UserRole.vendor; _deactivatedOnly = false; _load(); })),
+              AdminFilterChip(label: 'Vendors', selected: _roleFilter == UserRole.vendor, onTap: () => setState(() { _roleFilter = UserRole.vendor; _deactivatedOnly = false; _bannedOnly = false; _load(); })),
               const SizedBox(width: 8),
-              AdminFilterChip(label: 'Deactivated', selected: _deactivatedOnly, onTap: () => setState(() { _roleFilter = null; _deactivatedOnly = true; _load(); })),
+              AdminFilterChip(label: 'Deactivated', selected: _deactivatedOnly, onTap: () => setState(() { _roleFilter = null; _deactivatedOnly = true; _bannedOnly = false; _load(); })),
+              const SizedBox(width: 8),
+              AdminFilterChip(label: 'Banned', selected: _bannedOnly, onTap: () => setState(() { _roleFilter = null; _deactivatedOnly = false; _bannedOnly = true; _load(); })),
             ],
           ),
         ),
@@ -215,6 +221,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                                         if (user.isVendor && user.role != UserRole.vendor)
                                           const AdminBadge(text: 'Also a Vendor', color: Colors.teal),
                                         if (user.isDeactivated) const AdminBadge(text: 'Deactivated', color: Colors.redAccent),
+                                        if (user.isBanned) const AdminBadge(text: 'Banned', color: Color(0xFFB42318)),
                                       ],
                                     ),
                                     const SizedBox(height: 3),

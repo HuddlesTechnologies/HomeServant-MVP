@@ -10,6 +10,7 @@ import { CreateThreadDto } from './dto/create-thread.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import { PresenceService } from './presence.service';
 import { adminCanAccessSupportThread } from './support-access';
+import { adminPublicName } from '../common/admin-display-name';
 
 const MESSAGE_PAGE_SIZE = 50;
 const CHAT_LOG_WINDOW_DAYS = 30;
@@ -24,6 +25,16 @@ const PAID_BOOKING_STATUSES: BookingStatus[] = [
   BookingStatus.INSPECTION_CONFIRMED,
   BookingStatus.MOVED_IN,
 ];
+
+/// How a support topic reads in admin alerts — matches the app's labels.
+const SUPPORT_TOPIC_LABEL: Record<SupportTopic, string> = {
+  PAYMENTS: 'Payments',
+  BOOKING: 'Booking',
+  ACCOUNT: 'Account',
+  LISTING: 'Listing',
+  MARKETPLACE: 'Marketplace',
+  OTHER: 'Other',
+};
 
 const NOBODY_AVAILABLE_PREFIX = 'Thanks for your message.';
 
@@ -108,7 +119,11 @@ export class ChatService {
         ...(isAdmin ? {} : { NOT: { isSupport: true, status: 'RESOLVED' } }),
       },
       include: {
-        participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true, lastActiveAt: true } } } },
+        participants: {
+          include: {
+            user: { select: { id: true, fullName: true, firstName: true, role: true, profilePhotoUrl: true, lastActiveAt: true } },
+          },
+        },
         property: { select: { id: true, title: true, imageUrl: true } },
         order: { select: { id: true, items: { take: 1, select: { productName: true } } } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -131,7 +146,8 @@ export class ChatService {
         .filter((p) => p.userId !== userId)
         .map((p) => ({
           id: p.user.id,
-          fullName: p.user.fullName,
+          // Customers only ever see a support admin's first name.
+          fullName: !isAdmin && p.user.role === UserRole.ADMIN ? adminPublicName(p.user) : p.user.fullName,
           profilePhotoUrl: p.user.profilePhotoUrl,
           isOnline: this.presence.isOnline(p.user.id),
           lastActiveAt: p.user.lastActiveAt,
@@ -170,8 +186,10 @@ export class ChatService {
             include: { participants: true },
           });
           if (existing) {
-            // A topic picked now fills in one the open conversation lacks.
-            if (topic && !existing.supportTopic) {
+            // The topic just picked is what they're getting in touch about
+            // now — it replaces whatever the open conversation had, so the
+            // admin sees the current reason rather than a stale one.
+            if (topic && existing.supportTopic !== topic) {
               await tx.supportChatStat.updateMany({ where: { threadId: existing.id }, data: { topic } });
               return tx.thread.update({ where: { id: existing.id }, data: { supportTopic: topic }, include: { participants: true } });
             }
@@ -370,8 +388,10 @@ export class ChatService {
     const thread = await this.prisma.thread.findUnique({
       where: { id: threadId },
       include: {
-        participants: { include: { user: { select: { id: true, fullName: true, profilePhotoUrl: true } } } },
-        assignedAdmin: { select: { id: true, fullName: true } },
+        participants: {
+          include: { user: { select: { id: true, fullName: true, firstName: true, role: true, profilePhotoUrl: true } } },
+        },
+        assignedAdmin: { select: { id: true, fullName: true, firstName: true } },
         transferLogs: {
           where: { kind: { notIn: ['CLAIM', 'AUTO_ASSIGN'] } },
           orderBy: { createdAt: 'desc' },
@@ -394,6 +414,12 @@ export class ChatService {
     const unclaimedSupport = thread.isSupport && !thread.assignedAdminId;
     const lockedReason = isParticipant && !isAdmin ? await this.threadBlockReason(threadId, userId) : null;
     const lastTransfer = thread.transferLogs[0];
+    // Customers only ever see a support admin's first name.
+    const publicPerson = (u: { id: string; fullName: string | null; firstName: string | null; role?: UserRole; profilePhotoUrl?: string | null }) => ({
+      id: u.id,
+      fullName: !isAdmin && (u.role === undefined || u.role === UserRole.ADMIN) ? adminPublicName(u) : u.fullName,
+      ...(u.profilePhotoUrl !== undefined ? { profilePhotoUrl: u.profilePhotoUrl } : {}),
+    });
     return {
       id: thread.id,
       isSupport: thread.isSupport,
@@ -401,11 +427,11 @@ export class ChatService {
       priority: thread.priority,
       resolved,
       resolvedAt: thread.resolvedAt,
-      assignedAdmin: thread.assignedAdmin,
+      assignedAdmin: thread.assignedAdmin ? publicPerson(thread.assignedAdmin) : null,
       lastTransfer: lastTransfer
         ? { fromAdmin: lastTransfer.fromAdmin, toAdmin: lastTransfer.toAdmin, createdAt: lastTransfer.createdAt }
         : null,
-      otherParticipants: thread.participants.filter((p) => p.userId !== userId).map((p) => p.user),
+      otherParticipants: thread.participants.filter((p) => p.userId !== userId).map((p) => publicPerson(p.user)),
       canView,
       // A SUPER_ADMIN can hand an open support conversation to any admin
       // (see reassignThread) unless they're the one handling it — then the
@@ -554,9 +580,19 @@ export class ChatService {
       where: { threadId, ...(before ? { createdAt: { lt: new Date(before) } } : {}) },
       orderBy: { createdAt: 'desc' },
       take: MESSAGE_PAGE_SIZE,
-      include: { sender: { select: { id: true, fullName: true } } },
+      include: { sender: { select: { id: true, fullName: true, firstName: true, role: true } } },
     });
-    return messages.reverse();
+    const viewerIsAdmin = senderRole === UserRole.ADMIN;
+    return messages.reverse().map(({ sender, ...message }) => ({
+      ...message,
+      sender: sender
+        ? {
+            id: sender.id,
+            // Customers only ever see a support admin's first name.
+            fullName: !viewerIsAdmin && sender.role === UserRole.ADMIN ? adminPublicName(sender) : sender.fullName,
+          }
+        : null,
+    }));
   }
 
   async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
@@ -597,7 +633,7 @@ export class ChatService {
           type: dto.attachmentUrl ? MessageType.IMAGE : MessageType.TEXT,
           attachmentUrl: dto.attachmentUrl,
         },
-        include: { sender: { select: { id: true, fullName: true } } },
+        include: { sender: { select: { id: true, fullName: true, firstName: true } } },
       }),
       this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } }),
     ]);
@@ -645,6 +681,9 @@ export class ChatService {
       where: { threadId, userId: { not: userId } },
       select: { userId: true },
     });
+    // An admin is only ever shown to the customer by first name — that's
+    // also what goes out live over the socket (see the gateway broadcast).
+    if (senderRole === UserRole.ADMIN && message.sender) message.sender.fullName = adminPublicName(message.sender);
     const senderName = message.sender?.fullName ?? 'Someone';
     await Promise.all(
       otherParticipants.map((p) =>
@@ -683,7 +722,7 @@ export class ChatService {
             admin.id,
             NotificationType.NEW_MESSAGE,
             threadId,
-            'New support conversation',
+            thread.supportTopic ? `New support conversation · ${SUPPORT_TOPIC_LABEL[thread.supportTopic]}` : 'New support conversation',
             body,
             !admin.adminOnDuty,
           ),
@@ -712,8 +751,8 @@ export class ChatService {
   /// Tells the customer (and the admins) in the chat itself that it changed
   /// hands — by first name only, so an admin's full name isn't shared.
   private async postHandoffNotice(threadId: string, toAdminId: string): Promise<void> {
-    const admin = await this.prisma.user.findUnique({ where: { id: toAdminId }, select: { fullName: true } });
-    const firstName = admin?.fullName?.trim().split(/\s+/)[0];
+    const admin = await this.prisma.user.findUnique({ where: { id: toAdminId }, select: { fullName: true, firstName: true } });
+    const firstName = adminPublicName(admin);
     const who = firstName ? `${firstName} from HomeServant Support` : 'another member of HomeServant Support';
     try {
       await this.postThreadSystemMessage(threadId, `This conversation has been transferred to ${who}.`);
@@ -788,7 +827,7 @@ export class ChatService {
     const waiting = await this.prisma.thread.findMany({
       where: { isSupport: true, status: 'OPEN', assignedAdminId: null, messages: { some: {} } },
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
-      select: { id: true },
+      select: { id: true, supportTopic: true },
       take: 25,
     });
     let assigned = 0;
@@ -796,11 +835,12 @@ export class ChatService {
       const adminId = await this.autoAssign(thread.id);
       if (adminId) {
         assigned++;
+        const about = thread.supportTopic ? ` about ${SUPPORT_TOPIC_LABEL[thread.supportTopic]}` : '';
         await this.notifications.create(
           adminId,
           NotificationType.NEW_MESSAGE,
-          'A waiting conversation was assigned to you',
-          'A customer has been waiting in the support queue — it is now yours.',
+          'Auto assigned to you by system admin',
+          `A customer has been waiting in the support queue${about} — the system assigned the conversation to you.`,
           thread.id,
         );
       } else if (!(await this.pickAssignee())) {

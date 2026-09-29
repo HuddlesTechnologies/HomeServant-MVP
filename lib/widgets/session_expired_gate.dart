@@ -22,10 +22,12 @@ class SessionExpiredGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final expired = context.watch<AppState>().sessionExpired;
+    final banned = context.watch<AppState>().bannedMessage;
     return Stack(
       children: [
         child,
         if (expired) _SessionExpiredModal(
+          bannedMessage: banned,
           onLogInAgain: () {
             context.read<AppState>().acknowledgeSessionExpired();
             context.go('/get-started');
@@ -37,9 +39,13 @@ class SessionExpiredGate extends StatelessWidget {
 }
 
 class _SessionExpiredModal extends StatelessWidget {
-  const _SessionExpiredModal({required this.onLogInAgain});
+  const _SessionExpiredModal({required this.onLogInAgain, this.bannedMessage});
 
   final VoidCallback onLogInAgain;
+
+  /// Set when the account was permanently banned — shown instead of the
+  /// "session expired" wording.
+  final String? bannedMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -62,17 +68,17 @@ class _SessionExpiredModal extends StatelessWidget {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(color: AppColors.navy.withValues(alpha: 0.1), shape: BoxShape.circle),
-                child: const Icon(Icons.lock_clock_rounded, color: AppColors.navy, size: 32),
+                child: Icon(bannedMessage != null ? Icons.block_rounded : Icons.lock_clock_rounded, color: AppColors.navy, size: 32),
               ),
               const SizedBox(height: 20),
               Text(
-                'Session Expired',
+                bannedMessage != null ? 'Account Banned' : 'Session Expired',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.heading(color: AppColors.navy, size: 19),
               ),
               const SizedBox(height: 10),
               Text(
-                "For your security, you've been signed out. Please log in again to continue.",
+                bannedMessage ?? "For your security, you've been signed out. Please log in again to continue.",
                 textAlign: TextAlign.center,
                 style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.7), size: 14),
               ),
@@ -80,7 +86,7 @@ class _SessionExpiredModal extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: PillButton(
-                  label: 'Log In Again',
+                  label: bannedMessage != null ? 'OK' : 'Log In Again',
                   backgroundColor: AppColors.navy,
                   textColor: Colors.white,
                   onPressed: onLogInAgain,

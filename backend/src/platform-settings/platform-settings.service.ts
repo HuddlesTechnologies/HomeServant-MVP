@@ -35,7 +35,18 @@ export class PlatformSettingsService {
     return { ...settings, stats: { totalListings, unverifiedListings, verifiedLandlords, landlordsWithListings } };
   }
 
-  async update(adminId: string, data: { requireVerifiedLandlords?: boolean; payUnverifiedLandlords?: boolean }) {
+  async update(
+    adminId: string,
+    data: {
+      requireVerifiedLandlords?: boolean;
+      payUnverifiedLandlords?: boolean;
+      maxListingImageChanges?: number;
+      listingImageLockDays?: number;
+      featuredListingFeeNaira?: number;
+      featuredListingDays?: number;
+      promotedSlotEvery?: number;
+    },
+  ) {
     const before = await this.requireVerifiedLandlords();
     await this.prisma.platformSettings.upsert({
       where: { id: 1 },
@@ -89,6 +100,31 @@ export class PlatformSettingsService {
   async payUnverifiedLandlords(): Promise<boolean> {
     const row = await this.prisma.platformSettings.findUnique({ where: { id: 1 }, select: { payUnverifiedLandlords: true } });
     return row?.payUnverifiedLandlords ?? true;
+  }
+
+  /// How many photo changes a listing gets before they lock, and for how
+  /// long (see Property.imageChangesUsed). Defaults when the row is missing.
+  async listingImageRules(): Promise<{ maxChanges: number; lockDays: number }> {
+    const row = await this.prisma.platformSettings.findUnique({
+      where: { id: 1 },
+      select: { maxListingImageChanges: true, listingImageLockDays: true },
+    });
+    return { maxChanges: row?.maxListingImageChanges ?? 3, lockDays: row?.listingImageLockDays ?? 14 };
+  }
+
+  /// Fairness: one promoted listing in every N search results (min 2).
+  async promotedSlotEvery(): Promise<number> {
+    const row = await this.prisma.platformSettings.findUnique({ where: { id: 1 }, select: { promotedSlotEvery: true } });
+    return Math.max(2, row?.promotedSlotEvery ?? 3);
+  }
+
+  /// What a paid "Featured" ad costs (naira) and how many days it runs.
+  async featuredListingPrice(): Promise<{ feeNaira: number; days: number }> {
+    const row = await this.prisma.platformSettings.findUnique({
+      where: { id: 1 },
+      select: { featuredListingFeeNaira: true, featuredListingDays: true },
+    });
+    return { feeNaira: row?.featuredListingFeeNaira ?? 5000, days: row?.featuredListingDays ?? 7 };
   }
 
   async requireVerifiedLandlords(): Promise<boolean> {

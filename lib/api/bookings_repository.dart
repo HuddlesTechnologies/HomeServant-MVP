@@ -74,6 +74,7 @@ class BookingsRepository {
     DateTime? requestedDate,
     String? message,
     int? nights,
+    bool payMonthly = false,
   }) {
     return _client.call(() async {
       final response = await _client.dio.post(
@@ -83,6 +84,7 @@ class BookingsRepository {
           if (isShortlet && requestedDate != null) 'requestedDate': requestedDate.toIso8601String(),
           if (message != null && message.isNotEmpty) 'message': message,
           if (isShortlet && nights != null) 'nights': nights,
+          if (!isShortlet && payMonthly) 'paymentPlan': 'MONTHLY',
         },
       );
       final data = response.data as Map<String, dynamic>;
@@ -201,6 +203,15 @@ class BookingsRepository {
         '/bookings/$id/renew',
         data: {'expectedAmount': quote.amount, 'expectedLeaseMonths': quote.leaseMonths},
       );
+      return PaymentInitiation.fromApi(response.data as Map<String, dynamic>);
+    });
+  }
+
+  /// Monthly plan: starts the charge for next month's rent — open the
+  /// returned checkout. The server allows it from 7 days before it's due.
+  Future<PaymentInitiation> payNextMonth(String id) {
+    return _client.call(() async {
+      final response = await _client.dio.post('/bookings/$id/pay-month');
       return PaymentInitiation.fromApi(response.data as Map<String, dynamic>);
     });
   }

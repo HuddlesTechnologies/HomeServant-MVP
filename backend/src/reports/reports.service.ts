@@ -17,17 +17,26 @@ export class ReportsService {
     private readonly chatGateway: ChatGateway,
   ) {}
 
-  /// A tenant can only report a property they've actually rented (an
-  /// ACCEPTED booking); a buyer can only report an item they've actually
-  /// bought (an order item on one of their orders) — checked here rather
-  /// than left to the reporter's own honesty.
+  /// Who may report what — checked here rather than left to the
+  /// reporter's honesty:
+  /// - a listing: someone who has had real contact with it — booked it (in
+  ///   any state, including an unfinished checkout), messaged about it, or
+  ///   saved it. (This used to require an ACCEPTED booking, a status paid
+  ///   rentals never reach any more, so almost nobody could report a
+  ///   listing — including a suspicious one.)
+  /// - a marketplace item: someone who bought it.
+  /// One open report per person per listing/item; a second is refused.
   async create(reporterId: string, dto: CreateReportDto) {
     if (dto.targetType === 'PROPERTY') {
       if (!dto.propertyId) throw new BadRequestException('propertyId is required to report a property');
-      const rented = await this.prisma.booking.findFirst({
-        where: { tenantId: reporterId, propertyId: dto.propertyId, status: 'ACCEPTED' },
-      });
-      if (!rented) throw new ForbiddenException('You can only report a property you have rented');
+      const [booked, messaged, saved] = await Promise.all([
+        this.prisma.booking.count({ where: { tenantId: reporterId, propertyId: dto.propertyId } }),
+        this.prisma.thread.count({ where: { propertyId: dto.propertyId, participants: { some: { userId: reporterId } } } }),
+        this.prisma.favorite.count({ where: { userId: reporterId, propertyId: dto.propertyId } }),
+      ]);
+      if (booked + messaged + saved === 0) {
+        throw new ForbiddenException('You can report a listing once you have booked, messaged about or saved it');
+      }
     } else {
       if (!dto.productId) throw new BadRequestException('productId is required to report a marketplace item');
       const purchased = await this.prisma.marketplaceOrderItem.findFirst({
@@ -35,6 +44,15 @@ export class ReportsService {
       });
       if (!purchased) throw new ForbiddenException('You can only report an item you have purchased');
     }
+    const alreadyOpen = await this.prisma.report.findFirst({
+      where: {
+        reporterId,
+        status: { in: ['OPEN', 'IN_PROGRESS'] },
+        ...(dto.targetType === 'PROPERTY' ? { propertyId: dto.propertyId } : { productId: dto.productId }),
+      },
+      select: { id: true },
+    });
+    if (alreadyOpen) throw new BadRequestException("You've already reported this — our team is looking into it");
 
     const report = await this.prisma.report.create({
       data: {
@@ -109,9 +127,24 @@ export class ReportsService {
   }
 
   async setStatus(id: string, status: ReportStatus) {
-    await this.requireReport(id);
-    const updated = await this.prisma.report.update({ where: { id }, data: { status } });
+    const before = await this.requireReport(id);
+    const updated = await this.prisma.report.update({
+      where: { id },
+      data: { status },
+      include: { property: { select: { title: true } }, product: { select: { name: true } } },
+    });
     this.chatGateway.broadcastToAdmins('admin:badges-changed', {});
+    // The person who reported it hears that it was dealt with (they can
+    // see all their reports under Settings > My Reports).
+    if (status === 'RESOLVED' && before.status !== 'RESOLVED') {
+      const what = updated.property?.title ?? updated.product?.name ?? 'what you reported';
+      await this.notifications.create(
+        updated.reporterId,
+        NotificationType.BOOKING_STATUS,
+        'Your report was reviewed',
+        `Thanks for reporting ${what}. Our team has reviewed it and taken action where needed.`,
+      );
+    }
     return updated;
   }
 

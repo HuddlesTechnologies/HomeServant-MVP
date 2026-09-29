@@ -243,6 +243,12 @@ model User {
   gender               Gender?
   occupation           String?
   maritalStatus        MaritalStatus?
+  /// The tenant's booking profile, shown to a landlord (and shortlet owner)
+  /// alongside their booking request — a little background about them
+  /// and their hobbies, with [profilePhotoUrl]. Only exposed to a landlord
+  /// the tenant has booked with (BookingsService.findForLandlord).
+  bio                  String?
+  hobbies              String[]       @default([])
   emailVerifiedAt      DateTime?
   /// One-way latch: set the first time this account's profile holds every
   /// field the signup wizard requires (see UsersService.updateProfile) and
@@ -274,6 +280,15 @@ model User {
   /// in successfully (see AuthService.login/googleAuth), matching the
   /// "reactivate any time by logging back in" promise on that screen.
   deactivatedAt        DateTime?
+  /// Permanently banned by a moderator/super admin (e.g. for posting
+  /// suspicious listings) — see AdminService.banUser. Unlike [deactivatedAt]
+  /// it can't be undone by logging back in and is never auto-deleted: the
+  /// account can't sign in, its listings and shop are hidden, and only a
+  /// super admin can lift it (AdminService.unbanUser). [banReason] is shown
+  /// to the person when they try to sign in.
+  bannedAt             DateTime?
+  banReason            String?
+  bannedById           String?
   /// Updated on every successful login (every role, not just ADMIN — see
   /// AuthService.login/verifyLoginOtp/googleAuth) and again the moment a
   /// user's last open socket disconnects (see PresenceService/ChatGateway)
@@ -345,6 +360,8 @@ model User {
   threadTransfersFrom    ThreadTransferLog[]    @relation("ThreadTransfersFrom")
   threadTransfersTo      ThreadTransferLog[]    @relation("ThreadTransfersTo")
   supportNotes           SupportNote[]          @relation("SupportNotesAuthored")
+  supportCallsPlaced     SupportCallLog[]       @relation("SupportCallsPlaced")
+  supportCallsReceived   SupportCallLog[]       @relation("SupportCallsReceived")
   savedReplies           SavedReply[]           @relation("SavedRepliesCreated")
   pushSubscriptions      PushSubscription[]
   /// Admins only: the super admin who created this account through the
@@ -356,6 +373,7 @@ model User {
   adminsCreated          User[]                 @relation("AdminsCreated")
 
   @@index([role])
+  @@index([bannedAt])
 }
 
 enum ActivityLogType {
@@ -408,6 +426,18 @@ enum ActivityLogType {
   /// unlike the other user-security actions above (MODERATOR+). [reason]
   /// holds why.
   ADMIN_USER_2FA_DISABLED
+  /// An admin phoned the customer from a chat — see
+  /// SupportToolsService.logCall. [reason] holds why; the full record
+  /// (thread, number) is the SupportCallLog row.
+  SUPPORT_CUSTOMER_CALLED
+  /// A moderator/super admin permanently banned a user — see
+  /// AdminService.banUser. [reason] holds why.
+  ADMIN_USER_BANNED
+  /// A super admin lifted a permanent ban — see AdminService.unbanUser.
+  ADMIN_USER_UNBANNED
+  /// An admin changed a listing's search ranking boost — see
+  /// AdminService.setPropertyBoost. [reason] holds why.
+  ADMIN_PROPERTY_BOOSTED
 }
 
 /// Site-wide admin audit trail (Activity Log console section) — every
@@ -493,6 +523,10 @@ enum NotificationType {
   /// An admin marked a "Contact Support" thread resolved — see
   /// ChatService.resolveSupportThread.
   SUPPORT_THREAD_RESOLVED
+  /// The account was permanently banned, or the ban was lifted — see
+  /// AdminService.banUser/unbanUser.
+  ACCOUNT_BANNED
+  ACCOUNT_UNBANNED
 }
 
 /// A user-facing notification — modelled generically so
@@ -566,6 +600,8 @@ model PendingAdmin {
   id               String     @id @default(uuid())
   email            String     @unique
   fullName         String
+  firstName        String?
+  lastName         String?
   level            AdminLevel
   tempPasswordHash String
   /// The super admin who sent the invite (see User.createdByAdminId).
@@ -594,6 +630,10 @@ model Property {
   description        String
   imageUrl           String?
   galleryUrls        String[]         @default([])
+  /// The landlord's walkthrough video (property-videos folder), shown as
+  /// the "Property Tour" on the listing. Checked to be a real video of ours
+  /// before it's saved (StorageService.assertIsOwnVideo).
+  videoUrl           String?
   /// True once a tenant has moved into an accepted, paid lease on this
   /// property (see BookingsService.confirmMovedIn) — hides it from public
   /// search. Never set for a SHORTLET booking (see [category]); those
@@ -611,14 +651,38 @@ model Property {
   /// starting a new thread from it — replaces the old device-local,
   /// unsynced AppState toggle of the same intent.
   messagingEnabled   Boolean          @default(true)
+  /// The landlord lets tenants pay this (non-Shortlet) rental monthly:
+  /// the first month up front (held in escrow like a full payment), then
+  /// each month as it comes due. See Booking.paymentPlan.
+  allowMonthlyPayment Boolean         @default(false)
   /// Shortlet-only — the unit's exact address/room within [location],
   /// since one shortlet listing is a single bookable unit.
   unitAddress        String?
   roomNumber         String?
+  /// How many times the landlord has changed this listing's photos in the
+  /// current allowance (PlatformSettings.maxListingImageChanges). Reaching
+  /// the limit locks the photos until [imagesLockedUntil]; once that has
+  /// passed, the next change starts a fresh allowance. The photos a
+  /// listing is created with don't count. See PropertiesService.update.
+  imageChangesUsed   Int              @default(0)
+  imagesLockedUntil  DateTime?
+  /// Set while the landlord has hidden this listing themselves (only
+  /// possible while it isn't occupied) — left out of browse and search and
+  /// can't be booked, but otherwise untouched. Cleared when they show it
+  /// again.
+  hiddenByLandlordAt DateTime?
+  /// Admin search ranking: 0 = normal, 1 = boosted, 2 = top — set by a
+  /// moderator/super admin (e.g. for a popular shortlet), optionally until
+  /// [adminBoostUntil]. It only moves a listing up among *available*
+  /// listings, and only into the limited promoted slots — see
+  /// listing-ranking.ts for the fairness rules.
+  adminBoost         Int              @default(0)
+  adminBoostUntil    DateTime?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  bookings  Booking[]
+  bookings   Booking[]
+  promotions ListingPromotion[]
   favorites Favorite[]
   reviews   Review[]
   threads   Thread[]
@@ -626,6 +690,38 @@ model Property {
 
   @@index([landlordId])
   @@index([state, category])
+}
+
+enum PromotionStatus {
+  /// Checkout started, Paystack hasn't confirmed the charge yet.
+  PENDING_PAYMENT
+  /// Paid — featured from [ListingPromotion.startsAt] to [endsAt].
+  ACTIVE
+  /// The checkout was abandoned or superseded by a newer attempt.
+  FAILED
+}
+
+/// A landlord's paid "Featured" ad for one listing: they pay a fee (set in
+/// Platform Controls) through Paystack, and once it clears the listing is
+/// featured for a set number of days — labelled "Featured" to tenants and
+/// placed in the limited promoted search slots. Buying again while one is
+/// running extends it (the new period starts when the current one ends).
+/// HomeServant keeps the fee; there's no recipient or escrow.
+model ListingPromotion {
+  id                String          @id @default(uuid())
+  propertyId        String
+  property          Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  landlordId        String
+  days              Int
+  amountKobo        Int
+  paystackReference String          @unique
+  status            PromotionStatus @default(PENDING_PAYMENT)
+  paidAt            DateTime?
+  startsAt          DateTime?
+  endsAt            DateTime?
+  createdAt         DateTime        @default(now())
+
+  @@index([propertyId, status])
 }
 
 /// One review per tenant per property (the unique constraint), rather
@@ -700,6 +796,7 @@ model Thread {
   participants ThreadParticipant[]
   messages     Message[]
   transferLogs ThreadTransferLog[]
+  callLogs     SupportCallLog[]
 
   @@index([propertyId])
   @@index([orderId])
@@ -829,6 +926,14 @@ model Message {
   @@index([threadId, createdAt])
 }
 
+/// How a tenant pays for a (non-Shortlet) rental: the whole period up front
+/// (FULL, the default), or month by month (MONTHLY — only where the
+/// landlord allows it, see Property.allowMonthlyPayment).
+enum PaymentPlan {
+  FULL
+  MONTHLY
+}
+
 model Booking {
   id                      String        @id @default(uuid())
   propertyId              String
@@ -873,6 +978,20 @@ model Booking {
   /// Bookings" feed. Only hides it there: it is NOT declined, still shows in
   /// the Bookings tab and still counts as a request waiting for an answer.
   landlordFeedClearedAt   DateTime?
+  /// MONTHLY: the first payment is one month's rent (held until move-in
+  /// like a full payment); after move-in each further month is paid as it
+  /// comes due (PaymentsService.payMonthlyRent) and released straight to
+  /// the landlord. [monthlyRent] is the agreed monthly amount in naira
+  /// (the yearly rent / 12, rounded up), snapshotted like [priceSnapshot].
+  /// [rentPaidThrough] is how far the rent is paid; the lease-lifecycle cron
+  /// reminds the tenant before it and flags a missed month to both sides
+  /// (de-duped by the two *For fields, which hold the rentPaidThrough they
+  /// were sent for).
+  paymentPlan               PaymentPlan @default(FULL)
+  monthlyRent               Int?
+  rentPaidThrough           DateTime?
+  monthlyReminderSentFor    DateTime?
+  monthlyOverdueNotifiedFor DateTime?
   message                 String?
   createdAt               DateTime      @default(now())
   updatedAt               DateTime      @updatedAt
@@ -1120,6 +1239,26 @@ model SupportNote {
   @@index([threadId])
 }
 
+/// One phone call an admin placed to the customer from a chat, with the
+/// reason they had to give first — kept with the conversation (so it goes
+/// when the conversation is cleaned up, like its notes); the activity log
+/// keeps its own permanent SUPPORT_CUSTOMER_CALLED entry. [phoneNumber] is
+/// the number as it was when the call was placed.
+model SupportCallLog {
+  id          String   @id @default(uuid())
+  threadId    String
+  thread      Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  adminId     String?
+  admin       User?    @relation("SupportCallsPlaced", fields: [adminId], references: [id], onDelete: SetNull)
+  customerId  String?
+  customer    User?    @relation("SupportCallsReceived", fields: [customerId], references: [id], onDelete: SetNull)
+  phoneNumber String
+  reason      String
+  createdAt   DateTime @default(now())
+
+  @@index([threadId])
+}
+
 /// Ready-made answers admins can drop into a support reply, shared by
 /// every admin.
 model SavedReply {
@@ -1279,6 +1418,18 @@ model PlatformSettings {
   /// and released automatically once the landlord is verified, or when this
   /// is switched back on. See PaymentsService.releaseOrHoldForVerification.
   payUnverifiedLandlords   Boolean  @default(true)
+  /// How many times a landlord may change a listing's photos before they
+  /// are locked for [listingImageLockDays] days (see Property.imageChangesUsed).
+  maxListingImageChanges   Int      @default(3)
+  listingImageLockDays     Int      @default(14)
+  /// Paid "Featured" ads: what a landlord pays (naira) to feature a listing
+  /// for [featuredListingDays] days. See PromotionsService.
+  featuredListingFeeNaira  Int      @default(5000)
+  featuredListingDays      Int      @default(7)
+  /// Fairness: at most one promoted (featured or admin-boosted) listing in
+  /// every [promotedSlotEvery] search results — the rest are ordinary
+  /// listings. See listing-ranking.ts.
+  promotedSlotEvery        Int      @default(3)
   updatedById              String?
   updatedBy                User?    @relation("PlatformSettingsEditor", fields: [updatedById], references: [id], onDelete: SetNull)
   updatedAt                DateTime @updatedAt

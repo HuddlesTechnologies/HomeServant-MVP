@@ -1,7 +1,7 @@
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
-import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
+import { BookingStatus, NotificationType, OrderItemStatus, Payment, PaymentPlan, PaymentPurpose, PaymentStatus, PriceUnit, PropertyCategory, VerificationStatus } from '@prisma/client';
 import { ChatService } from '../chat/chat.service';
 import { formatRent } from '../common/format-rent';
 import { MailService } from '../mail/mail.service';
@@ -55,6 +55,14 @@ function addMonths(date: Date, months: number): Date {
 /// here, before it's ever handed to Paystack — nowhere else in this
 /// service deals in Naira.
 const KOBO_PER_NAIRA = 100;
+
+/// A monthly tenant can pay the next month from this many days before
+/// it's due.
+const MONTHLY_PAY_WINDOW_DAYS = 7;
+
+function minDate(a: Date, b: Date): Date {
+  return a.getTime() <= b.getTime() ? a : b;
+}
 
 /// The single home for HomeServant's escrow logic: charge in full, hold
 /// in HomeServant's own Paystack balance, and later Transfer the
@@ -320,6 +328,9 @@ export class PaymentsService {
     const leaseMonths = property.rentDurationMonths!;
     return {
       amount: property.price,
+      // Monthly: what's charged now is the first month of the new term.
+      paymentPlan: booking.paymentPlan,
+      monthlyAmount: booking.paymentPlan === PaymentPlan.MONTHLY ? Math.ceil(property.price / 12) : null,
       priceUnit: property.priceUnit,
       leaseMonths,
       previousAmount: booking.priceSnapshot,
@@ -356,6 +367,13 @@ export class PaymentsService {
     if (!booking.property.isOccupied) {
       throw new BadRequestException('This lease has already ended and the unit was relisted — please make a new booking request');
     }
+    if (
+      booking.paymentPlan === PaymentPlan.MONTHLY &&
+      booking.rentPaidThrough &&
+      booking.rentPaidThrough.getTime() < booking.leaseEndDate.getTime()
+    ) {
+      throw new BadRequestException("Pay the remaining months of this lease before renewing — see \"Pay next month's rent\"");
+    }
     const daysUntilEnd = (booking.leaseEndDate.getTime() - Date.now()) / MS_PER_DAY;
     if (daysUntilEnd > RENEWAL_WINDOW_DAYS) {
       throw new BadRequestException(`Too early to renew — you can renew starting ${RENEWAL_WINDOW_DAYS} days before your lease ends`);
@@ -369,10 +387,12 @@ export class PaymentsService {
       propertyId: string;
       tenantId: string;
       nights: number | null;
+      paymentPlan?: PaymentPlan;
+      monthlyRent?: number | null;
       property: { price: number; priceUnit: PriceUnit; landlordId: string; category: PropertyCategory };
     },
     tenantEmail: string,
-    { renewal = false }: { renewal?: boolean } = {},
+    { renewal = false, installment = false }: { renewal?: boolean; installment?: boolean } = {},
   ) {
     await this.prisma.payment.updateMany({
       where: { bookingId: booking.id, status: PaymentStatus.INITIATED },
@@ -380,7 +400,17 @@ export class PaymentsService {
     });
 
     const priceNaira = booking.property.price;
-    const amountNaira = booking.property.category === PropertyCategory.SHORTLET ? priceNaira * (booking.nights ?? 1) : priceNaira;
+    // A monthly plan charges one month at a time: the first month, each
+    // later month, and the first month of a renewed term. The agreed amount
+    // is kept for the current term; a renewal takes the current price.
+    const monthlyNaira =
+      booking.paymentPlan === PaymentPlan.MONTHLY
+        ? renewal
+          ? Math.ceil(priceNaira / 12)
+          : (booking.monthlyRent ?? Math.ceil(priceNaira / 12))
+        : null;
+    const amountNaira =
+      monthlyNaira ?? (booking.property.category === PropertyCategory.SHORTLET ? priceNaira * (booking.nights ?? 1) : priceNaira);
     const amountKobo = amountNaira * KOBO_PER_NAIRA;
     const platformFeeKobo = this.fee(amountKobo, PLATFORM_FEE_BPS);
     const reference = this.generateReference('rent');
@@ -402,7 +432,7 @@ export class PaymentsService {
       // yet, so nothing else relies on it). A renewal keeps the price the
       // tenant last paid until this charge actually succeeds; see
       // releaseRenewal.
-      ...(renewal
+      ...(renewal || installment
         ? []
         : [
             this.prisma.booking.update({
@@ -422,6 +452,36 @@ export class PaymentsService {
       await this.prisma.payment.update({ where: { paystackReference: reference }, data: { status: PaymentStatus.FAILED } });
       throw err;
     }
+  }
+
+  /// `POST /bookings/:id/pay-month` — a tenant on a MONTHLY plan paying the
+  /// next month of an active lease. Open from [MONTHLY_PAY_WINDOW_DAYS]
+  /// days before it's due, and any time once overdue; once every month of
+  /// the term is paid, the next step is renewing. The money goes straight
+  /// to the landlord when it clears (see [releaseMonthlyInstallment]).
+  async payMonthlyRent(bookingId: string, tenantId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { property: true, tenant: true },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    if (booking.tenantId !== tenantId) throw new ForbiddenException('Not your booking');
+    if (booking.paymentPlan !== PaymentPlan.MONTHLY) throw new BadRequestException('This booking is paid in full, not monthly');
+    if (booking.status !== BookingStatus.MOVED_IN || !booking.leaseEndDate || !booking.rentPaidThrough) {
+      throw new BadRequestException('Monthly rent is paid once you have moved in');
+    }
+    const evicted = await this.prisma.evictionRequest.count({ where: { bookingId, status: 'APPROVED' } });
+    if (evicted > 0) throw new BadRequestException('This tenancy was ended by an approved eviction');
+    if (booking.rentPaidThrough.getTime() >= booking.leaseEndDate.getTime()) {
+      throw new BadRequestException('Every month of this lease is paid. Renew from your bookings to stay on.');
+    }
+    const daysUntilDue = (booking.rentPaidThrough.getTime() - Date.now()) / MS_PER_DAY;
+    if (daysUntilDue > MONTHLY_PAY_WINDOW_DAYS) {
+      throw new BadRequestException(
+        `Next month's rent can be paid from ${MONTHLY_PAY_WINDOW_DAYS} days before it's due (${booking.rentPaidThrough.toDateString()})`,
+      );
+    }
+    return this.chargeBooking(booking, booking.tenant.email, { installment: true });
   }
 
   /// `POST /bookings/:id/moved-in` — tenant-only, only while PAID (i.e.
@@ -468,7 +528,15 @@ export class PaymentsService {
       const [updatedBooking] = await this.prisma.$transaction([
       this.prisma.booking.update({
         where: { id: bookingId },
-        data: { status: BookingStatus.MOVED_IN, leaseStartDate: leaseStart, leaseEndDate: leaseEnd },
+        data: {
+          status: BookingStatus.MOVED_IN,
+          leaseStartDate: leaseStart,
+          leaseEndDate: leaseEnd,
+          // Monthly: the first month (the payment just released) is covered.
+          ...(booking.paymentPlan === PaymentPlan.MONTHLY
+            ? { rentPaidThrough: minDate(addMonths(leaseStart, 1), leaseEnd) }
+            : {}),
+        },
       }),
       this.prisma.property.update({ where: { id: booking.propertyId }, data: { isOccupied: true } }),
       this.prisma.tenancyAgreement.create({
@@ -820,6 +888,17 @@ export class PaymentsService {
     }
 
     if (booking.status === BookingStatus.MOVED_IN) {
+      // A monthly tenant paying the next month of the current term, rather
+      // than renewing for a new one.
+      if (
+        booking.paymentPlan === PaymentPlan.MONTHLY &&
+        booking.rentPaidThrough &&
+        booking.leaseEndDate &&
+        booking.rentPaidThrough.getTime() < booking.leaseEndDate.getTime()
+      ) {
+        await this.releaseMonthlyInstallment(payment, booking);
+        return;
+      }
       await this.releaseRenewal(payment, booking);
       return;
     }
@@ -891,7 +970,43 @@ export class PaymentsService {
   /// the tenant is already living there. Extends leaseEndDate from its
   /// *current* value (not from "now"), and resets the reminder de-dupe
   /// field so the next cycle's 30/15/0-day reminders can fire again.
-  private async releaseRenewal(payment: Payment, booking: { id: string; propertyId: string; leaseEndDate: Date | null; property: { landlordId: string; title: string; rentDurationMonths: number | null }; tenantId: string; tenant: { email: string } }): Promise<void> {
+  /// A monthly tenant's payment for the next month cleared: it goes
+  /// straight to the landlord (the tenant already lives there, like a
+  /// renewal), and the rent is paid a month further.
+  private async releaseMonthlyInstallment(
+    payment: Payment,
+    booking: { id: string; rentPaidThrough: Date | null; leaseEndDate: Date | null; property: { landlordId: string; title: string }; tenantId: string; tenant: { email: string } },
+  ): Promise<void> {
+    const landlord = await this.prisma.user.findUniqueOrThrow({ where: { id: booking.property.landlordId } });
+    const outcome = await this.releaseOrHoldForLandlord(payment, landlord, `HomeServant monthly rent — ${booking.property.title}`);
+    const paidThrough = minDate(addMonths(booking.rentPaidThrough!, 1), booking.leaseEndDate!);
+    await this.prisma.booking.update({
+      where: { id: booking.id },
+      data: { rentPaidThrough: paidThrough, monthlyReminderSentFor: null, monthlyOverdueNotifiedFor: null },
+    });
+    const until = paidThrough.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+    const naira = `₦${Math.round(payment.amount / KOBO_PER_NAIRA).toLocaleString('en-US')}`;
+    await this.notifyBoth(
+      booking.tenantId,
+      booking.tenant.email,
+      NotificationType.BOOKING_STATUS,
+      'Monthly rent paid',
+      `Thanks — your rent for ${booking.property.title} is paid until ${until}.`,
+    );
+    await this.notifyBoth(
+      landlord.id,
+      landlord.email,
+      NotificationType.BOOKING_STATUS,
+      'Monthly rent received',
+      outcome === 'held'
+        ? `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until}). ${HELD_PAYOUT_LINE}`
+        : outcome === 'failed'
+          ? `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until}). ${DELAYED_PAYOUT_LINE}`
+          : `Your tenant paid ${naira} rent for ${booking.property.title} (paid until ${until}) and your payout has been released.`,
+    );
+  }
+
+  private async releaseRenewal(payment: Payment, booking: { id: string; propertyId: string; leaseEndDate: Date | null; paymentPlan?: PaymentPlan; property: { landlordId: string; title: string; rentDurationMonths: number | null }; tenantId: string; tenant: { email: string } }): Promise<void> {
     if (!booking.leaseEndDate || !booking.property.rentDurationMonths) {
       this.logger.error(`Renewal payment ${payment.id} succeeded but booking ${booking.id} is missing leaseEndDate/rentDurationMonths`);
       return;
@@ -905,12 +1020,32 @@ export class PaymentsService {
     // Shortlet, so the whole amount is one period's rent). It becomes the
     // booking's price and the tenancy agreement's rent and end date, so the
     // agreement always matches the current term.
-    const rentPaid = Math.round(payment.amount / KOBO_PER_NAIRA);
-    const { priceUnit } = await this.prisma.property.findUniqueOrThrow({ where: { id: booking.propertyId }, select: { priceUnit: true } });
+    const paidNaira = Math.round(payment.amount / KOBO_PER_NAIRA);
+    const { priceUnit, price } = await this.prisma.property.findUniqueOrThrow({
+      where: { id: booking.propertyId },
+      select: { priceUnit: true, price: true },
+    });
+    // Monthly: this charge was the new term's first month; the term's rent
+    // is still the yearly price, and the agreed month is what was paid.
+    const monthly = booking.paymentPlan === PaymentPlan.MONTHLY;
+    const rentPaid = monthly ? price : paidNaira;
     await this.prisma.$transaction([
       this.prisma.booking.update({
         where: { id: booking.id },
-        data: { leaseEndDate: newLeaseEnd, lastRentReminderDaysOut: null, priceSnapshot: rentPaid, priceUnitSnapshot: priceUnit },
+        data: {
+          leaseEndDate: newLeaseEnd,
+          lastRentReminderDaysOut: null,
+          priceSnapshot: rentPaid,
+          priceUnitSnapshot: priceUnit,
+          ...(monthly
+            ? {
+                monthlyRent: paidNaira,
+                rentPaidThrough: minDate(addMonths(booking.leaseEndDate, 1), newLeaseEnd),
+                monthlyReminderSentFor: null,
+                monthlyOverdueNotifiedFor: null,
+              }
+            : {}),
+        },
       }),
       this.prisma.tenancyAgreement.updateMany({
         where: { bookingId: booking.id },

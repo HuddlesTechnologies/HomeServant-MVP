@@ -19,6 +19,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PaystackModule } from './paystack/paystack.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PropertiesModule } from './properties/properties.module';
+import { PromotionsModule } from './promotions/promotions.module';
 import { ReportsModule } from './reports/reports.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { StorageModule } from './storage/storage.module';
@@ -46,6 +47,7 @@ import { VendorsModule } from './vendors/vendors.module';
     AuthModule,
     UsersModule,
     PropertiesModule,
+    PromotionsModule,
     BookingsModule,
     EvictionsModule,
     VerificationModule,

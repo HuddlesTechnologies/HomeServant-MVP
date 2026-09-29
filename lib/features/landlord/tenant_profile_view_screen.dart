@@ -110,6 +110,47 @@ class TenantProfileViewScreen extends StatelessWidget {
                 ],
               ),
             ),
+            // Their booking profile: what they wrote about themselves and
+            // their hobbies. White card, navy text; hobby chips are navy on
+            // a pale navy wash.
+            if (booking.tenantBio?.trim().isNotEmpty == true || booking.tenantHobbies.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (booking.tenantBio?.trim().isNotEmpty == true) ...[
+                      Text('About', style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w700)),
+                      const SizedBox(height: 6),
+                      Text(booking.tenantBio!.trim(), style: AppTextStyles.body(color: AppColors.navy, size: 13.5)),
+                    ],
+                    if (booking.tenantHobbies.isNotEmpty) ...[
+                      if (booking.tenantBio?.trim().isNotEmpty == true) const SizedBox(height: 14),
+                      Text('Hobbies', style: AppTextStyles.body(color: AppColors.navy, size: 14, weight: FontWeight.w700)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final hobby in booking.tenantHobbies)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: AppColors.navy.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Text(hobby, style: AppTextStyles.body(color: AppColors.navy, size: 12.5, weight: FontWeight.w600)),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
             if (tenancies.isNotEmpty) ...[
               const SizedBox(height: 24),
               Text('Tenancies with you', style: AppTextStyles.heading(color: AppColors.navy, size: 17)),

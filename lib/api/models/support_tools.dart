@@ -2,16 +2,20 @@ import 'admin_models.dart' show AdminLevel;
 
 /// What a support conversation is about (backend SupportTopic).
 enum SupportTopic {
-  payments('PAYMENTS', 'Payments'),
-  booking('BOOKING', 'Booking'),
-  account('ACCOUNT', 'Account'),
-  listing('LISTING', 'Listing'),
-  marketplace('MARKETPLACE', 'Marketplace'),
-  other('OTHER', 'Other');
+  payments('PAYMENTS', 'Payments', 'Charges, refunds, payouts'),
+  booking('BOOKING', 'Booking', 'Requests, inspections, moving in'),
+  account('ACCOUNT', 'Account', 'Signing in, profile, verification'),
+  listing('LISTING', 'Listing', 'A property listing'),
+  marketplace('MARKETPLACE', 'Marketplace', 'Orders and vendors'),
+  other('OTHER', 'Other', 'Something else');
 
-  const SupportTopic(this.apiValue, this.label);
+  const SupportTopic(this.apiValue, this.label, this.hint);
   final String apiValue;
   final String label;
+
+  /// What the topic covers — shown under it in the customer's picker and
+  /// to the admin handling the conversation.
+  final String hint;
 
   static SupportTopic? fromApi(Object? value) {
     for (final topic in values) {
@@ -59,6 +63,38 @@ class SupportNote {
       createdAt: DateTime.parse(json['createdAt'] as String),
       authorId: author?['id'] as String?,
       authorName: name?.trim().isNotEmpty == true ? name : author?['email'] as String?,
+    );
+  }
+}
+
+/// A phone call an admin placed to the customer from a chat, with the
+/// reason they gave (backend SupportCallLog).
+class SupportCall {
+  const SupportCall({
+    required this.id,
+    required this.phoneNumber,
+    required this.reason,
+    required this.createdAt,
+    this.adminId,
+    this.adminName,
+  });
+
+  final String id;
+  final String phoneNumber;
+  final String reason;
+  final DateTime createdAt;
+  final String? adminId;
+  final String? adminName;
+
+  factory SupportCall.fromApi(Map<String, dynamic> json) {
+    final admin = json['admin'] as Map<String, dynamic>?;
+    return SupportCall(
+      id: json['id'] as String,
+      phoneNumber: json['phoneNumber'] as String,
+      reason: json['reason'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      adminId: admin?['id'] as String?,
+      adminName: admin?['fullName'] as String?,
     );
   }
 }

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/open_payment_page.dart';
+import '../../api/api_exception.dart';
 import 'package:provider/provider.dart';
 import '../../api/models/booking.dart';
 import '../../core/date_format.dart';
@@ -254,6 +256,8 @@ class _LandlordPropertiesScreenState extends State<LandlordPropertiesScreen> {
                               onEdit: () => Navigator.of(context).push(
                                 MaterialPageRoute(builder: (_) => LandlordAddPropertyScreen(initial: property)),
                               ),
+                              onToggleHidden: () => _toggleHidden(context, property),
+                              onFeature: () => _featureListing(context, property),
                             );
                           },
                         ),
@@ -264,6 +268,115 @@ class _LandlordPropertiesScreenState extends State<LandlordPropertiesScreen> {
         ),
       ),
     );
+  }
+}
+
+/// Hides an unoccupied listing (after confirming what that means) or shows
+/// a hidden one again.
+Future<void> _toggleHidden(BuildContext context, Property property) async {
+  final hide = !property.hiddenByLandlord;
+  if (hide) {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: Text('Hide this listing?', style: AppTextStyles.heading(color: AppColors.navy, size: 18)),
+        content: Text(
+          "Tenants won't find it in search and it can't be booked until you show it again. "
+          'Nothing else changes — you can show it again any time.',
+          style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.8), size: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('Cancel', style: AppTextStyles.body(color: AppColors.navy, weight: FontWeight.w600)),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(backgroundColor: AppColors.navy),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('Hide listing', style: AppTextStyles.body(color: Colors.white, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await context.read<AppState>().setLandlordPropertyHidden(property.id, hide);
+    messenger.showSnackBar(SnackBar(content: Text(hide ? '${property.title} is now hidden' : '${property.title} is visible again')));
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+  }
+}
+
+/// "Feature this listing": shows the price and how long it runs (set by
+/// HomeServant), then opens Paystack checkout. The ad starts once the
+/// payment clears — or, if one is already running, right after it ends.
+Future<void> _featureListing(BuildContext context, Property property) async {
+  final appState = context.read<AppState>();
+  final messenger = ScaffoldMessenger.of(context);
+  final ({int feeNaira, int days, DateTime? featuredUntil, DateTime wouldRunUntil}) quote;
+  try {
+    quote = await appState.listings.promotionQuote(property.id);
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    return;
+  }
+  if (!context.mounted) return;
+  final go = await showModalBottomSheet<bool>(
+    context: context,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+    builder: (sheetContext) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 22, 22, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Feature this listing', style: AppTextStyles.heading(color: AppColors.navy, size: 19)),
+            const SizedBox(height: 8),
+            Text(
+              '${property.title} is marked "Featured" and shown in the promoted spots in search for ${quote.days} days. '
+              'Promoted spots are shared fairly with other listings, and a listing that is booked out is shown after '
+              'available ones.',
+              style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.8), size: 13.5),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              quote.featuredUntil != null
+                  ? 'Already featured until ${formatShortDate(quote.featuredUntil!.toLocal())}; this adds ${quote.days} days, to ${formatShortDate(quote.wouldRunUntil.toLocal())}.'
+                  : 'Runs until ${formatShortDate(quote.wouldRunUntil.toLocal())} once your payment clears.',
+              style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600),
+            ),
+            const SizedBox(height: 4),
+            Text('The fee is not refundable.', style: AppTextStyles.body(color: AppColors.navy.withValues(alpha: 0.7), size: 12.5)),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(sheetContext).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.navy,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+                ),
+                child: Text('Pay ₦${formatNaira(quote.feeNaira)}', style: AppTextStyles.button(color: Colors.white, size: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  if (go != true || !context.mounted) return;
+  try {
+    final url = await appState.listings.startPromotion(property.id);
+    final opened = await openPaymentPage(url);
+    if (!opened) messenger.showSnackBar(const SnackBar(content: Text("Couldn't open the payment page — try again.")));
+  } on ApiException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
   }
 }
 
@@ -322,6 +435,8 @@ class _PropertyTile extends StatelessWidget {
     required this.pendingRequests,
     required this.onTap,
     required this.onEdit,
+    required this.onToggleHidden,
+    required this.onFeature,
   });
 
   /// Booking requests on this listing still waiting on the landlord.
@@ -336,6 +451,8 @@ class _PropertyTile extends StatelessWidget {
   final Booking? activeBooking;
   final VoidCallback onTap;
   final VoidCallback onEdit;
+  final VoidCallback onToggleHidden;
+  final VoidCallback onFeature;
 
   @override
   Widget build(BuildContext context) {
@@ -407,6 +524,20 @@ class _PropertyTile extends StatelessWidget {
                           background: AppColors.navy,
                           foreground: Colors.white,
                         ),
+                      if (property.featured)
+                        _Pill(
+                          label: property.featuredUntil != null
+                              ? 'Featured until ${formatShortDate(property.featuredUntil!.toLocal())}'
+                              : 'Featured',
+                          background: AppColors.gold,
+                          foreground: AppColors.navy,
+                        ),
+                      if (property.hiddenByLandlord)
+                        _Pill(
+                          label: 'Hidden from tenants',
+                          background: AppColors.navy.withValues(alpha: 0.08),
+                          foreground: AppColors.navy,
+                        ),
                       if (!property.messagingEnabled)
                         _Pill(
                           label: 'Messaging off',
@@ -432,14 +563,59 @@ class _PropertyTile extends StatelessWidget {
                         'Last paid ${formatShortDate(activeBooking!.lastPaidAt!)}',
                         style: AppTextStyles.body(color: AppColors.hintGrey, size: 11.5),
                       ),
+                    // Monthly plan: how far the rent is paid, flagged in red
+                    // (dark red on the white card) once a month is missed.
+                    if (activeBooking!.payingMonthly && activeBooking!.rentPaidThrough != null)
+                      Text(
+                        activeBooking!.monthlyRentOverdue
+                            ? 'Monthly rent overdue since ${formatShortDate(activeBooking!.rentPaidThrough!)}'
+                            : 'Pays monthly · paid until ${formatShortDate(activeBooking!.rentPaidThrough!)}',
+                        style: AppTextStyles.body(
+                          color: activeBooking!.monthlyRentOverdue ? const Color(0xFFB42318) : AppColors.navy,
+                          size: 11.5,
+                          weight: FontWeight.w700,
+                        ),
+                      ),
                   ],
                 ],
               ),
             ),
-            IconButton(
-              onPressed: onEdit,
-              icon: const Icon(Icons.edit_outlined, color: AppColors.navy),
-              tooltip: 'Edit listing',
+            // The menu is a light Material surface: navy text on white.
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded, color: AppColors.navy),
+              tooltip: 'Listing options',
+              color: Colors.white,
+              onSelected: (value) => switch (value) {
+                'edit' => onEdit(),
+                'feature' => onFeature(),
+                _ => onToggleHidden(),
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'edit',
+                  child: Text('Edit listing', style: AppTextStyles.body(color: AppColors.navy, size: 14)),
+                ),
+                // A paid ad — not for a hidden listing, or an occupied rental
+                // (it isn't in search).
+                if (!property.hiddenByLandlord && (!occupied || property.category == 'Shortlet'))
+                  PopupMenuItem(
+                    value: 'feature',
+                    child: Text(
+                      property.featured ? 'Extend featured ad' : 'Feature this listing (ad)',
+                      style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                    ),
+                  ),
+                // Only an unoccupied listing can be hidden; a hidden one can
+                // always be shown again.
+                if (property.hiddenByLandlord || !occupied)
+                  PopupMenuItem(
+                    value: 'visibility',
+                    child: Text(
+                      property.hiddenByLandlord ? 'Show to tenants again' : 'Hide from tenants',
+                      style: AppTextStyles.body(color: AppColors.navy, size: 14),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

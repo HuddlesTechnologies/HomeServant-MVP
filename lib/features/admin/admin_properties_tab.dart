@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'widgets/admin_badge.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
@@ -157,6 +158,26 @@ class _AdminPropertiesTabState extends State<AdminPropertiesTab> {
                                     '₦${formatWithThousandsSeparator(property.price)} · ${property.landlordName ?? property.landlordEmail ?? 'Unknown landlord'}',
                                     style: AppTextStyles.body(color: AppColors.hintGrey, size: 12),
                                   ),
+                                  if (property.featured || property.adminBoostActive) ...[
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      children: [
+                                        if (property.featured)
+                                          const AdminBadge(text: 'Featured (paid)', color: Color(0xFF8A6100), size: AdminBadgeSize.small),
+                                        if (property.adminBoostActive)
+                                          AdminBadge(
+                                            text: property.adminBoost == 2 ? 'Ranked: Top' : 'Ranked: Boosted',
+                                            color: AppColors.navy,
+                                            size: AdminBadgeSize.small,
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                  if (property.hiddenByLandlord) ...[
+                                    const SizedBox(height: 4),
+                                    const AdminBadge(text: 'Hidden by landlord', color: AppColors.navy, size: AdminBadgeSize.small),
+                                  ],
                                   if (property.isOccupied) ...[
                                     const SizedBox(height: 4),
                                     Container(

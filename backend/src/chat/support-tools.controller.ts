@@ -7,7 +7,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
-import { CreateSupportNoteDto, SavedReplyDto, TriageThreadDto } from './dto/support-tools.dto';
+import { CreateSupportNoteDto, LogCallDto, SavedReplyDto, TriageThreadDto } from './dto/support-tools.dto';
 import { SupportMetricsService } from './support-metrics.service';
 import { SupportToolsService } from './support-tools.service';
 
@@ -44,6 +44,18 @@ export class SupportToolsController {
   @Patch('threads/:id/triage')
   triage(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: TriageThreadDto) {
     return this.tools.triage(id, user.sub, dto.topic, dto.priority);
+  }
+
+  /// An admin is about to phone the customer: records it with the reason
+  /// given and returns the number to dial. See SupportToolsService.logCall.
+  @Post('threads/:id/calls')
+  logCall(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser, @Body() dto: LogCallDto) {
+    return this.tools.logCall(id, user.sub, dto.reason);
+  }
+
+  @Get('threads/:id/calls')
+  calls(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.tools.listCalls(id, user.sub);
   }
 
   @Get('threads/:id/customer-context')

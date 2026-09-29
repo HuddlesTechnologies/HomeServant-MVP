@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/dashboard_theme.dart';
 import '../../../state/app_state.dart';
@@ -97,6 +98,25 @@ class PropertyCard extends StatelessWidget {
                   // Solid white pill with navy text: legible over any photo.
                   if (property.landlordVerified)
                     const Positioned(right: 12, bottom: 10, child: VerifiedPill()),
+                  // A paid ad: always labelled, so tenants can tell promoted
+                  // listings apart. Navy text on solid gold, over any photo.
+                  if (property.featured)
+                    Positioned(
+                      left: 12,
+                      bottom: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: AppColors.gold, borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.star_rounded, color: AppColors.navy, size: 14),
+                            const SizedBox(width: 4),
+                            Text('Featured', style: AppTextStyles.body(color: AppColors.navy, size: 11, weight: FontWeight.w800)),
+                          ],
+                        ),
+                      ),
+                    ),
                   if (property.hiddenUntilLandlordVerified)
                     Positioned(
                       left: 12,

@@ -7,7 +7,16 @@ import '../core/theme/app_text_styles.dart';
 /// now hides from browsing. White card with navy text and an amber icon,
 /// so it reads on every theme's background.
 class HiddenListingNotice extends StatelessWidget {
-  const HiddenListingNotice({super.key, this.hasBooking = false, this.isShortlet = false, this.ownerView = false});
+  const HiddenListingNotice({
+    super.key,
+    this.hasBooking = false,
+    this.isShortlet = false,
+    this.ownerView = false,
+    this.byLandlord = false,
+  });
+
+  /// The landlord hid it themselves (not Platform Controls).
+  final bool byLandlord;
 
   /// The tenant has a booking here: reassure them it carries on.
   final bool hasBooking;
@@ -37,12 +46,22 @@ class HiddenListingNotice extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  ownerView ? 'This listing is hidden from tenants' : 'This listing has been hidden because the $who is unverified',
+                  ownerView
+                      ? 'This listing is hidden from tenants'
+                      : byLandlord
+                      ? 'The $who has hidden this listing for now'
+                      : 'This listing has been hidden because the $who is unverified',
                   style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  ownerView
+                  byLandlord
+                      ? ownerView
+                            ? "You hid it: tenants can't find or book it. Show it again from My Properties any time."
+                            : hasBooking
+                            ? 'Other tenants can no longer find it. Your booking is not affected.'
+                            : "It doesn't show up in search and can't be booked until the $who shows it again."
+                      : ownerView
                       ? 'HomeServant only shows listings from verified landlords. It will show again as soon as your identity is verified; your current tenants and bookings are not affected.'
                       : hasBooking
                       ? 'Other tenants can no longer find it. Your booking is not affected: you can still continue, move in, message the $who or ask for a refund as usual.'

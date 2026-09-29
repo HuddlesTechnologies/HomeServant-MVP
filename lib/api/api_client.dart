@@ -34,7 +34,7 @@ class ApiClient {
                 return handler.next(retryError);
               }
             }
-            onSessionExpired?.call();
+            onSessionExpired?.call(_bannedMessage);
           }
           handler.next(error);
         },
@@ -48,7 +48,12 @@ class ApiClient {
   /// Set by [AppState] so a refresh-token failure (session truly expired,
   /// not just an access token due for renewal) clears local session state
   /// instead of leaving the app silently logged in with dead tokens.
-  void Function()? onSessionExpired;
+  /// [bannedMessage] is the server's explanation when the session ended
+  /// because the account was permanently banned (null otherwise).
+  void Function(String? bannedMessage)? onSessionExpired;
+
+  /// Set when the last refresh was refused because the account is banned.
+  String? _bannedMessage;
 
   /// Shared by every concurrent 401 so only one actually calls
   /// `/auth/refresh` at a time. The backend's refresh token is single-use
@@ -104,7 +109,9 @@ class ApiClient {
       final newRefreshToken = response.data['refreshToken'] as String;
       await _tokens.save(accessToken: accessToken, refreshToken: newRefreshToken);
       return accessToken;
-    } on DioException {
+    } on DioException catch (error) {
+      // 403 on refresh means a ban (see backend assertNotBanned).
+      _bannedMessage = error.response?.statusCode == 403 ? ApiException.fromDioError(error).message : null;
       await _tokens.clear();
       return null;
     }
