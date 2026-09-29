@@ -19,6 +19,7 @@ import '../../widgets/verified_badge.dart';
 import '../../api/models/verification.dart';
 import 'widgets/admin_verification_card.dart';
 import 'widgets/admin_booking_history.dart';
+import '../../widgets/profile_photo_viewer.dart';
 
 /// Full account detail for a single user — reached by tapping a row in
 /// AdminUsersTab. Shows every field the backend will hand back (see
@@ -456,13 +457,17 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: AppColors.offWhite,
-                              backgroundImage: user.profilePhotoUrl != null ? imageProviderForPath(user.profilePhotoUrl!) : null,
-                              child: user.profilePhotoUrl == null
-                                  ? const Icon(Icons.person_outline_rounded, color: AppColors.hintGrey)
-                                  : null,
+                            ProfilePhotoTapTarget(
+                              photoPath: user.profilePhotoUrl,
+                              name: user.fullName,
+                              child: CircleAvatar(
+                                radius: 22,
+                                backgroundColor: AppColors.offWhite,
+                                backgroundImage: user.profilePhotoUrl != null ? imageProviderForPath(user.profilePhotoUrl!) : null,
+                                child: user.profilePhotoUrl == null
+                                    ? const Icon(Icons.person_outline_rounded, color: AppColors.hintGrey)
+                                    : null,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(

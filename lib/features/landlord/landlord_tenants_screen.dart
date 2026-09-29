@@ -9,6 +9,7 @@ import '../../state/app_state.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/upload_picker.dart';
 import 'tenant_profile_view_screen.dart';
+import '../../widgets/profile_photo_viewer.dart';
 
 enum _TenantFilter { current, former, all }
 
@@ -248,17 +249,21 @@ class _TenantTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Their photo; initials (white on navy) when they have none.
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppColors.navy,
-                  backgroundImage: _photo(b) == null ? null : imageProviderForPath(_photo(b)!),
-                  onBackgroundImageError: _photo(b) == null ? null : (_, __) {},
-                  child: _photo(b) != null
-                      ? null
-                      : Text(
-                          entry.name.characters.first.toUpperCase(),
-                          style: AppTextStyles.body(color: Colors.white, size: 16, weight: FontWeight.w700),
-                        ),
+                ProfilePhotoTapTarget(
+                  photoPath: _photo(b),
+                  name: entry.name,
+                  child: CircleAvatar(
+                    radius: 22,
+                    backgroundColor: AppColors.navy,
+                    backgroundImage: _photo(b) == null ? null : imageProviderForPath(_photo(b)!),
+                    onBackgroundImageError: _photo(b) == null ? null : (_, __) {},
+                    child: _photo(b) != null
+                        ? null
+                        : Text(
+                            entry.name.characters.first.toUpperCase(),
+                            style: AppTextStyles.body(color: Colors.white, size: 16, weight: FontWeight.w700),
+                          ),
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(

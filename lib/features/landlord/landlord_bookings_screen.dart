@@ -308,7 +308,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                         ),
                         child: Row(
                           children: [
-                            LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl),
+                            LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl, name: booking.tenantName),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -459,7 +459,7 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
                         ),
                         child: Row(
                           children: [
-                            LandlordAvatar(radius: 18, photoUrl: entry.tenantProfilePhotoUrl),
+                            LandlordAvatar(radius: 18, photoUrl: entry.tenantProfilePhotoUrl, name: entry.tenantName),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -548,7 +548,7 @@ class _ActiveRentalTile extends StatelessWidget {
         children: [
           Row(
             children: [
-              LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl),
+              LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl, name: booking.tenantName),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -690,7 +690,7 @@ class _HistoryTile extends StatelessWidget {
       decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(14)),
       child: Row(
         children: [
-          LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: row.photoUrl),
+          LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: row.photoUrl, name: row.name),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

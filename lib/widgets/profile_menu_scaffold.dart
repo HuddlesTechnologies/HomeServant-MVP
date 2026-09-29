@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'profile_edit_button.dart';
 import 'profile_menu_tile.dart';
+import 'profile_photo_viewer.dart';
 import 'upload_picker.dart';
 
 /// Spec for one row in a [ProfileMenuScaffold]'s menu list — mirrors
@@ -95,7 +96,11 @@ class ProfileMenuScaffold extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 140),
         children: [
           if (header != null) ...[header!, const SizedBox(height: 22)] else const SizedBox(height: 20),
-          Container(
+          // Tap to see the photo full size.
+          Center(
+            child: ProfilePhotoTapTarget(
+              photoPath: photoPath,
+              child: Container(
             width: 78,
             height: 78,
             decoration: BoxDecoration(
@@ -110,6 +115,8 @@ class ProfileMenuScaffold extends StatelessWidget {
                   : null,
             ),
             child: photoPath == null ? Icon(Icons.person_outline, color: photoBorderColor, size: 40) : null,
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           ProfileEditButton(

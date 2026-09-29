@@ -577,7 +577,7 @@ class _IncomingBookingTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl),
+            LandlordAvatar(radius: 18, background: AppColors.sand, iconColor: AppColors.navy, photoUrl: booking.tenantProfilePhotoUrl, name: booking.tenantName),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
