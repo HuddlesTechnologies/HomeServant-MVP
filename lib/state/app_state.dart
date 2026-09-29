@@ -560,6 +560,7 @@ class AppState extends ChangeNotifier {
     promotionalNotifications = false;
     bannerAutoDismiss = true;
     adminOnDuty = true;
+    adminLevelLoadFailed = false;
     appLockEnabled = false;
     appLockPin = null;
     unawaited(_tokens.clearAppLockPin());
@@ -622,17 +623,44 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// True once loading this admin's level has failed every attempt. The
+  /// console then shows only the lowest-privilege pages, so AdminShell
+  /// shows a banner with a Retry button rather than letting a super admin
+  /// think they've been demoted.
+  bool adminLevelLoadFailed = false;
+
+  /// Loads this admin's level (`GET /admin/me`). A single failed request
+  /// (a slow network, or the server waking up) used to leave the level
+  /// unknown for the whole session, silently hiding every moderator and
+  /// super admin page, so it now retries a few times before giving up.
   Future<void> _loadAdminLevel() async {
-    try {
-      final me = await _adminRepo.me();
-      adminLevel = me.level;
-      adminOnDuty = me.onDuty;
-      notifyListeners();
-    } catch (_) {
-      // Leaves it null — AdminShell treats that the same as "not yet
-      // loaded" and shows the lowest-privilege view until a retry
-      // succeeds, rather than guessing.
+    const retryDelays = [Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)];
+    for (var attempt = 0; ; attempt++) {
+      try {
+        final me = await _adminRepo.me();
+        adminLevel = me.level;
+        adminOnDuty = me.onDuty;
+        adminLevelLoadFailed = false;
+        notifyListeners();
+        return;
+      } catch (_) {
+        if (attempt >= retryDelays.length || role != UserRole.admin) {
+          // Leaves it null: AdminShell shows the lowest-privilege view
+          // (never guesses higher) plus the retry banner.
+          adminLevelLoadFailed = true;
+          notifyListeners();
+          return;
+        }
+        await Future<void>.delayed(retryDelays[attempt]);
+      }
     }
+  }
+
+  /// The console banner's Retry button.
+  Future<void> retryLoadAdminLevel() async {
+    adminLevelLoadFailed = false;
+    notifyListeners();
+    await _loadAdminLevel();
   }
 
   final ChatSocketService _chatSocket = ChatSocketService();
