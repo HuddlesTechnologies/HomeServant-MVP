@@ -177,6 +177,19 @@ export class PaystackService {
     return { transferCode: body.data.transfer_code, status: body.data.status };
   }
 
+  /// HomeServant's available Paystack balance in kobo (NGN). Payouts are
+  /// sent from this balance, so a transfer bigger than it is refused ("Your
+  /// balance is not enough..."). Throws if Paystack can't be asked.
+  async balanceKobo(): Promise<number> {
+    const response = await fetch('https://api.paystack.co/balance', { headers: { Authorization: `Bearer ${this.secretKey}` } });
+    const body = (await response.json().catch(() => ({}))) as { status?: boolean; message?: string; data?: { currency?: string; balance?: number }[] };
+    if (!response.ok || !body.status || !Array.isArray(body.data)) {
+      this.logger.error(`balance lookup failed: ${body.message ?? response.status}`);
+      throw new InternalServerErrorException("Couldn't check the Paystack balance right now");
+    }
+    return body.data.filter((b) => (b.currency ?? 'NGN') === 'NGN').reduce((sum, b) => sum + (b.balance ?? 0), 0);
+  }
+
   /// Has a transfer with [reference] already been created at Paystack, and
   /// in what state? `'not_found'` means Paystack has never seen it, so it
   /// is safe to send with that reference. Any other outcome is Paystack's

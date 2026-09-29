@@ -48,6 +48,22 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly prisma: PrismaService,
   ) {
     prisma.onListingsChanged(() => this.scheduleListingsBroadcast());
+    prisma.onAdminQueuesChanged(() => this.scheduleAdminBadgesBroadcast());
+  }
+
+  private adminBadgesTimer: NodeJS.Timeout | null = null;
+
+  /// Every open admin console refetches its nav badge counts on
+  /// `admin:badges-changed`. Evictions, payouts/refunds and ID checks never
+  /// sent it, so those badges kept whatever they read when the console was
+  /// opened — never going up for a new case, nor down once it was resolved.
+  /// Now any write to those records sends it (debounced, like listings).
+  private scheduleAdminBadgesBroadcast(): void {
+    if (this.adminBadgesTimer) return;
+    this.adminBadgesTimer = setTimeout(() => {
+      this.adminBadgesTimer = null;
+      this.server?.to(this.adminRoom()).emit('admin:badges-changed', {});
+    }, 1500);
   }
 
   private listingsTimer: NodeJS.Timeout | null = null;
