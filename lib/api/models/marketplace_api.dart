@@ -1,5 +1,5 @@
 import '../../core/thousands_separator.dart';
-import '../../features/Market place/models/order_options.dart';
+import '../../features/marketplace/models/order_options.dart';
 import 'vendor.dart';
 
 extension FulfillmentMethodApi on FulfillmentMethod {

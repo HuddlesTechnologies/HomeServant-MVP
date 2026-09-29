@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_text_styles.dart';
-import '../features/Market place/models/order_options.dart';
+import '../features/marketplace/models/order_options.dart';
 
 /// The small colored status pill for an [OrderItemStatus] — its color and
 /// label come straight off the enum. Reused by every vendor screen that

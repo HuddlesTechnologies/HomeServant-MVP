@@ -16,7 +16,7 @@ import '../features/auth/signup_screen.dart';
 import '../features/auth/verify_otp_screen.dart';
 import '../features/landlord/landlord_dashboard_screen.dart';
 import '../features/dashboard/tenant_dashboard_screen.dart';
-import '../features/Market place/marketplace_navigator_host.dart';
+import '../features/marketplace/marketplace_navigator_host.dart';
 import '../features/onboarding/get_started_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/splash/web_landing_screen.dart';

@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../api/models/marketplace_api.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
-import '../../features/Market place/models/order_options.dart';
+import '../../features/marketplace/models/order_options.dart';
 import '../../models/dashboard_theme.dart';
 import '../../state/app_state.dart';
 import '../../widgets/order_status_badge.dart';
