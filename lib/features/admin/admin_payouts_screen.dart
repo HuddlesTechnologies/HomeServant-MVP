@@ -77,13 +77,20 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
   /// Navy text on white; the warning in the screen's darkened amber.
   Widget _balanceCard(List<StuckPayment>? items) {
     final blocked = items?.where(_blockedByBalance).toList() ?? const <StuckPayment>[];
+    // Paystack refusing transfers to other people's accounts altogether
+    // (server's PAYOUTS_NOT_ENABLED_ERROR) — an account setting, not money.
+    final notEnabled = items?.any((p) => p.lastError?.contains("Paystack hasn't enabled payouts") ?? false) ?? false;
     final owedKobo = blocked.fold<int>(0, (sum, p) => sum + p.amountKobo);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: blocked.isEmpty ? null : Border.all(color: _amber, width: 1.2),
+        border: notEnabled
+            ? Border.all(color: _red, width: 1.2)
+            : blocked.isEmpty
+            ? null
+            : Border.all(color: _amber, width: 1.2),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,6 +120,15 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
             'Money added in the Paystack dashboard in the other mode (test vs live) is not available here.',
             style: AppTextStyles.body(color: AppColors.navy, size: 12.5),
           ),
+          if (notEnabled) ...[
+            const SizedBox(height: 8),
+            Text(
+              "Paystack isn't allowing payouts to landlords' bank accounts yet (\"cannot initiate third party payouts\"), "
+              'so no payout can be sent whatever the balance. Upgrade the business to Registered in the Paystack dashboard '
+              '(Settings, Business/Compliance), or ask Paystack support to enable third-party transfers. Then press Retry.',
+              style: AppTextStyles.body(color: _red, size: 12.5, weight: FontWeight.w600),
+            ),
+          ],
           if (blocked.isNotEmpty) ...[
             const SizedBox(height: 8),
             Text(

@@ -271,7 +271,13 @@ glance, so err strict.
    - The admin *Payouts & Refunds* screen shows the balance and a
      **Live mode / Test mode** label for the server's key
      (`GET /api/admin/payouts/balance`), so a mode mismatch is visible.
-5. **Check it:** make a test payment in Test mode; the booking should move
+5. **Third-party payouts must be allowed.** Paying landlords sends money to
+   other people's bank accounts, which Paystack only allows once the
+   business is Registered (not Starter) and transfers are enabled on the
+   live account. Until then Paystack answers "You cannot initiate third
+   party payouts at this time"; the API records a plain explanation on the
+   payout and the admin Payouts screen shows what to do.
+6. **Check it:** make a test payment in Test mode; the booking should move
    to "paid" within seconds (the web app also confirms it itself when
    Paystack sends the tenant back, via `POST /api/bookings/confirm-payment`).
    If it doesn't, Paystack's webhook logs (Settings > API Keys & Webhooks)

@@ -1,6 +1,6 @@
 import { PrismaClient, UserRole } from '@prisma/client';
 import { PaystackService } from '../src/paystack/paystack.service';
-import { isLowBalanceError, PaymentsService } from '../src/payments/payments.service';
+import { isLowBalanceError, isPayoutsNotEnabledError, PAYOUTS_NOT_ENABLED_ERROR, PaymentsService } from '../src/payments/payments.service';
 import { PlatformSettingsService } from '../src/platform-settings/platform-settings.service';
 import { changesAdminQueues } from '../src/prisma/prisma.service';
 import { fakeMail, makeProperty, makeUser, resetDb, testDbUrl, testPrisma } from './helpers';
@@ -22,6 +22,8 @@ describe('admin badges refresh when their records change', () => {
     expect(isLowBalanceError('Insufficient balance')).toBe(true);
     expect(isLowBalanceError('Request timed out')).toBe(false);
     expect(isLowBalanceError(null)).toBe(false);
+    expect(isPayoutsNotEnabledError('You cannot initiate third party payouts at this time')).toBe(true);
+    expect(isPayoutsNotEnabledError('Your balance is not enough to fulfil this request')).toBe(false);
   });
 });
 
@@ -123,6 +125,20 @@ describeDb('payouts and a low Paystack balance (real Postgres)', () => {
     expect(await payments.retryLowBalancePayouts()).toBe(1);
     expect((await prisma.payment.findUniqueOrThrow({ where: { id: second.payment.id } })).status).toBe('RELEASED');
     expect(paystack.sent).toHaveLength(2);
+    expect(await payments.retryLowBalancePayouts()).toBe(0);
+  });
+
+  it("explains Paystack's 'third party payouts' refusal, and doesn't retry it automatically", async () => {
+    const { tenant, booking, payment } = await awaitingMoveIn();
+    paystack.balance = 5_000_000_00;
+    paystack.initiateTransfer = async () => {
+      throw new Error('You cannot initiate third party payouts at this time');
+    };
+    await payments.releaseBookingOnMovedIn(booking.id, tenant.id);
+    const row = await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    expect(row.status).toBe('PAID_HELD');
+    expect(row.payoutLastError).toBe(PAYOUTS_NOT_ENABLED_ERROR);
+    await expect(payments.retryPayout(payment.id)).rejects.toThrow(/third-party transfers/);
     expect(await payments.retryLowBalancePayouts()).toBe(0);
   });
 

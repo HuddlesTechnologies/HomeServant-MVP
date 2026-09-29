@@ -194,6 +194,7 @@
   <li>A payout the balance can't cover isn't sent. Its error says how much is available and how much is needed, and the screen shows how many payouts are waiting on the balance and their total.</li>
   <li><strong>They're retried automatically every 30 minutes</strong>, oldest first, once there is enough. Pressing <em>Retry payout</em> is only needed to send one straight away.</li>
   <li><strong>To fix it:</strong> top up the Paystack balance from the Paystack dashboard, or ask Paystack to keep collected payments in the balance instead of settling them to the bank. Sending money to HomeServant's own bank account does <em>not</em> add it to the Paystack balance.</li>
+  <li><strong>"Cannot initiate third party payouts":</strong> Paystack isn't letting HomeServant's account pay other people's bank accounts yet (usually a Starter, unregistered business, or transfers not yet enabled). No payout can go out whatever the balance, and they aren't retried automatically. Upgrade the business to Registered in the Paystack dashboard (Settings, Business/Compliance) or ask Paystack support to enable third-party transfers, then press <em>Retry payout</em>.</li>
   <li><strong>Test mode vs Live mode:</strong> Paystack keeps separate balances for each. If the label says <em>Test mode</em>, only the test balance counts and no real money moves; money added in live mode won't be seen. Real payouts need the live key (<code>sk_live_&hellip;</code>) in the server's <code>PAYSTACK_SECRET_KEY</code>.</li>
 </ul>
 <h2>Eviction requests (Super Admin)</h2>

@@ -94,6 +94,20 @@ export function isLowBalanceError(message: string | null | undefined): boolean {
   return !!message && (message.startsWith(LOW_BALANCE_ERROR) || /balance.*(not enough|insufficient)|insufficient.*balance/i.test(message));
 }
 
+/// Paystack's refusal when the account may not send transfers to other
+/// people's bank accounts yet ("You cannot initiate third party payouts at
+/// this time") — a Starter (unregistered) business, or transfers not yet
+/// enabled on the live account. Nothing in the app can fix it; say what to
+/// do in Paystack instead of passing the raw message on.
+export const PAYOUTS_NOT_ENABLED_ERROR =
+  "Paystack hasn't enabled payouts to other people's bank accounts on HomeServant's account yet (Paystack said: " +
+  '"cannot initiate third party payouts"). Upgrade the business to Registered in the Paystack dashboard (Settings, ' +
+  'Business/Compliance), or ask Paystack support to enable third-party transfers, then press Retry.';
+
+export function isPayoutsNotEnabledError(message: string | null | undefined): boolean {
+  return !!message && /third[\s-]?party (payouts?|transfers?)/i.test(message);
+}
+
 function lowBalanceMessage(availableKobo: number | null, neededKobo: number): string {
   const naira = (kobo: number) => `NGN ${(kobo / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
   return (
@@ -1246,11 +1260,12 @@ export class PaymentsService {
       }
       await this.markReleased(payment.id, reference);
     } catch (error) {
+      const failure = isPayoutsNotEnabledError((error as Error).message) ? new BadRequestException(PAYOUTS_NOT_ENABLED_ERROR) : error;
       await this.prisma.payment.updateMany({
         where: { id: payment.id, status: PaymentStatus.PAID_HELD },
-        data: { payoutLastError: (error as Error).message.slice(0, 500) },
+        data: { payoutLastError: (failure as Error).message.slice(0, 500) },
       });
-      throw error;
+      throw failure;
     }
   }
 
