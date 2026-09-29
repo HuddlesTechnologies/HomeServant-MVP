@@ -39,15 +39,18 @@
 <ul>
   <li>The dashboard opens on <strong>All</strong> listings, each labelled with its category; tabs narrow it to House, Shortlet, Self-Con or Apartment. Search by name or area, and filter by price and location. The price boxes start empty (the category's price range shows as a hint), so tenants just type a minimum, a maximum or both.</li>
   <li>A property page shows photos, the landlord's walkthrough video, details, rating and reviews. Save favourites to the <strong>Wishlist</strong>.</li>
+  <li><strong>Rented homes drop off the list:</strong> once a tenant has paid for a rental (or lives there), it is no longer shown to other tenants or bookable by them. It comes back when the lease ends or the booking is refunded or rejected. This happens live: a listing someone else has just rented disappears from other tenants' screens within seconds, without a refresh. Shortlets stay listed with an "available again" countdown.</li>
   <li><strong>Search order is fair:</strong> listings that can be booked now come first (a booked-out shortlet shows after them), and promoted listings &mdash; paid <strong>Featured</strong> ads, which are always labelled, and listings HomeServant ranks up &mdash; take at most one spot in every few results; the rest are the newest listings.</li>
   <li><strong>Report this listing</strong> (bottom of a property page) sends a scam, misleading photos, a request to pay outside HomeServant and so on to HomeServant's team; available once the tenant has booked, messaged about or saved the listing. <em>Settings &rarr; My Reports</em> shows their reports and whether they've been reviewed.</li>
   <li><strong>Booking profile</strong> (Edit Profile): a short <em>About me</em> and hobbies, shown with the profile photo to landlords and shortlet owners when a booking request comes in.</li>
 </ul>
 <h2>Renting a home (House, Self-Con, Apartment)</h2>
 <ol>
-  <li><strong>Rent Now</strong> takes payment straight away: the Paystack checkout opens in the same tab and returns to HomeServant afterwards. The money is <em>held</em> by HomeServant, not paid to the landlord yet.</li>
+  <li><strong>Rent Now</strong> takes payment straight away: the Paystack checkout opens in the same tab and returns to HomeServant afterwards, which confirms the payment at once and takes the tenant back to their dashboard, still signed in. The money is <em>held</em> by HomeServant, not paid to the landlord yet.</li>
+  <li><strong>One booking per home:</strong> once paid, the property page shows <em>You've paid for this property</em> with a link to Booking History instead of Rent Now, so it can't be paid for twice. A checkout that was started but not paid is picked up again (Rent Now or <em>Complete Payment</em> in Booking History) rather than creating a second booking.</li>
   <li>Book an inspection date (now, later from Booking History, or from the chat with the landlord) and change it until the landlord answers. The landlord confirms or declines it, or sets a date themselves, even if the tenant hasn't proposed one. Every step is noted in their chat.</li>
   <li>After inspecting, the tenant confirms they've <strong>moved in</strong>, which releases the payment to the landlord and starts the lease.</li>
+  <li><strong>From the chat:</strong> tapping <em>View property</em> in the chat with the landlord shows where the booking stands and the next step: <em>Book Inspection</em>, <em>Pending</em> while the landlord hasn't accepted the inspection date, <em>Moved In</em> once it's confirmed, then <em>You have successfully rented this property</em> with <em>View Tenancy Agreement</em>.</li>
   <li>Before moving in, the tenant can ask for a <strong>refund</strong>, or the landlord can reject the booking (a full refund).</li>
   <li><strong>Paying monthly</strong> (where the landlord allows it): at Rent Now the tenant chooses <em>Pay in full</em> or <em>Pay monthly</em> (a twelfth of the yearly rent). Monthly pays the first month now, held the same way until move-in; after that, <em>Pay Next Month</em> on the booking (open from 7 days before it's due) pays each month straight to the landlord. They're reminded 3 days before each month is due; a missed month is flagged to both sides. Renewing needs every month of the lease paid.</li>
   <li>Rent reminders arrive 30, 15 and 0 days before the lease ends; <strong>Renew Lease</strong> pays for the next period. Before anything is charged, the tenant sees exactly what they'll pay, for how many months and until when, and a highlighted note if the rent has gone up since their last payment. If the landlord changes the rent after the tenant has seen that amount, nothing is charged and the tenant is shown the new amount to review. Once the renewal is paid, the lease is extended and the tenancy agreement is updated to the new rent and end date.</li>
@@ -62,7 +65,9 @@
 <h2>Booking a shortlet</h2>
 <p>The tenant requests dates; the owner accepts or declines; the tenant then pays, and the payment goes to the owner straight away.</p>
 <h2>Paperwork</h2>
-<p><strong>Booking History</strong> shows every booking and payment. <strong>Tenancy Agreements</strong> keeps each lease's agreement to view or download.</p>
+<p><strong>Booking History</strong> shows every booking and payment. <strong>Tenancy Agreements</strong> keeps each lease's agreement to view or download, with the date each one was created.</p>
+<h2>Rating a property</h2>
+<p>A tenant can rate a property (1&ndash;5 stars, from Booking History) only once their payment has been completed and released to the landlord: after moving in for a rental, or once a shortlet's payment has gone to the owner. Until then the booking says <em>You can rate this property once your payment is completed.</em></p>
 
 <h1>4. Landlords</h1>
 <ul>
@@ -80,11 +85,18 @@
   <li><strong>My Tenants</strong> (dashboard home or Profile): everyone who has rented or paid for a stay, filtered by Current / Former / All and searchable by name, with when they rented and when their rent expires (highlighted within 30 days). Tapping a tenant shows their email, phone, occupation, marital status and every tenancy with that landlord, with <em>Evict tenant</em> on a current one. A tenant's phone number is only shown once they have paid for that landlord's property.</li>
   <li><strong>Request an eviction</strong> from an occupied property's page, with a reason; a super admin must approve it (see Eviction requests above).</li>
 </ul>
+<h2>Everywhere in the app</h2>
+<ul>
+  <li><strong>Pull down to refresh</strong> on the landlord's Home, Bookings, Properties and Messages tabs, the profile pages, and a tenant's home, Booking History and Tenancy Agreements.</li>
+  <li><strong>Always up to date:</strong> changes arrive live. When the app or browser tab comes back to the foreground, or the connection returns after a drop, it fetches anything it missed.</li>
+  <li><strong>Profile photos:</strong> tap anyone's profile photo, wherever it appears, to see it full size.</li>
+</ul>
 
 <h1>5. Money: escrow, refunds and payouts</h1>
 <ul>
   <li>Payments go through Paystack. Rent is <strong>held</strong> until move-in, then paid out to the landlord's account, minus the platform fee.</li>
   <li>A tenant's own refund before move-in returns the money less a small fee; a landlord's rejection refunds in full.</li>
+  <li>Payouts are sent from HomeServant's <strong>Paystack balance</strong>, so it must hold at least the amount being paid out. A payout the balance can't cover waits and is retried automatically every 30 minutes once money is there.</li>
   <li>No one is ever paid or refunded twice, and a payment can't be both paid out and refunded. If a payout or refund doesn't go through (a bank or Paystack problem), the tenant's move-in or stay still goes ahead and a moderator or super admin sees it on the <em>Payouts &amp; Refunds</em> screen to retry it, or to refund a tenant who hasn't moved in. After an admin refund, the tenant can't request another.</li>
   <li>Marketplace payments are held until the buyer confirms receipt (or released automatically after 7 days unless disputed).</li>
 </ul>

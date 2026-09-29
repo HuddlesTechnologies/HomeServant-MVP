@@ -15,7 +15,7 @@ verified landlords and tenants get a Verified badge.
 | Part | Tech | Hosted on |
 |---|---|---|
 | App (`lib/`) | Flutter (web + mobile), go_router, provider, dio, Socket.IO | Vercel (web) |
-| API (`backend/`) | NestJS 10, Prisma 5, PostgreSQL, Socket.IO | Render (Docker); database and storage on Supabase |
+| API (`backend/`) | NestJS 11, Prisma 7, PostgreSQL, Socket.IO (Node 22) | Render (Docker); database and storage on Supabase |
 
 ## Documentation
 

@@ -256,11 +256,26 @@ glance, so err strict.
    key and the webhook must be from the same mode.
 3. **Transfers:** payouts are Paystack Transfers from your Paystack
    balance. Turn off OTP for transfers (Settings > Preferences) or API
-   payouts wait for an OTP nobody enters, and keep enough balance (Paystack
-   settles card payments into it on its normal schedule).
-4. **Check it:** make a test payment in Test mode; the booking should move
-   to "paid" within seconds. If it doesn't, Paystack's webhook logs
-   (Settings > API Keys & Webhooks) show each delivery and the response.
+   payouts wait for an OTP nobody enters.
+4. **Keep the balance funded.** Paystack refuses a transfer bigger than the
+   balance ("Your balance is not enough to fulfil this request"). If card
+   payments are settled to your bank account automatically, the balance
+   stays near empty: top it up from the dashboard, or ask Paystack to keep
+   collections in the balance. Sending money to your own bank account does
+   not fund it. Test and Live mode have **separate balances**: money added
+   in Live mode is invisible to a `sk_test_` key and vice versa.
+   - The API checks the balance before each payout. A payout it can't
+     cover isn't sent; its error says how much is available and needed,
+     and it is retried automatically every 30 minutes
+     (`PaymentsService.retryLowBalancePayouts`).
+   - The admin *Payouts & Refunds* screen shows the balance and a
+     **Live mode / Test mode** label for the server's key
+     (`GET /api/admin/payouts/balance`), so a mode mismatch is visible.
+5. **Check it:** make a test payment in Test mode; the booking should move
+   to "paid" within seconds (the web app also confirms it itself when
+   Paystack sends the tenant back, via `POST /api/bookings/confirm-payment`).
+   If it doesn't, Paystack's webhook logs (Settings > API Keys & Webhooks)
+   show each delivery and the response.
 
 ## Resetting all chats (testing)
 

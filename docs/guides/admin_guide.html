@@ -111,6 +111,8 @@
   <li><strong>Activity Log</strong> (Moderator and above): a record of sensitive actions, such as admin sign-ins, account deactivations, bans and deletions, password and email changes, chat claims and transfers, calls to customers and ranking changes &mdash; with the reason the admin gave. Only a super admin can clear it.</li>
   <li><strong>Chat Log</strong> (Super Admin): every support conversation from the last 30 days, with who handled it and every transfer. Filter by <em>Unattended, Opened, Resolved</em>.</li>
 </ul>
+<div class="note"><strong>Badge counts</strong> on <em>ID Verifications</em>, <em>Payouts &amp; Refunds</em> and <em>Eviction Requests</em> count cases that still need action, not unread ones. Opening a screen doesn't clear its badge; resolving the case does. The counts update live in every open console as soon as a case is filed, decided, fails or goes through, and again when you leave one of those screens.</div>
+<div class="tip"><strong>Profile photos:</strong> tap anyone's profile photo (users list, user details, chats, eviction cases and so on) to see it full size.</div>
 <h2>Top bar</h2>
 <p>The <strong>bell</strong> opens your notifications, the <strong>gear</strong> opens Account Settings, and the <strong>door icon</strong> signs you out.</p>
 
@@ -186,12 +188,21 @@
   <li>Payouts waiting for verification can't be retried here; they're paid automatically when the landlord is verified (or if <em>Pay unverified landlords</em> is turned on). After a tenant has moved in, no one can refund them from here.</li>
   <li>If a payout fails, the tenant's side still goes ahead (move-in, stay, renewal) and the landlord is told their payout is delayed.</li>
 </ul>
+<h3>The Paystack balance</h3>
+<p>Payouts to landlords are sent from HomeServant's <strong>Paystack balance</strong>, and Paystack refuses a transfer bigger than it. The top of the screen shows the balance and a <strong>Live mode</strong> / <strong>Test mode</strong> label for the Paystack key the server uses.</p>
+<ul>
+  <li>A payout the balance can't cover isn't sent. Its error says how much is available and how much is needed, and the screen shows how many payouts are waiting on the balance and their total.</li>
+  <li><strong>They're retried automatically every 30 minutes</strong>, oldest first, once there is enough. Pressing <em>Retry payout</em> is only needed to send one straight away.</li>
+  <li><strong>To fix it:</strong> top up the Paystack balance from the Paystack dashboard, or ask Paystack to keep collected payments in the balance instead of settling them to the bank. Sending money to HomeServant's own bank account does <em>not</em> add it to the Paystack balance.</li>
+  <li><strong>Test mode vs Live mode:</strong> Paystack keeps separate balances for each. If the label says <em>Test mode</em>, only the test balance counts and no real money moves; money added in live mode won't be seen. Real payouts need the live key (<code>sk_live_&hellip;</code>) in the server's <code>PAYSTACK_SECRET_KEY</code>.</li>
+</ul>
 <h2>Eviction requests (Super Admin)</h2>
 <p>A landlord can ask to end a tenancy early, with a written reason. Every super admin is notified, and the case waits in <em>More &rarr; Eviction Requests</em> (the badge shows how many are waiting). Each case shows the property, both parties' contact details, the lease dates, the landlord's reason and the tenant's response, if they have given one.</p>
 <ul>
   <li><strong>Approve eviction</strong> ends the lease today and puts the property back on the market. An optional note goes to both parties. This can't be undone.</li>
   <li><strong>Reject</strong> needs a reason (both parties see it); the tenancy continues unchanged.</li>
-  <li>Give the tenant a fair chance to respond before deciding, and contact either side through Messages if you need more information. Only one super admin can decide a case; if someone else already did, you're told.</li>
+  <li><strong>Message tenant</strong> / <strong>Message landlord</strong> open a chat with that person, and <strong>Call tenant</strong> / <strong>Call landlord</strong> dial their number (on a computer, the number is shown to dial from a phone; the button is greyed out if there's no number on file).</li>
+  <li>Give the tenant a fair chance to respond before deciding, and contact either side if you need more information. Only one super admin can decide a case; if someone else already did, you're told.</li>
   <li>The case stays on record with who decided, when and why (filter by Approved, Rejected or Withdrawn).</li>
 </ul>
 <h2>Transferring and reassigning</h2>
