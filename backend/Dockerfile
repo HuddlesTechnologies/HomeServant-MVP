@@ -11,7 +11,7 @@
 FROM node:22-slim AS build
 WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-COPY package*.json ./
+COPY package*.json prisma.config.ts ./
 COPY prisma ./prisma
 RUN npm install
 COPY . .
@@ -21,8 +21,10 @@ FROM node:22-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-COPY package*.json ./
+COPY package*.json prisma.config.ts ./
 COPY prisma ./prisma
+# The Prisma CLI is a production dependency, so this uses the pinned
+# version (not whatever npx would download) for generate and migrate.
 RUN npm install --omit=dev && npx prisma generate
 COPY --from=build /app/dist ./dist
 
