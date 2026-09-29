@@ -65,10 +65,8 @@ Future<void> showSupportOptionsSheet(BuildContext context, {required DashboardTh
   );
 }
 
-/// Opens (or reuses) the caller's own support thread and pushes a real
-/// [ChatThreadScreen] on it — previously this pushed a purely local,
-/// scripted conversation with no `threadId`, so nothing typed here ever
-/// left the device.
+/// Opens (or reuses) the caller's own support thread on the server and
+/// pushes [ChatThreadScreen] on it, so messages reach the support team.
 Future<void> _openLiveChat(BuildContext context, DashboardTheme theme) async {
   final messenger = ScaffoldMessenger.of(context);
   // What it's about routes it to the right admin and lets them triage it

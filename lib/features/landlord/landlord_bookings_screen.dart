@@ -213,10 +213,8 @@ class _LandlordBookingsScreenState extends State<LandlordBookingsScreen> {
     // rental is an unfinished Rent Now checkout, not a request.
     final pendingBookings = allBookings.where((b) => b.status == api.BookingStatus.pending && b.isShortlet).toList();
     // MOVED_IN (non-Shortlet) / PAID (Shortlet) are the only statuses that
-    // mean "currently paying rent on this property" — BookingStatus.accepted
-    // is only ever a Shortlet's pre-payment approval step, so filtering on
-    // it here (as this used to) meant a tenant who'd actually moved in and
-    // paid never showed up in "Rent" at all.
+    // mean "currently paying rent on this property". ACCEPTED is only a
+    // Shortlet's approval step before payment, so it doesn't count.
     const rentedStatuses = {api.BookingStatus.movedIn, api.BookingStatus.paid};
     final rentedBookings = allBookings.where((b) => rentedStatuses.contains(b.status)).toList();
     // The Rent list shows who's renting now. A shortlet stays PAID after the

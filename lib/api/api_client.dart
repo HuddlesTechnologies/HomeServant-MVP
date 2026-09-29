@@ -57,21 +57,17 @@ class ApiClient {
 
   /// Shared by every concurrent 401 so only one actually calls
   /// `/auth/refresh` at a time. The backend's refresh token is single-use
-  /// (it's rotated and revoked on success — see AuthService.refresh), so
-  /// two requests 401-ing at the same moment and each independently
-  /// calling this used to race: the first to land would rotate the token,
-  /// and the second's attempt would then fail against the now-revoked one
-  /// — spuriously triggering [onSessionExpired] even though the session
-  /// was actually fine and new tokens were already saved by the first.
+  /// (it's rotated and revoked on success — see AuthService.refresh). If
+  /// two requests that 401 at the same moment each refreshed, the second
+  /// would fail against the token the first just revoked and sign the user
+  /// out ([onSessionExpired]) although their session is fine.
   Future<String?>? _refreshInFlight;
 
   /// An access token that's good for at least another minute, refreshing
   /// first if the stored one has expired (or is about to). The chat socket
-  /// calls this on every (re)connect: it used to authenticate once with the
-  /// token it had at login, so after the 15-minute access-token lifetime
-  /// any reconnect (network blip, laptop sleep, server restart) was
-  /// rejected and live messages/notifications silently stopped until a
-  /// page reload.
+  /// calls this on every (re)connect: access tokens last 15 minutes, so a
+  /// reconnect (network blip, laptop sleep, server restart) with the token
+  /// from login would be rejected and live updates would stop.
   Future<String?> freshAccessToken() async {
     final token = await _tokens.readAccessToken();
     if (token == null) return null;

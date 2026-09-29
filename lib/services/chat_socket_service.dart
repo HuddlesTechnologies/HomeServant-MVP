@@ -10,10 +10,9 @@ class ChatSocketMessage {
   final Map<String, dynamic> message;
 }
 
-/// Real-time chat delivery — before this, a thread's messages only ever
-/// loaded once, when the screen opened; there was no polling and no push,
-/// so a message sent by the other party while you were already looking at
-/// the thread just never appeared until you left and reopened it.
+/// Real-time delivery of chat messages, read receipts and notifications,
+/// so a message the other person sends appears in an open chat straight
+/// away.
 ///
 /// One socket per signed-in session (connected in AppState right after
 /// login/session-restore, disconnected on logout), independent of any

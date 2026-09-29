@@ -56,7 +56,7 @@ class AppNotification {
 
   /// The chat thread a message/transfer/resolved notification is about —
   /// lets the detail screen show its current status and open it. Null for
-  /// other types, and for notifications created before this was recorded.
+  /// other types, and for older notifications that don't have it.
   final String? threadId;
 
   /// Only ever set on a live socket push, never on GET /notifications: the
@@ -67,9 +67,9 @@ class AppNotification {
 
   bool get isRead => readAt != null;
 
-  /// This notification, marked read now — keeps every other field
-  /// (rebuilding it by hand used to drop [threadId], so a read chat
-  /// notification could no longer open its conversation).
+  /// This notification, marked read now, with every other field kept
+  /// (including [threadId], which a read chat notification still needs to
+  /// open its conversation).
   AppNotification markedRead() => AppNotification(
     id: id,
     type: type,

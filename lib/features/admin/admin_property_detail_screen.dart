@@ -14,8 +14,8 @@ import '../../widgets/labeled_value_row.dart';
 import 'widgets/admin_badge.dart';
 import 'admin_user_detail_screen.dart';
 
-/// Every detail an admin can see about a listing — reached by tapping a
-/// row in AdminPropertiesTab, which previously had no detail view at all.
+/// Every detail an admin can see about a listing, reached by tapping a
+/// row in AdminPropertiesTab or a transaction's "View full property".
 class AdminPropertyDetailScreen extends StatefulWidget {
   const AdminPropertyDetailScreen({super.key, required this.propertyId});
 

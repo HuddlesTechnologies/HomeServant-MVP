@@ -16,12 +16,10 @@ class _PropertyPreviewBubble extends StatelessWidget {
     final imageUrl = message.previewPropertyImageUrl;
     final price = message.previewPropertyPrice;
     final priceUnit = message.previewPropertyPriceUnit;
-    // Opaque accent/onAccent for fromMe, surface/onSurface otherwise — the
-    // same paired convention the plain-text bubble above uses. A
-    // translucent accent tint (as this used to be) is only guaranteed to
-    // stay light against a light theme.background; in Midnight,
-    // theme.background is dark navy, so a low-alpha tint over it stays
-    // dark and theme.onSurface (always navy) text on it is unreadable.
+    // Opaque accent/onAccent for fromMe, surface/onSurface otherwise, like
+    // the text bubble. Not a translucent tint: over Midnight's dark navy
+    // background a tint stays dark, and onSurface (always navy) text on it
+    // would be unreadable.
     final bubbleColor = message.fromMe ? theme.accent : theme.surface;
     final onBubbleColor = message.fromMe ? theme.onAccent : theme.onSurface;
     return Container(
@@ -80,11 +78,9 @@ class _ImageMessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = message.attachmentUrl;
-    // Opaque accent/onAccent for fromMe, surface/onSurface otherwise —
-    // matches the plain-text bubble and _PropertyPreviewBubble above. A
-    // translucent accent tint over theme.background stays dark in Midnight
-    // (background is navy there), so onSurface (always navy) text on it
-    // used to be unreadable for outgoing messages.
+    // Opaque accent/onAccent for fromMe, surface/onSurface otherwise, like
+    // the text and property-preview bubbles (see _PropertyPreviewBubble for
+    // why not a translucent tint).
     final bubbleColor = message.fromMe ? theme.accent : theme.surface;
     final onBubbleColor = message.fromMe ? theme.onAccent : theme.onSurface;
     return Container(

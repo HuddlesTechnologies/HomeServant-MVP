@@ -19,8 +19,7 @@ import 'chat_thread_screen.dart';
 /// two as separate, purpose-scoped views. Starting a *new* vendor
 /// conversation still happens from order history/an order's detail screen
 /// (see OrderHistoryScreen/VendorOrderDetailScreen) — the marketplace
-/// inbox only lists ones already begun. The two inboxes used to be
-/// separate near-identical screens.
+/// inbox only lists ones already begun.
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key, required this.theme, this.marketplaceOnly = false});
 

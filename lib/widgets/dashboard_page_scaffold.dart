@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_text_styles.dart';
 
-/// Shared page shell for the dashboard/landlord screens that each used to
-/// define their own identical `Scaffold(backgroundColor: ..., appBar:
-/// AppBar(backgroundColor: ..., elevation: 0, iconTheme: ..., title: ...))`
-/// wrapper.
+/// Shared page shell for the dashboard and landlord screens: a [Scaffold]
+/// with a flat app bar in the page's own colours.
 ///
 /// Takes [background]/[foreground] directly rather than a single
 /// `DashboardTheme` object: most callers pass `theme.background`/

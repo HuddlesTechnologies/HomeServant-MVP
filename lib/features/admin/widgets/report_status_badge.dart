@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../api/models/admin_models.dart';
 import 'admin_badge.dart';
 
-/// A report's status as a colored badge — shared by the reports list and
-/// a report's detail screen, which used to each define it.
+/// A report's status as a colored badge, on the reports list and a
+/// report's detail screen.
 class ReportStatusBadge extends StatelessWidget {
   const ReportStatusBadge({super.key, required this.status});
 

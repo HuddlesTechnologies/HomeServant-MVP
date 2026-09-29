@@ -557,12 +557,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     // A SYSTEM notice has no sender and goes to both sides; anything else
     // from us was already echoed locally by [_send].
     if (!isSystem && (senderId == null || senderId == appState.userId)) return;
-    // The raw type string here is Prisma's enum member as-is (TEXT /
-    // PROPERTY_PREVIEW / IMAGE) — this previously compared against
-    // 'propertyPreview', which the backend never actually sends, so a
-    // live-pushed property-preview message silently never rendered as its
-    // card (see ChatMessage._messageTypeFromApi's doc comment for the same
-    // fix on the initial-load path).
+    // The socket sends Prisma's MessageType names as-is, in upper case,
+    // the same as the REST API (see _messageTypeFromApi in chat.dart).
     final type = switch (event.message['type']) {
       'PROPERTY_PREVIEW' => MessageType.propertyPreview,
       'IMAGE' => MessageType.image,
@@ -899,9 +895,8 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
       );
       return;
     }
-    // Records the date on the booking (this button used to only send a chat
-    // message, so the landlord then had "no inspection date" to accept).
-    // The server posts the note into this chat itself.
+    // Records the date on the booking, so the landlord has a date to accept
+    // or decline. The server posts the note into this chat itself.
     try {
       await context.read<AppState>().proposeInspection(booking.id, scheduled);
       messenger.showSnackBar(SnackBar(content: Text('Inspection date sent to the landlord: $formatted')));

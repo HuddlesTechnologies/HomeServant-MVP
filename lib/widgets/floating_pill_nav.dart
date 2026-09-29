@@ -3,12 +3,8 @@ import 'package:flutter/material.dart';
 /// The floating, rounded-pill bottom nav bar shape shared by every
 /// dashboard (tenant, landlord, vendor): a row of icons over a coloured
 /// pill, where the selected icon gets its own filled circle behind it.
-///
-/// Each dashboard used to hand-roll this same `Container` +
-/// `AnimatedContainer` structure with only its icon set and colours
-/// differing — this factors that structure out once, leaving each
-/// dashboard's own nav widget as a thin wrapper that just supplies
-/// [itemCount], [iconBuilder], and colours.
+/// Each dashboard's nav bar is a thin wrapper that supplies [itemCount],
+/// [iconBuilder] and its colours.
 class FloatingPillNav extends StatelessWidget {
   const FloatingPillNav({
     super.key,

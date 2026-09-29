@@ -21,10 +21,9 @@ import '../../widgets/hidden_listing_notice.dart';
 import '../../widgets/report_sheet.dart';
 import 'widgets/shortlet_unavailable_countdown.dart';
 
-/// Every [BookingStatus] from the moment a tenant's payment clears onward —
-/// used to gate showing a property's listing number to the tenant (see
-/// CLAUDE.md-adjacent product requirement: visible to landlord/admin
-/// always, but to a tenant only once they've actually paid).
+/// Every [BookingStatus] from the moment a tenant's payment clears onward.
+/// A tenant sees a property's listing number only once they've paid;
+/// landlords and admins always see it.
 const _paidBookingStatuses = {
   BookingStatus.paid,
   BookingStatus.paidAwaitingInspection,
@@ -277,9 +276,9 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     final messagingEnabled = property.messagingEnabled;
     final isShortlet = property.category == 'Shortlet';
     final unavailable = isShortlet && property.shortletUnavailable;
-    // Rent Now used to stay live after paying, letting a tenant pay (and
-    // book) the same property twice. The server refuses too now; this
-    // explains why and points at the booking they already have.
+    // Once a tenant has an active booking here, Rent Now is replaced by a
+    // note pointing at it, so they can't pay for the same property twice
+    // (the server refuses a second booking too).
     final existingBookingNote = context.select<AppState, String?>(
       (state) => _existingBookingNote(state.myBookings.where((b) => b.property.id == property.id), isShortlet),
     );
@@ -578,11 +577,10 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                           if (!mounted) return;
                                           final payment = result.payment;
                                           if (payment != null) {
-                                            // Non-Shortlet: the booking just charged
-                                            // immediately — open the Paystack checkout
-                                            // right away instead of waiting on a
-                                            // landlord pre-approval that no longer
-                                            // happens.
+                                            // Non-Shortlet: the booking is charged as
+                                            // soon as it's created (no landlord
+                                            // approval first), so open the Paystack
+                                            // checkout right away.
                                             final launched = await openPaymentPage(payment.authorizationUrl);
                                             if (!launched && mounted) {
                                               messenger.showSnackBar(

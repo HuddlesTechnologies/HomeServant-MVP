@@ -202,11 +202,9 @@ class AppState extends ChangeNotifier with _NotificationsSection, _ListingsSecti
   void _handleSessionExpired([String? banned]) {
     sessionExpired = true;
     bannedMessage = banned;
-    // Unlike deactivateAccount()/deleteAccount(), this used to leave the
-    // now-dead refresh token sitting in secure storage until the next cold
-    // start's load() happened to clear it — harmless in practice (the
-    // server already rejects it) but inconsistent with every other
-    // forced-sign-out path.
+    // Clear the stored tokens now, like every other sign-out: the server
+    // already rejects them, so keeping them would only leave dead
+    // credentials on the device.
     unawaited(_tokens.clear());
     unawaited(GoogleAuthService.signOut());
     _clearSession();
@@ -506,12 +504,9 @@ class AppState extends ChangeNotifier with _NotificationsSection, _ListingsSecti
     // case), OR when this is confirmed to be a full-profile response (see
     // AuthUser.hasFullProfile) — in which case a null is authoritative
     // ("actually cleared"), not just "absent from this narrower shape",
-    // and must overwrite whatever was set locally before. Without the
-    // second half of that condition, a field intentionally cleared via
-    // [completeProfile] (e.g. blanking a phone number) would come back
-    // null from the server but the old value would win by default,
-    // leaving the UI showing stale data despite the clear having actually
-    // succeeded.
+    // and must overwrite whatever was set locally before; otherwise a
+    // field cleared via [completeProfile] (e.g. blanking a phone number)
+    // would keep showing its old value.
     if (user.fullName != null || user.hasFullProfile) fullName = user.fullName ?? '';
     if (user.phoneNumber != null || user.hasFullProfile) phoneNumber = user.phoneNumber ?? '';
     if (user.profilePhotoUrl != null || user.hasFullProfile) profilePhotoPath = user.profilePhotoUrl;
@@ -636,10 +631,10 @@ class AppState extends ChangeNotifier with _NotificationsSection, _ListingsSecti
   /// think they've been demoted.
   bool adminLevelLoadFailed = false;
 
-  /// Loads this admin's level (`GET /admin/me`). A single failed request
-  /// (a slow network, or the server waking up) used to leave the level
-  /// unknown for the whole session, silently hiding every moderator and
-  /// super admin page, so it now retries a few times before giving up.
+  /// Loads this admin's level (`GET /admin/me`), retrying a few times
+  /// before giving up: while the level is unknown, every moderator and
+  /// super admin page is hidden, so one failed request (a slow network, or
+  /// the server waking up) mustn't leave it unknown for the session.
   Future<void> _loadAdminLevel() async {
     const retryDelays = [Duration(seconds: 2), Duration(seconds: 4), Duration(seconds: 8)];
     for (var attempt = 0; ; attempt++) {
@@ -854,13 +849,11 @@ class AppState extends ChangeNotifier with _NotificationsSection, _ListingsSecti
 
     if (appLockEnabled) {
       appLockPin = await _tokens.readAppLockPin();
-      // One-time migration for installs saved before the PIN moved to
-      // secure storage: a legacy plaintext copy may still be in this JSON
-      // blob. Adopt it into secure storage once; the field is no longer
-      // written by [_toJson], so it naturally drops out of the file on the
-      // next save. If neither source has a PIN, app lock can't be honored,
-      // so turn it back off rather than locking the user out with nothing
-      // to check against.
+      // An older install may still have the PIN in plain text in this JSON
+      // blob. Move it into secure storage; [_toJson] doesn't write it, so
+      // it drops out of the file on the next save. If neither place has a
+      // PIN, there's nothing to check against, so app lock is turned off
+      // rather than locking the user out.
       if (appLockPin == null) {
         final legacyPin = decoded?['appLockPin'] as String?;
         if (legacyPin != null) {
@@ -888,12 +881,11 @@ class AppState extends ChangeNotifier with _NotificationsSection, _ListingsSecti
       }
     }
 
-    // Routing only needs to know who's signed in. This used to wait for
-    // every list (bookings, favorites, notifications...) as well, and the
-    // router ignores the session until isLoaded — so on a slow start (e.g.
-    // coming back from Paystack) the tenant sat on the Get Started page,
-    // and then tapping Log In jumped straight to the dashboard without a
-    // password once loading finished behind it.
+    // Routing only needs to know who's signed in, so isLoaded is set now
+    // and the lists (bookings, favorites, notifications...) load after.
+    // The router ignores the session until isLoaded; waiting for every list
+    // would leave a signed-in tenant on the Get Started page on a slow
+    // start (e.g. coming back from Paystack).
     isLoaded = true;
     restoringSession = false;
     super.notifyListeners(); // restored data, not a change to persist again

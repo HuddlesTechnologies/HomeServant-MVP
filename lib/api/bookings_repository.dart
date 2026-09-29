@@ -147,9 +147,8 @@ class BookingsRepository {
   // The six booking actions below return nothing: the server replies with
   // the bare booking row (no property or tenant attached), which
   // Booking.fromApi can't read. AppState reloads the list after each one
-  // instead. Reading the reply used to throw after the action had already
-  // succeeded, so the screen never updated and repeating the tap failed
-  // (e.g. "no pending inspection date" when accepting an inspection).
+  // instead. (Parsing that reply would throw after the action had already
+  // succeeded, leaving the screen stale.)
   /// Tenant proposes (or re-proposes, after a decline) an inspection date —
   /// only valid while the booking is PAID_AWAITING_INSPECTION, including
   /// much later than payment ("book later").

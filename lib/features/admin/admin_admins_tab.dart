@@ -40,7 +40,7 @@ class _AdminCreateDraft {
   final DateTime? savedAt;
 
   /// True while the emailed confirmation code can still be entered. A draft
-  /// saved before this was recorded has no [savedAt] and counts as expired.
+  /// with no [savedAt] (saved by an older build) counts as expired.
   bool get codeStillValid => savedAt != null && DateTime.now().difference(savedAt!) < _inviteCodeLifetime;
 
   Map<String, dynamic> toJson() => {

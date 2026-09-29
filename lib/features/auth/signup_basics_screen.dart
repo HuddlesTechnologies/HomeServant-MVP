@@ -16,8 +16,7 @@ import '../../widgets/upload_picker.dart';
 import '../../widgets/upload_picker_rules.dart';
 
 /// Signup step 1 ("Welcome Onboard": name, phone, date of birth) for both
-/// tenants and landlords — previously two near-identical screens. Role
-/// differences: a tenant can enter a referral code; a landlord gives a
+/// tenants and landlords. Role differences: a tenant can enter a referral code; a landlord gives a
 /// house address and can attach a certificate of ownership.
 class SignupBasicsScreen extends StatefulWidget {
   const SignupBasicsScreen({super.key, required this.role, required this.onContinue});

@@ -46,8 +46,7 @@ class ChatMessage {
   /// every social/messaging app shows "Seen" on your own last sent message.
   bool read;
 
-  /// Only meaningful for [fromMe]: shown as "Sending…", or "Not sent · Tap
-  /// to retry" — a failed send used to leave the bubble looking delivered,
-  /// with only a passing snackbar to say otherwise.
+  /// Only meaningful for [fromMe]: shown under the bubble as "Sending…" or
+  /// "Not sent · Tap to retry", so a failed send never looks delivered.
   SendState sendState;
 }

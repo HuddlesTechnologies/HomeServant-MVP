@@ -211,13 +211,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           folder: 'profile-photos',
         );
       }
-      // An empty string is sent as-is, not converted to null — the
-      // backend now treats '' as an explicit "clear this field" signal
-      // (see UpdateProfileDto/UsersService.updateProfile) and accepts it
-      // even for phoneNumber's normally-strict format validator. Sending
-      // null here instead would just omit the field from the request
-      // entirely, silently leaving the old value in place server-side
-      // despite the screen reporting "Profile updated".
+      // An empty string is sent as-is, not converted to null: the backend
+      // treats '' as "clear this field" (see UpdateProfileDto /
+      // UsersService.updateProfile), even for phoneNumber's strict format
+      // check. A null would leave the field out of the request, so the old
+      // value would stay on the server.
       await appState.completeProfile(
         fullName: _fullName.text.trim(),
         phoneNumber: _phone.text.trim(),

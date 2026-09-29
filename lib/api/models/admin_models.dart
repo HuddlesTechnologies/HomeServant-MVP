@@ -51,8 +51,9 @@ class AdminAccount {
   final AdminLevel level;
 
   /// The super admin who created this account through the console, if
-  /// recorded (null for the first admin, database promotions, and admins
-  /// created before this was tracked). [createdByName] falls back to email.
+  /// recorded (null for the first admin, admins promoted directly in the
+  /// database, and older accounts that don't have it). [createdByName]
+  /// falls back to email.
   final String? createdById;
   final String? createdByName;
   final String? fullName;
@@ -127,8 +128,7 @@ class AdminPage<T> {
   bool get hasMore => page * pageSize < total;
 
   /// Unwraps the `{items, total, page, pageSize}` shape every paginated
-  /// admin list endpoint returns — was duplicated at each call site in
-  /// AdminRepository (stats/findUsers/findVendors/etc).
+  /// admin list endpoint returns.
   factory AdminPage.fromApi(Map<String, dynamic> json, T Function(Map<String, dynamic>) itemParser) => AdminPage<T>(
     items: (json['items'] as List).cast<Map<String, dynamic>>().map(itemParser).toList(),
     total: json['total'] as int,

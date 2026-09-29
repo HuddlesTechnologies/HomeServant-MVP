@@ -12,9 +12,8 @@ import 'login_outcome_handler.dart';
 
 /// "Continue with Google" button that runs the whole Google sign-in: gets
 /// an ID token, calls [AppState.loginWithGoogle], handles the
-/// reactivate-a-deactivated-account prompt, and reports the result. The
-/// login and signup screens used to each carry an identical copy of this
-/// flow.
+/// reactivate-a-deactivated-account prompt, and reports the result. Used
+/// by the login and signup screens.
 ///
 /// On Android/iOS this is our own button, which opens the native account
 /// picker. On web it renders Google's own button instead (the only web flow
@@ -60,8 +59,8 @@ class _GoogleSignInButtonState extends State<GoogleSignInButton> {
       if (mounted) widget.onError(e.message);
     } catch (e) {
       // Google SDK failures (misconfigured OAuth client, popup blocked,
-      // network) used to escape this handler entirely, so the button
-      // just stopped spinning with no explanation.
+      // network) are caught here too, so the user sees an error instead of
+      // the button just stopping.
       debugPrint('Google sign-in failed: $e');
       if (mounted) widget.onError('Google sign-in failed. Please try again.');
     } finally {

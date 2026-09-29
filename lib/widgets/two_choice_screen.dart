@@ -6,9 +6,8 @@ import '../core/theme/app_text_styles.dart';
 import 'pill_button.dart';
 
 /// The full-bleed photo screen with the logo, a title, a subtitle and two
-/// stacked buttons (navy on top, gold below) that Get Started and the
-/// Login/Sign Up role pickers all share. They used to be three copies of
-/// this layout differing only in their text.
+/// stacked buttons (navy on top, gold below), shared by Get Started and
+/// the Login/Sign Up role pickers.
 class TwoChoiceScreen extends StatelessWidget {
   const TwoChoiceScreen({
     super.key,

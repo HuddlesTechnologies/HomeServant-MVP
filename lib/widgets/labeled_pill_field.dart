@@ -4,9 +4,7 @@ import '../core/theme/app_text_styles.dart';
 import 'pill_text_field.dart';
 
 /// Label-above-textfield wrapper used across the onboarding/signup forms
-/// (landlord/tenant profile steps, vendor signup) — promoted from the
-/// near-identical private `_Field` widgets those screens used to each
-/// define on their own.
+/// (landlord/tenant profile steps, vendor signup).
 class LabeledPillField extends StatelessWidget {
   const LabeledPillField({
     super.key,
