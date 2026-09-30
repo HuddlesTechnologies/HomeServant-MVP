@@ -146,10 +146,8 @@ class _AdminDashboardTabState extends State<AdminDashboardTab> {
         slivers: [
           SliverPadding(
             padding: const EdgeInsets.all(16),
-            // 220px still meant only 2 (huge) columns on a phone-width
-            // viewport — this app is mobile-first, so the previous fix only
-            // ever helped on a genuinely wide desktop window. A much smaller
-            // cap forces 3+ compact tiles per row even on a narrow screen.
+            // A small maximum tile width, so even a phone gets 3+ compact
+            // tiles per row (a wide cap like 220px gives just 2 huge ones).
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 130,

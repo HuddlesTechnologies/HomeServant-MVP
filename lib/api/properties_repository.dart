@@ -7,9 +7,8 @@ class PropertiesRepository {
   final ApiClient _client;
 
   /// Fetches every matching property, following `total` across as many
-  /// 100-item pages as it takes — a single fixed `pageSize: 100` with no
-  /// follow-up used to silently drop the 101st+ result once a filtered
-  /// view (the browse feed, a landlord's own listings) grew past that.
+  /// 100-item pages as it takes, so a list with more than 100 listings is
+  /// never cut short.
   Future<List<Property>> findMany({String? state, String? category, String? landlordId}) {
     return _client.call(() async {
       const pageSize = 100;

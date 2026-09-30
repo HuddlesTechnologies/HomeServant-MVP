@@ -1,5 +1,5 @@
 import '../../core/thousands_separator.dart';
-import '../../features/Market place/models/order_options.dart';
+import '../../features/marketplace/models/order_options.dart';
 import 'vendor.dart';
 
 extension FulfillmentMethodApi on FulfillmentMethod {
@@ -232,10 +232,10 @@ class MarketplaceOrderItemApi {
     final product = json['product'] as Map<String, dynamic>?;
     final vendor = json['vendor'] as Map<String, dynamic>?;
     final order = json['order'] as Map<String, dynamic>?;
-    // Real backend shape: a nested `payment: { status }` (raw Payment
-    // status enum — PAID_HELD/RELEASED/REFUNDED/etc, see
-    // OrderItemPaymentProgress.fromApi), not a flat top-level field. The
-    // other key names below are kept as a defensive fallback only.
+    // The backend nests the payment as `payment: { status }` (the raw
+    // PaymentStatus enum, PAID_HELD/RELEASED/REFUNDED/etc., see
+    // OrderItemPaymentProgress.fromApi). The flat key names below are only
+    // read as a fallback.
     final payment = json['payment'] as Map<String, dynamic>?;
     return MarketplaceOrderItemApi(
       id: json['id'] as String,

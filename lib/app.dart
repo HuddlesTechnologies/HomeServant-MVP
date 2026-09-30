@@ -60,9 +60,8 @@ class _HomeServantAppState extends State<HomeServantApp> with WidgetsBindingObse
         // would only flip the handful of Material-default surfaces
         // (dialogs, default text) to dark while every custom screen stayed
         // hardcoded light, which reads as broken, not as dark mode. Pinning
-        // this explicitly documents that as a deliberate scope decision
-        // rather than an oversight; a real dark mode needs that refactor
-        // done first.
+        // this makes that a deliberate choice: a real dark mode needs every
+        // screen reading its colours from the theme first.
         themeMode: ThemeMode.light,
         routerConfig: _router,
         builder: (context, child) =>

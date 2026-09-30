@@ -7,9 +7,9 @@ import { OtpProvider } from './otp-provider.interface';
 
 export const CODE_TTL_MINUTES = 10;
 const MAX_ATTEMPTS = 5;
-/// How many of the most recent unexpired codes are accepted. Resending
-/// used to invalidate the earlier code, so someone typing the code from the
-/// first email (often the one that actually arrived) got "Incorrect code".
+/// How many of the most recent unexpired codes are accepted, so a resend
+/// doesn't invalidate the earlier code: people often type the code from
+/// the first email, which is frequently the one that arrived.
 const ACCEPTED_RECENT_CODES = 3;
 
 @Injectable()

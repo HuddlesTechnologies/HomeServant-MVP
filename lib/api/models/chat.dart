@@ -34,12 +34,9 @@ class ThreadParticipant {
 /// ChatService.postBookingSystemMessage.
 enum MessageType { text, propertyPreview, image, system }
 
-// The backend returns Prisma's raw MessageType enum member (TEXT /
-// PROPERTY_PREVIEW / IMAGE) verbatim in JSON — nothing camelCases it — so
-// this has to match that exact casing. This previously compared against
-// 'propertyPreview'/lowerCamelCase, which never matched anything the API
-// actually sends: property-preview messages silently never rendered as
-// their special card, always falling back to a plain text bubble instead.
+// The backend sends Prisma's MessageType enum names as-is (TEXT /
+// PROPERTY_PREVIEW / IMAGE / SYSTEM), so these must match that exact
+// casing. Anything unrecognised is shown as a plain text bubble.
 MessageType _messageTypeFromApi(String? value) => switch (value) {
   'PROPERTY_PREVIEW' => MessageType.propertyPreview,
   'IMAGE' => MessageType.image,
@@ -97,8 +94,8 @@ class ChatMessage {
   final MessageQuote? replyTo;
   /// Null once the sender's account has been deleted — Message.sender is
   /// `onDelete: SetNull`, so their messages stay in the thread without one.
-  /// Parsing this as non-null used to throw on any thread holding such a
-  /// message, failing the whole inbox load ("Couldn't load messages").
+  /// Must stay nullable: treating it as required would fail the whole inbox
+  /// load for any thread holding such a message.
   final String? senderId;
   final String senderName;
   final String body;

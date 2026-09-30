@@ -18,7 +18,7 @@ import { compareNames, nameTokens, subjectDisplayName } from './name-match';
 ///     verification, meta}`). The older `api.myidentitypass.com` /
 ///     `sandbox.myidentitypass.com` hosts complete a TLS handshake and then
 ///     drop the connection without replying — both from curl and from
-///     Node's fetch — so this no longer targets them.
+///     Node's fetch — so this doesn't use them.
 ///   * `x-api-key` is definitely the auth header: omitting it gives
 ///     "Authentication credentials were not provided", while a rejected key
 ///     gives "Invalid API key or inactive organisation".

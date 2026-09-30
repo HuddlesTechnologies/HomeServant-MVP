@@ -13,9 +13,9 @@ class AppColors {
   static const Color inputFieldGrey = Color(0xFF8C93A6);
   static const Color hintGrey = Color(0xFF7A7F8C);
 
-  /// Warm brown used as the emphasis/link colour on landlord auth screens
-  /// (formerly that role's screen background, before it moved to
-  /// [landlordSand]).
+  /// Warm brown, the landlord brand colour: emphasis and links on the
+  /// landlord's [landlordSand] screens ([UserRole.emphasis]), and landlord
+  /// or super-admin accents elsewhere.
   static const Color landlordBrown = Color(0xFF774C00);
 
   /// The three brand colours the "Theme" picker is allowed to recombine —

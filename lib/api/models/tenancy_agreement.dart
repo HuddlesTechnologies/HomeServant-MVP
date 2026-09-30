@@ -1,8 +1,7 @@
 /// Mirrors the persisted `TenancyAgreement` row returned by `GET
 /// /bookings/:id/tenancy-agreement` — generated once, server-side, on
-/// move-in. Replaces the old client-side fabrication in
-/// `tenancy_agreement_content.dart`, which invented a lease end date and
-/// hardcoded the landlord's contact details.
+/// move-in, so the lease dates and both parties' details are exactly what
+/// the server recorded. `tenancy_agreement_content.dart` lays it out.
 class TenancyAgreement {
   const TenancyAgreement({
     required this.propertyTitle,

@@ -548,9 +548,7 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 // The address this tenant gave at signup
-                                // (signup-tenant-2) or last saved in Edit
-                                // Profile — used to be a hardcoded
-                                // "Ikeja, Lagos" for everyone.
+                                // or last saved in Edit Profile.
                                 Flexible(
                                   child: Text(
                                     context.watch<AppState>().houseAddress.trim().isEmpty

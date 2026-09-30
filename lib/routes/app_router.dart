@@ -16,7 +16,7 @@ import '../features/auth/signup_screen.dart';
 import '../features/auth/verify_otp_screen.dart';
 import '../features/landlord/landlord_dashboard_screen.dart';
 import '../features/dashboard/tenant_dashboard_screen.dart';
-import '../features/Market place/marketplace_navigator_host.dart';
+import '../features/marketplace/marketplace_navigator_host.dart';
 import '../features/onboarding/get_started_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/splash/web_landing_screen.dart';
@@ -114,7 +114,7 @@ const _preAuthPaths = {
 /// (Guard C would see gender/occupation/maritalStatus still null — not
 /// fetched yet, not actually missing — and, because that dead-end route
 /// isn't itself in this bounce set, leave them stranded there instead of
-/// ever reaching /dashboard), or — admin-login's own version of this bug
+/// ever reaching /dashboard), or — admin-login's own version of this race
 /// — letting a non-admin account that submits valid credentials on the
 /// admin login form get bounced straight to its own ordinary dashboard
 /// before AdminLoginScreen's "this account is not an admin account" check

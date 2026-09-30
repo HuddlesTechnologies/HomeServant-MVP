@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
-/// Shared by every admin tab's horizontal filter-chip row — replaces
-/// what used to be separately duplicated as `_RoleChip`
-/// (admin_users_tab.dart) and `_StatusChip` (admin_vendors_tab.dart),
-/// which were identical apart from their name.
+/// One chip in an admin screen's horizontal filter row: navy with white
+/// text when selected, white with navy text otherwise, with an optional
+/// count badge.
 class AdminFilterChip extends StatelessWidget {
   const AdminFilterChip({super.key, required this.label, required this.selected, required this.onTap, this.badgeCount});
 

@@ -71,9 +71,9 @@ class _AdminVendorsTabState extends State<AdminVendorsTab> {
   }
 
   Future<void> _approve(AdminVendor vendor) async {
-    // Guards against a double-tap (or a slow response tempting a second
-    // tap) firing the approve endpoint more than once, which previously
-    // sent the vendor a duplicate approval email/notification each time.
+    // Ignores a second tap while the first approval is in flight: each call
+    // emails and notifies the vendor, so a double-tap would send those
+    // twice.
     if (_approvingIds.contains(vendor.id)) return;
     setState(() => _approvingIds.add(vendor.id));
     final messenger = ScaffoldMessenger.of(context);

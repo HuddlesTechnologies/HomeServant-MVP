@@ -644,12 +644,47 @@ export class ChatService {
     }));
   }
 
+  /// Sends one message into a thread, in order: check it may be sent, save
+  /// it, update the support-chat bookkeeping, then notify everyone else.
+  /// Returns the message as both sides receive it live.
   async sendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto) {
+    const body = await this.assertCanSendMessage(threadId, userId, senderRole, dto);
+    const message = await this.saveMessage(threadId, userId, body, dto);
+    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    if (thread?.isSupport) await this.afterSupportMessage(thread, userId, senderRole, message.createdAt);
+
+    // Customers only ever see an admin's first name, in the message itself
+    // and in anything it quotes.
+    if (senderRole === UserRole.ADMIN && message.sender) message.sender.fullName = adminPublicName(message.sender);
+    const { replyTo: quoted, ...sent } = message;
+    const outgoing = { ...sent, replyTo: replyQuote(quoted, (s) => (s.role === UserRole.ADMIN ? adminPublicName(s) : s.fullName)) };
+
+    const senderName = message.sender?.fullName ?? 'Someone';
+    const preview = messagePreview(body);
+    const otherParticipants = await this.prisma.threadParticipant.findMany({
+      where: { threadId, userId: { not: userId } },
+      select: { userId: true },
+    });
+    await Promise.all(
+      otherParticipants.map((p) =>
+        this.notifications.create(p.userId, NotificationType.NEW_MESSAGE, `New message from ${senderName}`, preview, threadId),
+      ),
+    );
+    // A support chat no admin has picked up has nobody to notify above, so
+    // every admin is alerted instead.
+    if (senderRole !== UserRole.ADMIN && thread?.isSupport && otherParticipants.length === 0) {
+      await this.alertAdminsOfWaitingSupportChat(thread, senderName, preview);
+      this.gateway.broadcastToAdmins('message:new', { threadId, message: outgoing });
+    }
+    return outgoing;
+  }
+
+  /// Throws if [userId] may not send [dto] into the thread; otherwise
+  /// returns the trimmed text. A message needs text, an image, or both.
+  private async assertCanSendMessage(threadId: string, userId: string, senderRole: UserRole, dto: SendMessageDto): Promise<string> {
     await this.assertCanWrite(threadId, userId, senderRole);
-    // A support conversation that has ended (resolved by an admin, or ended
-    // by the customer) takes no new messages: the customer no longer sees
-    // it in their inbox, so a reply there would go unseen. They start a new
-    // one from Contact Support instead.
+    // An ended support chat is gone from the customer's inbox, so a reply
+    // there would never be seen. The customer starts a new one instead.
     const target = await this.prisma.thread.findUnique({ where: { id: threadId }, select: { isSupport: true, status: true } });
     if (target?.isSupport && target.status === 'RESOLVED') {
       throw new ForbiddenException(
@@ -673,10 +708,12 @@ export class ChatService {
       const original = await this.prisma.message.findFirst({ where: { id: dto.replyToId, threadId }, select: { id: true } });
       if (!original) throw new BadRequestException("The message you're replying to isn't in this conversation");
     }
-    // Falls back to a fixed label rather than the (possibly empty) body —
-    // an image sent with no caption would otherwise show as a blank
-    // notification/support-queue preview.
-    const previewText = body || '📷 Photo';
+    return body;
+  }
+
+  /// Saves the message and bumps the thread's updatedAt (which orders the
+  /// inbox) in one transaction.
+  private async saveMessage(threadId: string, userId: string, body: string, dto: SendMessageDto) {
     const [message] = await this.prisma.$transaction([
       this.prisma.message.create({
         data: {
@@ -691,14 +728,23 @@ export class ChatService {
       }),
       this.prisma.thread.update({ where: { id: threadId }, data: { updatedAt: new Date() } }),
     ]);
-    const thread = await this.prisma.thread.findUnique({ where: { id: threadId } });
+    return message;
+  }
 
-    // First admin to reply to an unclaimed support thread claims it — the
-    // implicit counterpart to [claimThread]'s explicit "open it from the
-    // queue" claim, for whenever an admin replies without having opened it
-    // that way first (e.g. an old client, or a reply typed from a
-    // notification deep-link). See [attemptClaim] for the race-safety.
-    if (senderRole === 'ADMIN' && thread?.isSupport && !thread.assignedAdminId) {
+  /// Support-chat bookkeeping after a message is saved. Runs before anyone
+  /// is notified, because claiming or assigning the chat adds the admin as
+  /// a participant, and participants get the normal new-message alert.
+  private async afterSupportMessage(
+    thread: { id: string; status: string; assignedAdminId: string | null },
+    userId: string,
+    senderRole: UserRole,
+    sentAt: Date,
+  ) {
+    const threadId = thread.id;
+    // The first admin to reply to an unclaimed chat claims it, the same as
+    // opening it from the queue ([claimThread]; [attemptClaim] handles two
+    // admins replying at once).
+    if (senderRole === UserRole.ADMIN && !thread.assignedAdminId) {
       const claimed = await this.attemptClaim(threadId, userId);
       if (claimed) {
         await this.activityLog.log(ActivityLogType.SUPPORT_THREAD_CLAIMED, { actorId: userId });
@@ -708,88 +754,44 @@ export class ChatService {
       }
     }
 
-    if (thread?.isSupport) {
-      // Dashboard timings: the customer's first message, and the first
-      // admin reply to it.
-      await this.prisma.supportChatStat.updateMany({
-        where: senderRole === 'ADMIN' ? { threadId, firstResponseAt: null } : { threadId, firstCustomerMessageAt: null },
-        data:
-          senderRole === 'ADMIN'
-            ? { firstResponseAt: message.createdAt, firstResponderId: userId }
-            : { firstCustomerMessageAt: message.createdAt },
-      });
-    }
+    // Response-time statistics: when the customer first wrote, and when an
+    // admin first replied.
+    await this.prisma.supportChatStat.updateMany({
+      where: senderRole === UserRole.ADMIN ? { threadId, firstResponseAt: null } : { threadId, firstCustomerMessageAt: null },
+      data: senderRole === UserRole.ADMIN ? { firstResponseAt: sentAt, firstResponderId: userId } : { firstCustomerMessageAt: sentAt },
+    });
 
-    // A customer writing into an unclaimed support conversation: hand it to
-    // an available admin straight away (they then get the normal
-    // new-message notification below) instead of leaving it in the shared
-    // queue. If nobody suitable is online and on duty it stays in the queue
-    // (SupportAlertsService assigns it as soon as someone is), and the
-    // customer is told once that it may take a while.
-    if (senderRole !== 'ADMIN' && thread?.isSupport && thread.status === 'OPEN' && !thread.assignedAdminId) {
+    // A customer writing into an open, unassigned chat: give it to an
+    // available admin now. If nobody is online and on duty it stays in the
+    // shared queue (SupportAlertsService assigns it once someone is), and
+    // the customer is told once that a reply may take a while.
+    if (senderRole !== UserRole.ADMIN && thread.status === 'OPEN' && !thread.assignedAdminId) {
       const assigned = await this.autoAssign(threadId);
       if (!assigned && !(await this.anyAdminAvailable())) await this.postNobodyAvailableNotice(threadId);
     }
+  }
 
-    const otherParticipants = await this.prisma.threadParticipant.findMany({
-      where: { threadId, userId: { not: userId } },
-      select: { userId: true },
-    });
-    // An admin is only ever shown to the customer by first name — that's
-    // also what goes out live over the socket (see the gateway broadcast).
-    if (senderRole === UserRole.ADMIN && message.sender) message.sender.fullName = adminPublicName(message.sender);
-    // Sent to both sides live, so an admin quoted in it is shown by first
-    // name only, as everywhere else customers see admins.
-    const { replyTo: quoted, ...sent } = message;
-    const withQuote = { ...sent, replyTo: replyQuote(quoted, (s) => (s.role === UserRole.ADMIN ? adminPublicName(s) : s.fullName)) };
-    const senderName = message.sender?.fullName ?? 'Someone';
+  /// Alerts every admin to a customer message in a support chat nobody has
+  /// picked up. One alert per chat: later messages update it quietly
+  /// ("Ada (3 messages): …") instead of alerting again. Admins marked
+  /// "Away" get it silently (User.adminOnDuty). The 5-minute "still
+  /// waiting" reminder is SupportAlertsService's job.
+  private async alertAdminsOfWaitingSupportChat(
+    thread: { id: string; supportTopic: SupportTopic | null },
+    senderName: string,
+    preview: string,
+  ) {
+    const [admins, messageCount] = await Promise.all([
+      this.prisma.user.findMany({ where: { role: UserRole.ADMIN }, select: { id: true, adminOnDuty: true } }),
+      this.prisma.message.count({ where: { threadId: thread.id } }),
+    ]);
+    const title = thread.supportTopic ? `New support conversation · ${SUPPORT_TOPIC_LABEL[thread.supportTopic]}` : 'New support conversation';
+    const body = messageCount > 1 ? `${senderName} (${messageCount} messages): ${preview}` : `${senderName}: ${preview}`;
     await Promise.all(
-      otherParticipants.map((p) =>
-        this.notifications.create(
-          p.userId,
-          NotificationType.NEW_MESSAGE,
-          `New message from ${senderName}`,
-          previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText,
-          threadId,
-        ),
+      admins.map((admin) =>
+        this.notifications.upsertThreadAlert(admin.id, NotificationType.NEW_MESSAGE, thread.id, title, body, !admin.adminOnDuty),
       ),
     );
-
-    // An unclaimed support thread has no admin participant for the loop
-    // above to notify — without this, a brand-new "Contact Support"
-    // message (or any message on it before an admin picks it up) alerted
-    // nobody until an admin happened to manually reopen the Support Queue
-    // tab, which defeated the point of this whole feature.
-    //
-    // One alert per conversation, not per message: a customer's follow-up
-    // messages before anyone picks it up update that same alert quietly
-    // ("Ada (3 messages): …") instead of re-notifying — and re-sounding —
-    // every admin each time. "Away" admins get it silently (see
-    // User.adminOnDuty). The 5-minute "still waiting" reminder is
-    // SupportAlertsService's job.
-    if (senderRole !== 'ADMIN' && thread?.isSupport && otherParticipants.length === 0) {
-      const [admins, messageCount] = await Promise.all([
-        this.prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true, adminOnDuty: true } }),
-        this.prisma.message.count({ where: { threadId } }),
-      ]);
-      const preview = previewText.length > 140 ? `${previewText.slice(0, 140)}…` : previewText;
-      const body = messageCount > 1 ? `${senderName} (${messageCount} messages): ${preview}` : `${senderName}: ${preview}`;
-      await Promise.all(
-        admins.map((admin) =>
-          this.notifications.upsertThreadAlert(
-            admin.id,
-            NotificationType.NEW_MESSAGE,
-            threadId,
-            thread.supportTopic ? `New support conversation · ${SUPPORT_TOPIC_LABEL[thread.supportTopic]}` : 'New support conversation',
-            body,
-            !admin.adminOnDuty,
-          ),
-        ),
-      );
-      this.gateway.broadcastToAdmins('message:new', { threadId, message: withQuote });
-    }
-
-    return withQuote;
   }
 
   /// Posts an automatic SYSTEM message (no sender) into a thread and pushes
@@ -955,9 +957,8 @@ export class ChatService {
 
   async markRead(threadId: string, userId: string, senderRole?: UserRole): Promise<void> {
     await this.assertCanRead(threadId, userId, senderRole);
-    // Opening a conversation also clears the caller's own notifications
-    // about it — they used to stay unread (and keep the bell count up)
-    // after the chat itself had been read.
+    // Opening a conversation also marks the caller's notifications about it
+    // read, so the bell count drops with the chat's.
     await this.prisma.notification.updateMany({
       where: { userId, threadId, readAt: null },
       data: { readAt: new Date() },
@@ -1238,6 +1239,13 @@ export class ChatService {
 }
 
 /// What a reply shows of the message it quotes.
+/// Notification preview text: the message, cut to 140 characters, or
+/// "📷 Photo" for an image sent without a caption.
+function messagePreview(body: string): string {
+  const text = body || '📷 Photo';
+  return text.length > 140 ? `${text.slice(0, 140)}…` : text;
+}
+
 const REPLY_QUOTE_SELECT = {
   id: true,
   body: true,

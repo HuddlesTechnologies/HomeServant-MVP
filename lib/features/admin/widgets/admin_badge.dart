@@ -4,8 +4,7 @@ import '../../../core/theme/app_text_styles.dart';
 enum AdminBadgeSize { small, regular, large }
 
 /// A small tinted pill label ("Verified", "Suspended", "Support", ...)
-/// in [color] on a 12%-alpha wash of the same color. Six admin screens
-/// used to define their own copy of this, differing only in size.
+/// in [color] on a 12%-alpha wash of the same color, in three sizes.
 class AdminBadge extends StatelessWidget {
   const AdminBadge({super.key, required this.text, required this.color, this.size = AdminBadgeSize.regular});
 

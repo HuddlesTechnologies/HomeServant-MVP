@@ -4,8 +4,7 @@ import '../core/theme/app_text_styles.dart';
 
 /// A read-only "label: value" row — grey label in a fixed-width column,
 /// navy value beside it. For the light (white/off-white) detail cards on
-/// the admin screens and the landlord's view of a tenant's profile, which
-/// used to each carry their own copy of this widget.
+/// the admin screens and the landlord's view of a tenant's profile.
 class LabeledValueRow extends StatelessWidget {
   const LabeledValueRow(this.label, this.value, {super.key, this.labelWidth = 140, this.verticalPadding = 6});
 

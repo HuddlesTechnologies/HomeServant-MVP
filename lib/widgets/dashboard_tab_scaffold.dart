@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 
 /// Shared page shell for every tabbed dashboard (tenant, landlord, vendor):
-/// a [Scaffold] with [navBar] floated over the bottom-centre. Each
-/// dashboard used to duplicate this exact `Scaffold` > `SafeArea` > `Stack`
-/// > `Positioned` structure with only the body, nav bar, and background
-/// colour differing.
+/// a [Scaffold] with [navBar] floated over the bottom-centre.
 ///
 /// [body] is placed as-is — dashboards vary in whether (and how wide) they
 /// self-constrain their own content (e.g. the tenant feed cheats its

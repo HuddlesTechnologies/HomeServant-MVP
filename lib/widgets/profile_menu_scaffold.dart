@@ -23,11 +23,11 @@ class ProfileMenuItemSpec {
   final bool showDivider;
 }
 
-/// Shared shell for a profile screen's photo + edit button + menu list —
-/// the tenant and landlord profile screens each used to define this same
-/// layout by hand, differing only in their colour values (tenant: the
-/// switchable `DashboardTheme`; landlord: fixed navy/gold) and their menu
-/// items. Built from the existing [ProfileEditButton]/[ProfileMenuTile].
+/// Shared shell for a profile screen's photo + edit button + menu list,
+/// used by the tenant and landlord profile screens. They differ only in
+/// colours (tenant: the switchable `DashboardTheme`; landlord: fixed
+/// navy/gold) and menu items, which are parameters. Built from
+/// [ProfileEditButton] and [ProfileMenuTile].
 class ProfileMenuScaffold extends StatelessWidget {
   const ProfileMenuScaffold({
     super.key,

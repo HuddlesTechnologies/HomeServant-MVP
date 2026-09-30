@@ -54,10 +54,9 @@ class _OtpInputRowState extends State<OtpInputRow> {
 
   @override
   Widget build(BuildContext context) {
-    // Fixed-size boxes, centred as a group — they used to be Expanded
-    // squares that grew with the screen (huge and misaligned on a wide web
-    // layout), with the digit sitting at the top of each box instead of in
-    // the middle. They only shrink when the row can't fit them.
+    // Fixed-size boxes, centred as a group, with the digit centred in each,
+    // so they don't grow huge on a wide web layout. They only shrink when
+    // the row can't fit them.
     return LayoutBuilder(
       builder: (context, constraints) {
         final available = constraints.maxWidth - _gap * (widget.length - 1);

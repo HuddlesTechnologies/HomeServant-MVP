@@ -723,8 +723,9 @@ class _RentDurationPicker extends StatelessWidget {
   }
 }
 
-/// Per-property replacement for the old device-wide "Allow Tenant
-/// Messages" toggle — calls the new `Property.messagingEnabled` field.
+/// "Allow Tenant Messages" for this listing: sets
+/// `Property.messagingEnabled`, which hides the Message button and blocks
+/// new chats about it when off.
 class _MessagingToggle extends StatelessWidget {
   const _MessagingToggle({required this.value, required this.onChanged});
 

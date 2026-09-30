@@ -11,22 +11,16 @@ String _lastMessagePreview(ChatMessage? lastMessage) {
 }
 
 /// One row in a conversation list: avatar, other participant's name, last
-/// message preview, and an optional time/unread indicator — shared by the
-/// tenant and landlord Messages screens, which each used to define this
-/// same row inline with slightly different styling (the tenant row shows a
-/// relative timestamp next to the name and a small unread dot; the landlord
-/// row has no timestamp and shows an unread-count badge instead). Every
-/// style/colour and the avatar/trailing widgets themselves are taken as
-/// parameters — fully resolved by the caller — so each screen's exact
-/// current look carries over unchanged rather than this widget guessing at
-/// shared unread-styling rules that don't actually match between the two.
+/// message preview, and an optional time/unread indicator, for the tenant
+/// and landlord Messages screens. Their rows look different (the tenant
+/// row shows a relative time and an unread dot; the landlord row an
+/// unread-count badge), so every style, colour and the avatar/trailing
+/// widgets are parameters the caller resolves.
 ///
-/// Deliberately has no `onTap` of its own — the tenant screen wraps its row
-/// in a plain `GestureDetector` while the landlord screen wraps its row in
-/// an `InkWell` (for the splash feedback); nesting this widget's own tap
-/// handler inside either would risk a double-fire (and would drop the
-/// landlord row's splash), so each caller keeps its existing wrapper as-is
-/// and this widget only renders the row's content.
+/// Has no `onTap` of its own: the tenant screen wraps it in a
+/// `GestureDetector` and the landlord screen in an `InkWell` (for the
+/// splash). A tap handler here as well could fire twice and would hide the
+/// landlord row's splash.
 class ChatThreadListTile extends StatelessWidget {
   const ChatThreadListTile({
     super.key,

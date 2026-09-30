@@ -121,9 +121,9 @@ export class LeaseLifecycleService {
     }
   }
 
-  /// Sends the same 30/15/0-day-out reminder to both sides of the lease —
-  /// previously tenant-only, which left a landlord with no warning that a
-  /// unit was about to come back on the market. Both notifications share
+  /// Sends the same 30/15/0-day-out reminder to both sides of the lease, so
+  /// the landlord also knows the unit may come back on the market. Both
+  /// notifications share
   /// the one [lastRentReminderDaysOut] de-dupe field on the booking, so
   /// they're always sent (or skipped) together rather than drifting apart.
   private async sendRentExpiryReminders(): Promise<void> {

@@ -52,16 +52,12 @@ class AppTheme {
   /// app's hardcoded navy/white pairing — this pins the dialog to the same
   /// explicit navy-on-white convention every other widget in the app uses.
   ///
-  /// Every color is set directly on [DatePickerThemeData] rather than left
-  /// to infer from a `colorScheme` override — an earlier version of this
-  /// only overrode `colorScheme`, which (verified with an actual rendered
-  /// golden image, not just reading the framework source) still left the
-  /// header's help text/date headline and the entry-mode-toggle icon
-  /// rendering in a washed-out blue-grey instead of navy, well under
-  /// accessible contrast against the dialog's white background. Explicit
-  /// beats inferred: every role a user can actually see text/icons in is
-  /// named here, so there's nothing left for a fallback chain to get
-  /// wrong.
+  /// Every color is set directly on [DatePickerThemeData] rather than
+  /// inferred from a `colorScheme` override: with only `colorScheme`, the
+  /// header's help text, date headline and entry-mode icon render in a
+  /// washed-out blue-grey, well under readable contrast on the white
+  /// dialog. Naming every role that draws text or icons leaves nothing for
+  /// a fallback to get wrong.
   ///
   /// The dialog's own text theme is also pinned to the bundled Givonic
   /// font. The month/year toggle ("September 2026"), the OK/Cancel labels

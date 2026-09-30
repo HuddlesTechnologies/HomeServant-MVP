@@ -6,7 +6,6 @@ import '../../../widgets/labeled_pill_field.dart';
 /// A labelled text field in the vendor forms (Become a Vendor, Edit Shop):
 /// [DashboardTheme.foreground] label on the page background, and
 /// [DashboardTheme.onSurface] text on a [DashboardTheme.surface] fill.
-/// Both vendor screens used to carry their own private copy.
 class VendorTextField extends StatelessWidget {
   const VendorTextField({
     super.key,

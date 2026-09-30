@@ -73,12 +73,9 @@ class Property {
       messagingEnabled: json['messagingEnabled'] as bool? ?? true,
       unitAddress: json['unitAddress'] as String?,
       roomNumber: json['roomNumber'] as String?,
-      // Field names for shortlet-availability are a best guess against the
-      // backend contract described in the build plan (which flagged these
-      // names as unconfirmed) — verify against the real Property response
-      // once the backend agent's work lands, and adjust here if different.
-      // Real backend field names (properties.service.ts): isCurrentlyUnavailable /
-      // availableAgainAt. The others are kept as a defensive fallback only.
+      // The backend sends isCurrentlyUnavailable / availableAgainAt
+      // (properties.service.ts); the other two names are only read as a
+      // fallback.
       shortletUnavailable: (json['isCurrentlyUnavailable'] as bool?) ??
           (json['shortletUnavailable'] as bool?) ??
           (json['isShortletUnavailable'] as bool?) ??
@@ -329,10 +326,9 @@ class Property {
   /// booking reaches MOVED_IN.
   final int? rentDurationMonths;
 
-  /// Per-property replacement for the old device-local
-  /// `AppState.landlordMessagesEnabled` toggle — when false, a tenant can't
-  /// message this landlord or book an inspection through chat, only pay
-  /// rent directly.
+  /// The landlord's "Allow Tenant Messages" for this listing. When false,
+  /// a tenant can't message this landlord or book an inspection through
+  /// chat, only pay rent directly.
   final bool messagingEnabled;
 
   /// Shortlet-only: the specific unit's address and room/unit number,

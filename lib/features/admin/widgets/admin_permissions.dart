@@ -10,8 +10,8 @@ import '../../../state/app_state.dart';
 ///
 /// Uses `watch`, not `select`: these getters are called straight from list
 /// item builders (Users, Vendors, Properties, Marketplace), and provider
-/// asserts that `select` is never used there — in debug builds that
-/// assertion replaced each of those lists with the red error screen.
+/// asserts that `select` is never used there (in debug builds the failed
+/// assertion replaces the list with the red error screen).
 extension AdminPermissions on BuildContext {
   bool get canModerate => watch<AppState>().adminLevel?.atLeastModerator ?? false;
 

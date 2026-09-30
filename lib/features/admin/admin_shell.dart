@@ -213,8 +213,8 @@ class _AdminShellState extends State<AdminShell> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 12),
-        // Explicit navy/white/gold (see AppTheme's snackBarTheme) — the
-        // "Turn on" button used to be nearly invisible.
+        // Explicit navy background, white text and gold action (see
+        // AppTheme's snackBarTheme), so the "Turn on" button is readable.
         backgroundColor: AppColors.navy,
         content: Text(
           'Get a pop-up for new chats and alerts even when this tab is in the background?',
@@ -457,9 +457,8 @@ class _AdminShellState extends State<AdminShell> {
 
   static bool _usesSidebar(BuildContext context) => MediaQuery.sizeOf(context).width >= Breakpoints.medium;
 
-  /// Not `static const` like the old list — the Vendors/Reports
-  /// destinations' icons carry live badge counts, so this has to be
-  /// rebuilt from instance state rather than fixed at compile time.
+  /// A getter, not a constant: the Vendors/Reports icons carry live badge
+  /// counts, so the list is rebuilt from the current state.
   List<NavigationDestination> get _primaryDestinations => [
     const NavigationDestination(icon: Icon(Icons.dashboard_outlined), selectedIcon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
     const NavigationDestination(icon: Icon(Icons.people_outline_rounded), selectedIcon: Icon(Icons.people_rounded), label: 'Users'),

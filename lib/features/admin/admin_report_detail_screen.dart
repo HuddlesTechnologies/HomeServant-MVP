@@ -15,11 +15,10 @@ import 'widgets/transfer_target_sheet.dart';
 import '../../widgets/labeled_value_row.dart';
 import 'widgets/report_status_badge.dart';
 
-/// Full report detail — reached by tapping a row in AdminReportsTab or the
-/// dashboard's activity feed. Owns the status/transfer actions that used to
-/// live in AdminReportsTab's bottom sheet, plus links out to the reported
-/// property/vendor and the reporter's own profile — "every possibly needed
-/// info for that section."
+/// Full report detail, reached by tapping a row in AdminReportsTab or the
+/// dashboard's activity feed: the report, its status and transfer actions,
+/// and links to the reported property or vendor and the reporter's
+/// profile.
 class AdminReportDetailScreen extends StatefulWidget {
   const AdminReportDetailScreen({super.key, required this.reportId});
 

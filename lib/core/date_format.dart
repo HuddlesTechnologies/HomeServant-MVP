@@ -1,6 +1,4 @@
-/// Short month names, shared by every screen that formats a date as
-/// "24 Oct 2026" or similar — History, Edit Profile, and the chat thread
-/// screen each used to define their own identical `_months` list.
+/// Short month names, for every date shown as "24 Oct 2026" or similar.
 const monthAbbreviations = [
   'Jan',
   'Feb',
@@ -35,9 +33,8 @@ String timeOfDayGreeting([DateTime? now]) {
 }
 
 /// "2m ago"/"3h ago"-style relative timestamp, falling back to
-/// [formatShortDate] once [dt] is more than a week old — the shared
-/// logic behind the near-identical formatters that used to be
-/// duplicated in the chat thread, messages, and notifications screens.
+/// [formatShortDate] once [dt] is more than a week old. Used by the chat
+/// thread, messages and notifications screens.
 String formatRelativeTime(DateTime dt) {
   final diff = DateTime.now().difference(dt);
   if (diff.inMinutes < 1) return 'Just now';

@@ -36,7 +36,7 @@ export function changesAdminQueues(model: string | undefined, operation: string)
 /// prisma.config.ts.
 ///
 /// What Nest receives is the client extended with a query hook (Prisma's
-/// replacement for the old `$use` middleware): one place that sees every
+/// `$extends` query extension): one place that sees every
 /// write, so no code path that changes a listing can forget to tell
 /// connected apps (ChatGateway broadcasts `listings:changed`). `$extends`
 /// returns a new client rather than changing this one, so the constructor

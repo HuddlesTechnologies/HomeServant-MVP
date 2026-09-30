@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme/app_text_styles.dart';
 
 /// The outlined "Edit Profile" pill shown at the top of every profile
-/// screen (tenant, vendor, landlord) — each used to define its own
-/// private, near-identical `_EditProfileButton`.
+/// screen (tenant, vendor, landlord).
 class ProfileEditButton extends StatelessWidget {
   const ProfileEditButton({super.key, required this.color, required this.onTap, this.compact = false});
 

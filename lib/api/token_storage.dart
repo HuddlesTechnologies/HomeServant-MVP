@@ -2,17 +2,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'web_session_storage_stub.dart' if (dart.library.html) 'web_session_storage_web.dart' as web_storage;
 
-/// Access/refresh tokens live in the platform keychain, not
-/// [SharedPreferences] — [AppState] used to store the user's raw password
-/// there, which real tokens must not repeat.
+/// Access/refresh tokens and the app-lock PIN live in the platform
+/// keychain, never in [SharedPreferences], which is plain text on disk.
 ///
-/// On web there is no platform keychain, so [FlutterSecureStorage] falls
-/// back to browser `localStorage` — which every tab/window on the same
-/// origin shares. That let two different users signed in from two tabs on
-/// the same browser silently bleed into each other's session (a tab left
-/// open for user A would pick up user B's token as soon as B logged in
-/// elsewhere and it made its next background request). So on web, tokens go
-/// to `sessionStorage` instead — isolated per tab — via [web_storage].
+/// On web there is no keychain, and [FlutterSecureStorage] would fall back
+/// to `localStorage`, which every tab on the same origin shares: a tab
+/// signed in as user A would pick up user B's token as soon as B signed in
+/// in another tab. So on web, tokens go to `sessionStorage`, which is
+/// separate per tab, via [web_storage].
 class TokenStorage {
   TokenStorage() : _storage = const FlutterSecureStorage();
 

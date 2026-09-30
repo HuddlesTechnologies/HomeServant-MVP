@@ -23,9 +23,8 @@ import 'widgets/admin_badge.dart';
 /// role gets from `ChatRepository.myThreads()`) plus a shared "Support
 /// Queue" tab: every open "Contact Support" thread, claimed or not, visible
 /// to every admin regardless of participancy (see backend
-/// ChatService.findSupportQueue) — that's the fix for "admins never
-/// receive support messages," which used to be a fully local, fake UI with
-/// no backend thread behind it at all.
+/// ChatService.findSupportQueue), so a new support message always reaches
+/// someone.
 class AdminMessagesTab extends StatefulWidget {
   const AdminMessagesTab({super.key});
 

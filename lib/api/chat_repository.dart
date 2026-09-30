@@ -29,7 +29,7 @@ class ChatRepository {
   /// backend ChatService.openSupportThread. Unlike [openThread], there's no
   /// recipient to pick; any admin can pick it up from the shared queue.
   /// Returns just the thread's id: the chat screen needs nothing else, and
-  /// re-fetching the whole inbox here used to hold up opening Live Chat.
+  /// not re-fetching the inbox here keeps Live Chat quick to open.
   Future<String> openSupportThread({SupportTopic? topic}) {
     return _client.call(() async {
       final response = await _client.dio.post('/threads/support', data: {if (topic != null) 'topic': topic.apiValue});

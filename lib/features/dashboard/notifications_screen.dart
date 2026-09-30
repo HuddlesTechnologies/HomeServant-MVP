@@ -42,9 +42,8 @@ const _vendorNotificationTypes = {
 };
 
 /// This account's notifications. With [vendorOnly] (the vendor
-/// dashboard's bell) it shows just the shop-related ones — the same
-/// underlying rows, filtered client-side. The vendor list used to be a
-/// separate near-copy of this screen.
+/// dashboard's bell) it shows just the shop-related ones: the same rows,
+/// filtered on the device.
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, required this.theme, this.vendorOnly = false});
 

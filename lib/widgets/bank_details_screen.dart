@@ -53,9 +53,8 @@ class BankDetailsPalette {
 /// real account holder's name before saving — the same name the server
 /// independently re-resolves and actually persists.
 ///
-/// Landlords and vendors used to have two copies of this screen that
-/// differed only in colors, where the saved account comes from/goes to,
-/// and the intro text; those are the parameters now.
+/// Used by both landlords and vendors: the colours, where the saved account
+/// is read from and written to, and the intro text are parameters.
 class BankDetailsScreen extends StatefulWidget {
   const BankDetailsScreen._({
     required this.palette,
@@ -390,11 +389,10 @@ class _BankPickerSheetState extends State<_BankPickerSheet> {
         ? widget.banks
         : widget.banks.where((b) => b.name.toLowerCase().contains(query)).toList();
 
-    // A fixed height (not sized to its content): the list used to be
-    // shrinkWrap'd inside a min-size Column, so every keystroke in the
-    // search box resized the whole sheet — it jumped around while
-    // filtering and collapsed to nothing on zero matches. The keyboard's
-    // inset is added below so the list isn't hidden under it on mobile web.
+    // A fixed height, not sized to its content, so the sheet doesn't jump
+    // around as the search filters the list (or collapse when nothing
+    // matches). The keyboard's inset is added below so the list isn't
+    // hidden under it on mobile web.
     final media = MediaQuery.of(context);
     final height = (media.size.height * 0.75).clamp(0.0, 640.0).toDouble();
     return Padding(

@@ -22,10 +22,8 @@ import { adminCanAccessSupportThread } from './support-access';
 /// this can't just inject ConfigService the way a normal provider would.
 const socketCorsOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:8765').split(',').map((o) => o.trim());
 
-/// Real-time delivery for chat — previously a thread's messages only ever
-/// loaded once, when the screen opened, with no polling and no push, so a
-/// message sent by the other party while you were already looking at the
-/// thread just never appeared until you left and reopened it.
+/// Real-time delivery for chat: new messages, read receipts, notifications
+/// and admin badge updates reach connected apps as they happen.
 ///
 /// Auth happens once, at the socket handshake (the same access token the
 /// REST API uses, passed as `auth: { token }` from the client) rather than

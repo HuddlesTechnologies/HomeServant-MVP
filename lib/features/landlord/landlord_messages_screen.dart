@@ -72,11 +72,8 @@ class _LandlordMessagesScreenState extends State<LandlordMessagesScreen> {
           )
           .toList();
     }
-    // "All" is the default. The list used to open on "Unread" with no way
-    // back to read conversations (the other two pills, Deleted/Archived,
-    // had nothing behind them and were always empty), so a chat vanished
-    // from the inbox the moment it was opened — looking like its history
-    // had been wiped, though every message was still on the server.
+    // "All" is the default, so a conversation stays in the list after it's
+    // read; "Unread" narrows it to chats with new messages.
     return _filterIndex == 1 ? threads.where((t) => t.unreadCount > 0).toList() : threads;
   }
 

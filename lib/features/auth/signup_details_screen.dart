@@ -17,11 +17,10 @@ import '../../widgets/upload_picker.dart';
 import '../../widgets/upload_picker_rules.dart';
 
 /// Signup step 2 (profile photo, identification, gender, occupation,
-/// marital status) for both tenants and landlords. The two used to be
-/// separate near-identical screens, and fixes kept landing in only one of
-/// them (landlord signup was missing gender/occupation/marital status
-/// entirely for a while). The only role differences are below: a tenant
-/// gives a home address; a landlord uploads a verification document.
+/// marital status) for both tenants and landlords, as one screen so both
+/// roles always collect the same fields. The only role differences: a
+/// tenant gives a home address; a landlord uploads a verification
+/// document.
 class SignupDetailsScreen extends StatefulWidget {
   const SignupDetailsScreen({super.key, required this.role, required this.onFinish});
 
