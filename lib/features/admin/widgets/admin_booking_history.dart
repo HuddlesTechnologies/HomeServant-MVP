@@ -246,7 +246,7 @@ class _BookingDetails extends StatelessWidget {
           if (property != null) ...[
             _heading('Property'),
             _row('Category', _words(property.category)),
-            _row('Rooms', '${property.bedrooms} bed · ${property.bathrooms} bath'),
+            _row('Rooms', '${property.bedrooms} bed · ${property.bathrooms} bath · ${property.kitchens} kitchen${property.kitchens == 1 ? '' : 's'}'),
             _row('Listed price', '${nairaLabel(property.price)}/${property.priceUnit.toLowerCase()}'),
             if (property.rentDurationMonths != null) _row('Lease length', '${property.rentDurationMonths} months'),
             _row('Address', '${property.location}, ${property.state}'),

@@ -5,7 +5,14 @@ import { PlatformSettingsService } from '../platform-settings/platform-settings.
 import { PrismaService } from '../prisma/prisma.service';
 import { withMoneyLock } from './money-lock';
 import { PaymentNotices } from './payment-notices';
-import { PayoutOutcome, RETRYABLE_TRANSFER_STATUSES, isLowBalanceError, lowBalanceMessage } from './payment-rules';
+import {
+  CANCELLED_PAYOUT_ERROR,
+  PAUSED_PAYOUT_ERROR,
+  PayoutOutcome,
+  RETRYABLE_TRANSFER_STATUSES,
+  isLowBalanceError,
+  lowBalanceMessage,
+} from './payment-rules';
 
 /// A landlord's or vendor's payout details.
 export type PayoutAccount = { bankCode: string | null; accountNumber: string | null; accountName: string | null };
@@ -44,6 +51,9 @@ export class PayoutSender {
       }
       const current = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
       if (current.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment is no longer held');
+      // An admin paused or cancelled it (Payouts & Refunds): nothing is sent.
+      if (current.payoutCancelledAt) throw new BadRequestException(CANCELLED_PAYOUT_ERROR);
+      if (current.payoutPausedAt) throw new BadRequestException(PAUSED_PAYOUT_ERROR);
 
       // Payments released before payoutReference existed used their own id
       // as the transfer reference.
@@ -138,13 +148,27 @@ export class PayoutSender {
   /// heldForVerificationAt) when "Pay unverified landlords" is off and they
   /// aren't verified. Never throws: a failed transfer returns 'failed' and
   /// waits on the admin Payouts screen, so the tenant's side (move-in,
-  /// stay, renewal) always goes ahead.
+  /// stay, renewal) always goes ahead. A payout an admin paused (or
+  /// cancelled) isn't sent: it's marked as having come due and returns
+  /// 'paused'.
   async releaseOrHold(
     payment: Payment,
     landlord: PayoutAccount & { id: string },
     reason: string,
     lockHeld = false,
   ): Promise<PayoutOutcome> {
+    const flags = await this.prisma.payment.findUnique({
+      where: { id: payment.id },
+      select: { payoutPausedAt: true, payoutCancelledAt: true },
+    });
+    if (flags?.payoutPausedAt || flags?.payoutCancelledAt) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { payoutLastError: flags.payoutCancelledAt ? CANCELLED_PAYOUT_ERROR : PAUSED_PAYOUT_ERROR },
+      });
+      this.logger.log(`Payout for payment ${payment.id} not sent: ${flags.payoutCancelledAt ? 'cancelled' : 'paused'} by an admin`);
+      return 'paused';
+    }
     if (!(await this.platform.payUnverifiedLandlords())) {
       const verification = await this.prisma.identityVerification.findUnique({ where: { userId: landlord.id }, select: { status: true } });
       if (verification?.status !== VerificationStatus.APPROVED) {
@@ -173,7 +197,13 @@ export class PayoutSender {
     });
     if (!landlord) return 0;
     const held = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null }, booking: { property: { landlordId } } },
+      where: {
+        status: PaymentStatus.PAID_HELD,
+        heldForVerificationAt: { not: null },
+        payoutPausedAt: null,
+        payoutCancelledAt: null,
+        booking: { property: { landlordId } },
+      },
       include: { booking: { select: { property: { select: { title: true } } } } },
     });
     let released = 0;
@@ -207,7 +237,7 @@ export class PayoutSender {
   /// when "Pay unverified landlords" is switched back on.
   async releaseAllHeld(): Promise<number> {
     const rows = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null } },
+      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null }, payoutPausedAt: null, payoutCancelledAt: null },
       select: { booking: { select: { property: { select: { landlordId: true } } } } },
     });
     const landlordIds = [...new Set(rows.map((r) => r.booking?.property.landlordId).filter((id): id is string => !!id))];
@@ -219,7 +249,7 @@ export class PayoutSender {
   /// For Platform Controls: how much is held for verification right now.
   async heldStats(): Promise<{ count: number; totalKobo: number; landlords: number }> {
     const rows = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null } },
+      where: { status: PaymentStatus.PAID_HELD, heldForVerificationAt: { not: null }, payoutCancelledAt: null },
       select: { amount: true, platformFeeAmount: true, booking: { select: { property: { select: { landlordId: true } } } } },
     });
     return {

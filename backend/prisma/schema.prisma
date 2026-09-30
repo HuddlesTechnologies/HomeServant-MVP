@@ -198,6 +198,18 @@ model Payment {
   /// Set when an admin refunded the tenant from the console, with why.
   refundedById          String?
   refundReason          String?
+  /// Set while an admin has paused this payout (Payouts & Refunds): no
+  /// transfer to the landlord goes out, automatic or manual, until it's
+  /// resumed. The money stays held.
+  payoutPausedAt        DateTime?
+  payoutPausedById      String?
+  payoutPauseReason     String?
+  /// Set when an admin cancelled this payout for good: the landlord is never
+  /// sent this money. It stays held by HomeServant (still PAID_HELD, so the
+  /// tenant can be refunded from it where the refund rules allow).
+  payoutCancelledAt     DateTime?
+  payoutCancelledById   String?
+  payoutCancelReason    String?
   status                PaymentStatus         @default(INITIATED)
   paidAt                DateTime?
   releasedAt            DateTime?
@@ -625,6 +637,7 @@ model Property {
   priceUnit           PriceUnit
   bedrooms            Int
   bathrooms           Int
+  kitchens            Int              @default(1)
   description         String
   imageUrl            String?
   galleryUrls         String[]         @default([])

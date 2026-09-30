@@ -10,6 +10,7 @@ export interface EmailProperty {
   priceUnit: string;
   bedrooms: number;
   bathrooms: number;
+  kitchens: number;
   listingNumber: number;
 }
 
@@ -24,7 +25,7 @@ export function propertyEmailDetails(p: EmailProperty): { html: string; text: st
     ['Property', `${p.title} (listing #${p.listingNumber})`],
     ['Address', `${p.location}, ${p.state}`],
     ['Type', CATEGORY[p.category] ?? p.category],
-    ['Rooms', `${p.bedrooms} bedroom${p.bedrooms === 1 ? '' : 's'}, ${p.bathrooms} bathroom${p.bathrooms === 1 ? '' : 's'}`],
+    ['Rooms', `${p.bedrooms} bedroom${p.bedrooms === 1 ? '' : 's'}, ${p.bathrooms} bathroom${p.bathrooms === 1 ? '' : 's'}, ${p.kitchens} kitchen${p.kitchens === 1 ? '' : 's'}`],
     ['Price', `₦${p.price.toLocaleString('en-NG')} per ${UNIT[p.priceUnit] ?? p.priceUnit.toLowerCase()}`],
   ];
   const html =
@@ -47,5 +48,6 @@ export const EMAIL_PROPERTY_SELECT = {
   priceUnit: true,
   bedrooms: true,
   bathrooms: true,
+  kitchens: true,
   listingNumber: true,
 } as const;

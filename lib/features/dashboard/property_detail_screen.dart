@@ -326,7 +326,11 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                                 icon: Icons.bathtub_outlined,
                                 label: '${property.bathrooms} Bathroom${property.bathrooms == 1 ? '' : 's'}',
                               ),
-                              _FeatureIcon(theme: theme, icon: Icons.kitchen_outlined, label: 'Kitchen'),
+                              _FeatureIcon(
+                                theme: theme,
+                                icon: Icons.kitchen_outlined,
+                                label: '${property.kitchens} Kitchen${property.kitchens == 1 ? '' : 's'}',
+                              ),
                             ],
                           ),
                           const SizedBox(height: 26),

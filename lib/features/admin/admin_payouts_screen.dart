@@ -16,7 +16,8 @@ const _red = Color(0xFFB42318);
 const _amber = Color(0xFF8A5A0B);
 
 /// Moderators and super admins: rent money that needs attention — payouts to landlords
-/// that haven't gone out, and refunds to tenants that failed. Every action
+/// that haven't gone out (or that an admin paused), and refunds to tenants
+/// that failed. A payout can be paused, resumed or cancelled here. Every action
 /// goes through the same safeguards as automatic payments (one money action
 /// at a time; Paystack is asked first whether it already happened), so
 /// pressing a button twice can never pay or refund twice. White cards,
@@ -193,6 +194,58 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
     });
   }
 
+  Future<void> _pausePayout(StuckPayment p) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Pause the payout to ${p.landlordName}?',
+      body: 'Nothing is sent to the landlord (${nairaLabelFromKobo(p.amountKobo)}) until an admin resumes it: not on move-in, not on '
+          'verification, and not by Retry. The money stays held by HomeServant.',
+      actionLabel: 'Pause payout',
+      hint: 'Reason (only admins see it)',
+    );
+    if (reason == null || !mounted) return;
+    final repo = context.read<AppState>().verification;
+    await _run(p, () async {
+      await repo.pausePayout(p.paymentId, reason);
+      return 'Payout paused.';
+    });
+  }
+
+  Future<void> _resumePayout(StuckPayment p) async {
+    final ok = await showAdminConfirmSheet(
+      context,
+      title: 'Resume the payout to ${p.landlordName}?',
+      body: 'If the landlord is owed it now, ${nairaLabelFromKobo(p.amountKobo)} is sent straight away (Paystack is checked first, so it is '
+          'never sent twice). Otherwise it is paid when it comes due, as usual.',
+      actionLabel: 'Resume payout',
+      destructive: false,
+    );
+    if (ok != true || !mounted) return;
+    final repo = context.read<AppState>().verification;
+    await _run(p, () async {
+      final result = await repo.resumePayout(p.paymentId);
+      if (result.sent) return 'Payout resumed and sent to ${p.landlordName}.';
+      return result.message == null ? 'Payout resumed.' : 'Payout resumed, but not sent yet: ${result.message}';
+    });
+  }
+
+  Future<void> _cancelPayout(StuckPayment p) async {
+    final reason = await showAdminReasonSheet(
+      context,
+      title: 'Cancel the payout to ${p.landlordName}?',
+      body: 'The landlord will never be sent this ${nairaLabelFromKobo(p.amountKobo)}. It stays held by HomeServant and leaves this list. '
+          'This can\'t be undone.${p.canRefundTenant ? ' To give the money back to the tenant instead, use Refund tenant.' : ''}',
+      actionLabel: 'Cancel payout',
+      hint: 'Reason (the landlord sees it)',
+    );
+    if (reason == null || !mounted) return;
+    final repo = context.read<AppState>().verification;
+    await _run(p, () async {
+      await repo.cancelPayout(p.paymentId, reason);
+      return 'Payout cancelled.';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _items;
@@ -262,7 +315,7 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
   Widget _card(StuckPayment p) {
     final busy = _busy.contains(p.paymentId) || p.inProgress;
     final isRefund = p.kind == StuckPaymentKind.refund;
-    final color = p.reason == 'AWAITING_VERIFICATION' || p.reason == 'READY' ? _amber : _red;
+    final color = p.reason == 'AWAITING_VERIFICATION' || p.reason == 'READY' || p.reason == 'PAUSED' ? _amber : _red;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
@@ -300,6 +353,8 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
           if (isRefund && p.requestedBy != null)
             _row('Asked for by', switch (p.requestedBy) { 'LANDLORD' => 'Landlord (rejected booking)', 'ADMIN' => 'An admin', _ => 'Tenant' }),
           if (p.attempts > 0) _row('Attempts', '${p.attempts}'),
+          if (p.pausedAt != null) _row('Paused on', formatShortDate(p.pausedAt!)),
+          if (p.pauseReason != null && p.pauseReason!.isNotEmpty) _row('Pause note', p.pauseReason!),
           if (p.lastError != null) ...[
             const SizedBox(height: 6),
             Container(
@@ -332,7 +387,10 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
               children: [
                 if (p.canRetry) _button('Retry payout', filled: true, onTap: () => _retryPayout(p)),
                 if (p.canRetryRefund) _button('Retry refund', filled: true, onTap: () => _retryRefund(p)),
+                if (p.canResume) _button('Resume payout', filled: true, onTap: () => _resumePayout(p)),
                 if (p.canRefundTenant) _button('Refund tenant', onTap: () => _refundTenant(p)),
+                if (p.canPause) _button('Pause payout', onTap: () => _pausePayout(p)),
+                if (p.canCancel) _button('Cancel payout', danger: true, onTap: () => _cancelPayout(p)),
                 _button('View landlord', onTap: () async {
                   await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AdminUserDetailScreen(userId: p.landlordId)));
                   if (mounted) _load();
@@ -355,7 +413,9 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
     ),
   );
 
-  Widget _button(String label, {required VoidCallback onTap, bool filled = false}) => filled
+  /// [danger]: outlined in the screen's red, for an action that can't be
+  /// undone (red text on white).
+  Widget _button(String label, {required VoidCallback onTap, bool filled = false, bool danger = false}) => filled
       ? ElevatedButton(
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.navy,
@@ -367,10 +427,10 @@ class _AdminPayoutsScreenState extends State<AdminPayoutsScreen> {
         )
       : OutlinedButton(
           style: OutlinedButton.styleFrom(
-            side: const BorderSide(color: AppColors.navy),
+            side: BorderSide(color: danger ? _red : AppColors.navy),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           ),
           onPressed: onTap,
-          child: Text(label, style: AppTextStyles.body(color: AppColors.navy, size: 13, weight: FontWeight.w600)),
+          child: Text(label, style: AppTextStyles.body(color: danger ? _red : AppColors.navy, size: 13, weight: FontWeight.w600)),
         );
 }

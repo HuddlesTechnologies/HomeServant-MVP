@@ -972,7 +972,13 @@ export class PaymentsService {
   @Cron(CronExpression.EVERY_30_MINUTES)
   async retryLowBalancePayouts(): Promise<number> {
     const waiting = await this.prisma.payment.findMany({
-      where: { purpose: PaymentPurpose.RENTAL_BOOKING, status: PaymentStatus.PAID_HELD, payoutLastError: { not: null } },
+      where: {
+        purpose: PaymentPurpose.RENTAL_BOOKING,
+        status: PaymentStatus.PAID_HELD,
+        payoutLastError: { not: null },
+        payoutPausedAt: null,
+        payoutCancelledAt: null,
+      },
       select: { id: true, payoutLastError: true },
       orderBy: { paidAt: 'asc' },
     });
@@ -1027,6 +1033,8 @@ export class PaymentsService {
     }
     if (payment.status === PaymentStatus.RELEASED) return { status: 'ALREADY_PAID' as const };
     if (payment.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment is not waiting for a payout');
+    if (payment.payoutCancelledAt) throw new BadRequestException('This payout was cancelled');
+    if (payment.payoutPausedAt) throw new BadRequestException('This payout is paused. Resume it first.');
     const booking = payment.booking;
     const landlord = await this.prisma.user.findUniqueOrThrow({
       where: { id: booking.property.landlordId },
@@ -1067,6 +1075,101 @@ export class PaymentsService {
       throw new BadRequestException(after.payoutLastError ?? 'The payout did not go through');
     }
     return { status: 'PAID' as const };
+  }
+
+  /// Payouts & Refunds "Pause": stops this landlord payout from going out —
+  /// automatically (move-in, verification, low-balance retries) or by Retry
+  /// — until it's resumed. Taken under the money lock, so it can't land in
+  /// the middle of a transfer. [reason] is for other admins only.
+  async pausePayout(paymentId: string, adminId: string, reason: string) {
+    await this.loadRentalPayout(paymentId);
+    await withMoneyLock(this.prisma, paymentId, async () => {
+      const current = await this.prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+      if (current.payoutCancelledAt) throw new BadRequestException('This payout was cancelled');
+      if (current.payoutPausedAt) return;
+      await this.prisma.payment.update({
+        where: { id: paymentId },
+        data: { payoutPausedAt: new Date(), payoutPausedById: adminId, payoutPauseReason: reason.trim() },
+      });
+    });
+    this.logger.log(`Payout ${paymentId} paused by admin ${adminId}`);
+    return { status: 'PAUSED' as const };
+  }
+
+  /// Payouts & Refunds "Resume": lifts a pause, then sends the payout if
+  /// it's owed now (the landlord is payable and the tenant has moved in /
+  /// the stay is confirmed). If it isn't owed yet, or the transfer fails,
+  /// it simply stays on the Payouts screen as before: [sent] says which.
+  async resumePayout(paymentId: string, adminId: string) {
+    const payment = await this.loadRentalPayout(paymentId);
+    if (!payment.payoutPausedAt) return { status: 'RESUMED' as const, sent: false, message: null };
+    await withMoneyLock(this.prisma, paymentId, () =>
+      this.prisma.payment.update({
+        where: { id: paymentId },
+        data: { payoutPausedAt: null, payoutPausedById: null, payoutPauseReason: null },
+      }),
+    );
+    this.logger.log(`Payout ${paymentId} resumed by admin ${adminId}`);
+    // Only one that came due while paused (or was already owed) is sent.
+    const owed = !!payment.payoutLastError || !!payment.heldForVerificationAt;
+    if (!owed) return { status: 'RESUMED' as const, sent: false, message: null };
+    try {
+      await this.retryPayout(paymentId);
+      return { status: 'RESUMED' as const, sent: true, message: null };
+    } catch (err) {
+      return { status: 'RESUMED' as const, sent: false, message: (err as Error).message };
+    }
+  }
+
+  /// Payouts & Refunds "Cancel payout": the landlord is never sent this
+  /// money. It stays held by HomeServant (the payment stays PAID_HELD), so
+  /// the tenant can still be refunded from it where the refund rules allow;
+  /// it no longer shows on the Payouts screen. The landlord is told, with
+  /// [reason].
+  async cancelPayout(paymentId: string, adminId: string, reason: string) {
+    const payment = await this.loadRentalPayout(paymentId);
+    const trimmed = reason.trim();
+    if (trimmed.length < 10) throw new BadRequestException('Give a reason (at least 10 characters); the landlord sees it');
+    if (payment.payoutCancelledAt) return { status: 'CANCELLED' as const };
+    await withMoneyLock(this.prisma, paymentId, () =>
+      this.prisma.payment.update({
+        where: { id: paymentId },
+        data: {
+          payoutCancelledAt: new Date(),
+          payoutCancelledById: adminId,
+          payoutCancelReason: trimmed,
+          heldForVerificationAt: null,
+          payoutLastError: null,
+        },
+      }),
+    );
+    this.logger.warn(`Payout ${paymentId} cancelled by admin ${adminId}: ${trimmed}`);
+    const booking = payment.booking;
+    const landlord = await this.prisma.user.findUnique({ where: { id: booking.property.landlordId }, select: { id: true, email: true } });
+    if (landlord) {
+      const naira = ((payment.amount - payment.platformFeeAmount) / 100).toLocaleString('en-NG', { maximumFractionDigits: 2 });
+      await this.notices.notifyAboutBooking(
+        booking,
+        landlord.id,
+        landlord.email,
+        NotificationType.BOOKING_STATUS,
+        'Your payout was cancelled',
+        `HomeServant has cancelled your payout of NGN ${naira} for ${booking.property.title}. Reason: ${trimmed}. Contact support if you have questions.`,
+      );
+    }
+    return { status: 'CANCELLED' as const };
+  }
+
+  /// A rent payment still held in escrow, with its booking and property.
+  private async loadRentalPayout(paymentId: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { booking: { include: { property: true } } },
+    });
+    if (!payment?.booking || payment.purpose !== PaymentPurpose.RENTAL_BOOKING) throw new NotFoundException('Payout not found');
+    if (payment.status === PaymentStatus.RELEASED) throw new BadRequestException('This payout has already been sent');
+    if (payment.status !== PaymentStatus.PAID_HELD) throw new BadRequestException('This payment is not waiting for a payout');
+    return { ...payment, booking: payment.booking };
   }
 
   /// For Platform Controls: how much is currently held.

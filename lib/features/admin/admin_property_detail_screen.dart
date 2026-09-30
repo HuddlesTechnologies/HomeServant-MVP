@@ -202,6 +202,7 @@ class _AdminPropertyDetailScreenState extends State<AdminPropertyDetailScreen> {
                         LabeledValueRow('Price', '₦${formatWithThousandsSeparator(property.price)}/${property.priceUnit}'),
                         LabeledValueRow('Bedrooms', '${property.bedrooms}'),
                         LabeledValueRow('Bathrooms', '${property.bathrooms}'),
+                        LabeledValueRow('Kitchens', '${property.kitchens}'),
                         if (property.rentDurationMonths != null)
                           LabeledValueRow('Lease Duration', '${property.rentDurationMonths} months'),
                         if (property.unitAddress != null && property.unitAddress!.isNotEmpty)

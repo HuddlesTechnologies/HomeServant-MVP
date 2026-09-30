@@ -87,7 +87,7 @@ class _BookedPropertyCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${property.priceLabel} · ${property.bedrooms} bed · ${property.bathrooms} bath',
+                  '${property.priceLabel} · ${property.bedrooms} bed · ${property.bathrooms} bath · ${property.kitchens} kitchen${property.kitchens == 1 ? '' : 's'}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.body(color: text, size: 12, weight: FontWeight.w600),
@@ -418,6 +418,7 @@ class _PropertyDetailsSheet extends StatelessWidget {
                     fact(Icons.home_work_outlined, property.category),
                     fact(Icons.bed_outlined, '${property.bedrooms} bed${property.bedrooms == 1 ? '' : 's'}'),
                     fact(Icons.bathtub_outlined, '${property.bathrooms} bath${property.bathrooms == 1 ? '' : 's'}'),
+                    fact(Icons.kitchen_outlined, '${property.kitchens} kitchen${property.kitchens == 1 ? '' : 's'}'),
                   ],
                 ),
                 if (property.description.trim().isNotEmpty) ...[
