@@ -50,6 +50,7 @@ const transactionInclude = {
           priceUnit: true,
           bedrooms: true,
           bathrooms: true,
+          kitchens: true,
           imageUrl: true,
           galleryUrls: true,
         },

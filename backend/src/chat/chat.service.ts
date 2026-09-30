@@ -418,6 +418,7 @@ export class ChatService {
             priceUnit: true,
             bedrooms: true,
             bathrooms: true,
+      kitchens: true,
             description: true,
             imageUrl: true,
             galleryUrls: true,

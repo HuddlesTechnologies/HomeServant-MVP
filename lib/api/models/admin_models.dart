@@ -439,6 +439,7 @@ class AdminBookingProperty {
     required this.priceUnit,
     required this.bedrooms,
     required this.bathrooms,
+    this.kitchens = 1,
     required this.description,
     required this.images,
     required this.isOccupied,
@@ -461,6 +462,7 @@ class AdminBookingProperty {
   final String priceUnit;
   final int bedrooms;
   final int bathrooms;
+  final int kitchens;
   final String description;
   final List<String> images;
   final bool isOccupied;
@@ -486,6 +488,7 @@ class AdminBookingProperty {
       priceUnit: json['priceUnit'] as String? ?? 'YEAR',
       bedrooms: json['bedrooms'] as int? ?? 0,
       bathrooms: json['bathrooms'] as int? ?? 0,
+      kitchens: json['kitchens'] as int? ?? 1,
       description: json['description'] as String? ?? '',
       images: (json['images'] as List? ?? const []).cast<String>(),
       isOccupied: json['isOccupied'] as bool? ?? false,

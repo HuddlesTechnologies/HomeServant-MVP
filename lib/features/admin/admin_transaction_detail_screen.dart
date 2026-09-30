@@ -63,7 +63,7 @@ class AdminTransactionDetailScreen extends StatelessWidget {
                     _Row('Listing #', '${property.listingNumber}'),
                     _Row('Location', [property.location, property.state].where((s) => s.isNotEmpty).join(', ')),
                     _Row('Type', _titleCase(property.category)),
-                    _Row('Rooms', '${property.bedrooms} bed · ${property.bathrooms} bath'),
+                    _Row('Rooms', '${property.bedrooms} bed · ${property.bathrooms} bath · ${property.kitchens} kitchen${property.kitchens == 1 ? '' : 's'}'),
                     _Row('Price', '${nairaLabel(property.price)}${_perUnit(property.priceUnit)}'),
                     const SizedBox(height: 10),
                     _Button(label: 'View full property', icon: Icons.home_work_outlined, onTap: () => _openProperty(context, property.id)),

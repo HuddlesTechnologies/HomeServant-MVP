@@ -105,10 +105,17 @@ export function lowBalanceMessage(availableKobo: number | null, neededKobo: numb
 
 /// What happened to a landlord's payout: sent, held until they're
 /// verified, or failed and waiting for a retry.
-export type PayoutOutcome = 'released' | 'held' | 'failed';
+export type PayoutOutcome = 'released' | 'held' | 'paused' | 'failed';
+
+/// Why a payout wasn't sent while an admin has it paused or cancelled
+/// (saved as the payment's payoutLastError when it came due meanwhile).
+export const PAUSED_PAYOUT_ERROR = 'This payout is paused by an admin';
+export const CANCELLED_PAYOUT_ERROR = 'This payout was cancelled by an admin';
 
 const HELD_PAYOUT_LINE =
   "HomeServant is holding your payout until your identity is verified. Open your Profile and tap \"Get verified\"; it's released automatically once you are.";
+const PAUSED_PAYOUT_LINE =
+  'HomeServant has paused your payout while we look into something. We\'ll be in touch; your money is safe.';
 const DELAYED_PAYOUT_LINE =
   "Your payout is delayed by a problem sending it to your bank. HomeServant has been alerted and will send it shortly; check your bank details in the app.";
 
@@ -117,6 +124,7 @@ const DELAYED_PAYOUT_LINE =
 /// [whenReleased] when it was sent.
 export function landlordPayoutMessage(outcome: PayoutOutcome, event: string, whenReleased: string): string {
   if (outcome === 'held') return `${event}. ${HELD_PAYOUT_LINE}`;
+  if (outcome === 'paused') return `${event}. ${PAUSED_PAYOUT_LINE}`;
   if (outcome === 'failed') return `${event}. ${DELAYED_PAYOUT_LINE}`;
   return whenReleased;
 }

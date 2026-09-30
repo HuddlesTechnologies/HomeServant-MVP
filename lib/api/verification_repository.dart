@@ -121,4 +121,22 @@ class VerificationRepository {
   Future<void> refundTenant(String paymentId, String reason) => _client.call(() async {
     await _client.dio.post('/admin/payouts/$paymentId/refund-tenant', data: {'reason': reason});
   });
+
+  /// Stops a landlord payout from going out until it's resumed.
+  Future<void> pausePayout(String paymentId, String reason) => _client.call(() async {
+    await _client.dio.post('/admin/payouts/$paymentId/pause', data: {'reason': reason});
+  });
+
+  /// Lifts a pause. The server sends the payout straight away if it's owed:
+  /// [sent] says whether it went out, and [message] why not (if it tried).
+  Future<({bool sent, String? message})> resumePayout(String paymentId) => _client.call(() async {
+    final response = await _client.dio.post('/admin/payouts/$paymentId/resume');
+    final data = response.data as Map<String, dynamic>;
+    return (sent: data['sent'] as bool? ?? false, message: data['message'] as String?);
+  });
+
+  /// Cancels a landlord payout for good; [reason] is sent to the landlord.
+  Future<void> cancelPayout(String paymentId, String reason) => _client.call(() async {
+    await _client.dio.post('/admin/payouts/$paymentId/cancel', data: {'reason': reason});
+  });
 }

@@ -49,6 +49,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
   final _price = TextEditingController();
   final _bedrooms = TextEditingController();
   final _bathrooms = TextEditingController();
+  final _kitchens = TextEditingController();
   final _description = TextEditingController();
   final _unitAddress = TextEditingController();
   final _roomNumber = TextEditingController();
@@ -128,6 +129,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     _price.text = initial.price.toString();
     _bedrooms.text = initial.bedrooms.toString();
     _bathrooms.text = initial.bathrooms.toString();
+    _kitchens.text = initial.kitchens.toString();
     _description.text = initial.description;
     _unitAddress.text = initial.unitAddress ?? '';
     _roomNumber.text = initial.roomNumber ?? '';
@@ -156,6 +158,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
     _price.dispose();
     _bedrooms.dispose();
     _bathrooms.dispose();
+    _kitchens.dispose();
     _description.dispose();
     _unitAddress.dispose();
     _roomNumber.dispose();
@@ -272,6 +275,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
             priceUnit: isShortlet ? 'night' : 'year',
             bedrooms: int.tryParse(_bedrooms.text) ?? 0,
             bathrooms: int.tryParse(_bathrooms.text) ?? 0,
+            kitchens: int.tryParse(_kitchens.text) ?? 0,
             description: _description.text.trim(),
             videoPath: videoUrl,
             rentDurationMonths: isShortlet ? null : _rentDurationMonths,
@@ -293,6 +297,7 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
             priceUnit: isShortlet ? 'night' : 'year',
             bedrooms: int.tryParse(_bedrooms.text) ?? 0,
             bathrooms: int.tryParse(_bathrooms.text) ?? 0,
+            kitchens: int.tryParse(_kitchens.text) ?? 0,
             description: _description.text.trim(),
             landlordName: landlordName,
             videoPath: videoUrl,
@@ -421,6 +426,16 @@ class _LandlordAddPropertyScreenState extends State<LandlordAddPropertyScreen> {
                     child: PillTextField(
                       hint: 'Bathrooms',
                       controller: _bathrooms,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      validator: _required,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: PillTextField(
+                      hint: 'Kitchens',
+                      controller: _kitchens,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       validator: _required,

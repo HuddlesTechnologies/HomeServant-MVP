@@ -13,6 +13,7 @@ class Property {
     required this.priceUnit,
     required this.bedrooms,
     required this.bathrooms,
+    this.kitchens = 1,
     required this.description,
     required this.landlordName,
     this.galleryImages = const [],
@@ -62,6 +63,7 @@ class Property {
       priceUnit: (json['priceUnit'] as String) == 'NIGHT' ? 'night' : 'year',
       bedrooms: json['bedrooms'] as int,
       bathrooms: json['bathrooms'] as int,
+      kitchens: json['kitchens'] as int? ?? 1,
       description: json['description'] as String,
       landlordName: (json['landlord'] as Map<String, dynamic>?)?['fullName'] as String? ?? 'User',
       landlordId: (json['landlord'] as Map<String, dynamic>?)?['id'] as String? ?? json['landlordId'] as String?,
@@ -114,6 +116,7 @@ class Property {
     'priceUnit': priceUnit == 'night' ? 'NIGHT' : 'YEAR',
     'bedrooms': bedrooms,
     'bathrooms': bathrooms,
+    'kitchens': kitchens,
     'description': description,
     if (!image.startsWith('assets/')) 'imageUrl': image,
     if (galleryImages.isNotEmpty) 'galleryUrls': galleryImages,
@@ -148,6 +151,7 @@ class Property {
     String? priceUnit,
     int? bedrooms,
     int? bathrooms,
+    int? kitchens,
     String? description,
     String? image,
     List<String>? galleryImages,
@@ -170,6 +174,7 @@ class Property {
     priceUnit: priceUnit ?? this.priceUnit,
     bedrooms: bedrooms ?? this.bedrooms,
     bathrooms: bathrooms ?? this.bathrooms,
+    kitchens: kitchens ?? this.kitchens,
     description: description ?? this.description,
     landlordName: landlordName,
     videoPath: clearVideo ? null : videoPath ?? this.videoPath,
@@ -290,6 +295,7 @@ class Property {
 
   final int bedrooms;
   final int bathrooms;
+  final int kitchens;
   final String description;
 
   /// Name shown as the other party when a tenant taps "Message Landlord" on

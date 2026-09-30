@@ -31,6 +31,13 @@ export class CreatePropertyDto {
   @Min(0)
   bathrooms!: number;
 
+  /// Optional so an older app that doesn't send it still lists fine
+  /// (the column defaults to 1).
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  kitchens?: number;
+
   @IsString()
   @MinLength(10)
   description!: string;

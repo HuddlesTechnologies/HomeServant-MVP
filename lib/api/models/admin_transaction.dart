@@ -32,6 +32,7 @@ class TransactionProperty {
     required this.priceUnit,
     required this.bedrooms,
     required this.bathrooms,
+    this.kitchens = 1,
     this.imageUrl,
     this.galleryUrls = const [],
   });
@@ -46,6 +47,7 @@ class TransactionProperty {
   final String priceUnit;
   final int bedrooms;
   final int bathrooms;
+  final int kitchens;
   final String? imageUrl;
   final List<String> galleryUrls;
 
@@ -63,6 +65,7 @@ class TransactionProperty {
     priceUnit: json['priceUnit'] as String? ?? '',
     bedrooms: json['bedrooms'] as int? ?? 0,
     bathrooms: json['bathrooms'] as int? ?? 0,
+    kitchens: json['kitchens'] as int? ?? 1,
     imageUrl: json['imageUrl'] as String?,
     galleryUrls: (json['galleryUrls'] as List?)?.cast<String>() ?? const [],
   );

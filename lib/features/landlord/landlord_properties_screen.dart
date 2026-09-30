@@ -502,7 +502,7 @@ class _PropertyTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '${property.priceLabel} · ${property.category} · '
-                    '${property.bedrooms} bed · ${property.bathrooms} bath',
+                    '${property.bedrooms} bed · ${property.bathrooms} bath · ${property.kitchens} kitchen${property.kitchens == 1 ? '' : 's'}',
                     style: AppTextStyles.body(color: AppColors.navy, size: 12.5, weight: FontWeight.w600),
                   ),
                   if (property.listingNumber != null) ...[

@@ -10,6 +10,7 @@ describe('property details in booking emails', () => {
     priceUnit: 'YEAR',
     bedrooms: 2,
     bathrooms: 1,
+    kitchens: 1,
     listingNumber: 42,
   };
 
@@ -18,7 +19,7 @@ describe('property details in booking emails', () => {
     expect(text).toContain('Property: Sunny <b>2-Bed</b> Flat (listing #42)');
     expect(text).toContain('Address: Lekki Phase 1, Lagos');
     expect(text).toContain('Type: Apartment');
-    expect(text).toContain('Rooms: 2 bedrooms, 1 bathroom');
+    expect(text).toContain('Rooms: 2 bedrooms, 1 bathroom, 1 kitchen');
     expect(text).toContain('Price: ₦1,200,000 per year');
   });
 
