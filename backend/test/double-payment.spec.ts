@@ -125,7 +125,7 @@ describeDb('one booking per property, and rating after payout (real Postgres)', 
     expect(history.map((b) => b.id)).toEqual([paid.id]);
   });
 
-  it('hides a rental from browsing once paid for, and refuses a second tenant', async () => {
+  it('keeps a paid-for rental listed until move-in, but refuses a second tenant', async () => {
     const { tenant, property } = await listing();
     const notifier = { create: async () => undefined };
     const settings = new PlatformSettingsService(prisma as never, notifier as never, fakeMail() as never);
@@ -137,14 +137,15 @@ describeDb('one booking per property, and rating after payout (real Postgres)', 
     const booking = (await bookings.create(tenant.id, { propertyId: property.id })) as unknown as Created;
     expect(await browse()).toEqual([property.id]);
 
+    // Paid, not moved in yet: still listed, but no one else can pay for it.
     await payments.handleChargeSuccess(booking.reference);
-    expect(await browse()).toEqual([]);
+    expect(await browse()).toEqual([property.id]);
     const other = await makeUser(prisma, UserRole.TENANT);
-    await expect(bookings.create(other.id, { propertyId: property.id })).rejects.toThrow('already been rented');
+    await expect(bookings.create(other.id, { propertyId: property.id })).rejects.toThrow('already paid for this property');
     // The tenant who paid can still open it directly.
     await expect(properties.findOne(property.id)).resolves.toMatchObject({ id: property.id });
 
-    // Moved in: still hidden. Refunded instead: listed again.
+    // Moved in: hidden. Lease over / refunded: listed again.
     await prisma.booking.update({ where: { id: booking.id }, data: { status: 'INSPECTION_CONFIRMED' } });
     await payments.releaseBookingOnMovedIn(booking.id, tenant.id);
     expect(await browse()).toEqual([]);
