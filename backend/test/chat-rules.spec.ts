@@ -60,6 +60,46 @@ describeDb('messaging, support and listing rules (real Postgres)', () => {
     return { tenant, landlord, property };
   }
 
+  // --- Notifications reach the other side -----------------------------------
+
+  it('a chat message notifies the other side: saved to their list, sent live, and pushed', async () => {
+    const { tenant, landlord, property } = await tenantLandlordProperty();
+    await prisma.booking.create({ data: { propertyId: property.id, tenantId: tenant.id, status: 'PAID_AWAITING_INSPECTION' } });
+    const thread = await chat.findOrCreateThread(tenant.id, { recipientId: landlord.id, propertyId: property.id });
+
+    await chat.sendMessage(thread.id, tenant.id, UserRole.TENANT, { body: 'When can I inspect?' });
+    await chat.sendMessage(thread.id, landlord.id, UserRole.LANDLORD, { body: 'Saturday works' });
+
+    for (const [user, from] of [
+      [landlord, tenant],
+      [tenant, landlord],
+    ] as const) {
+      const [saved] = await notifications.findMine(user.id);
+      expect(saved).toMatchObject({ type: 'NEW_MESSAGE', title: `New message from ${from.fullName}`, threadId: thread.id, readAt: null });
+      expect(gateway.events.some((e) => e.kind === 'emitToUser' && e.args[0] === user.id && e.args[1] === 'notification:new')).toBe(true);
+      expect(pushes).toContainEqual({ userId: user.id, title: `New message from ${from.fullName}` });
+    }
+    // Nobody is notified of their own message.
+    expect((await notifications.findMine(tenant.id)).map((n) => n.title)).toEqual([`New message from ${landlord.fullName}`]);
+  });
+
+  it("the chat tells each side the inspection they can arrange, and whether they're the tenant or the landlord", async () => {
+    const { tenant, landlord, property } = await tenantLandlordProperty();
+    const booking = await prisma.booking.create({ data: { propertyId: property.id, tenantId: tenant.id, status: 'PAID_AWAITING_INSPECTION' } });
+    const thread = await chat.findOrCreateThread(tenant.id, { recipientId: landlord.id, propertyId: property.id });
+
+    expect((await chat.getThreadSummary(thread.id, tenant.id, UserRole.TENANT)).inspection).toMatchObject({
+      bookingId: booking.id,
+      status: 'PAID_AWAITING_INSPECTION',
+      role: 'TENANT',
+    });
+    expect((await chat.getThreadSummary(thread.id, landlord.id, UserRole.LANDLORD)).inspection).toMatchObject({ bookingId: booking.id, role: 'LANDLORD' });
+
+    // Nothing to arrange once they've moved in.
+    await prisma.booking.update({ where: { id: booking.id }, data: { status: 'MOVED_IN' } });
+    expect((await chat.getThreadSummary(thread.id, tenant.id, UserRole.TENANT)).inspection).toBeNull();
+  });
+
   // --- Tenant/landlord messaging is tied to payment -------------------------
 
   describe('tenant/landlord payment rules', () => {

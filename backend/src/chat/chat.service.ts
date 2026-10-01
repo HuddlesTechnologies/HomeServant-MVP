@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ActivityLogType, BookingStatus, MessageType, NotificationType, PaymentStatus, Prisma, SupportTopic, UserRole } from '@prisma/client';
+import { ActivityLogType, BookingStatus, MessageType, NotificationType, PaymentStatus, Prisma, PropertyCategory, SupportTopic, UserRole } from '@prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -384,6 +384,29 @@ export class ChatService {
   /// adminCanAccessSupportThread), and to an admin who transferred the
   /// thread away — they get the status (so their notification can say where
   /// it went) but canView false, since it's no longer theirs to read.
+  /// The inspection a tenant–landlord chat can arrange: the tenant's paid,
+  /// not-yet-moved-in rental booking for the chat's property, its status
+  /// and date, and whether [userId] is its TENANT (proposes or changes a
+  /// date) or LANDLORD (accepts, declines, sets or changes one). Null when
+  /// there's nothing to arrange (no such booking, or a shortlet).
+  private async threadInspection(thread: { isSupport: boolean; propertyId: string | null; participants: { userId: string }[] }, userId: string) {
+    if (thread.isSupport || !thread.propertyId) return null;
+    const booking = await this.prisma.booking.findFirst({
+      where: {
+        propertyId: thread.propertyId,
+        tenantId: { in: thread.participants.map((p) => p.userId) },
+        status: { in: [BookingStatus.PAID_AWAITING_INSPECTION, BookingStatus.INSPECTION_PROPOSED, BookingStatus.INSPECTION_CONFIRMED] },
+        property: { category: { not: PropertyCategory.SHORTLET } },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true, requestedDate: true, tenantId: true, property: { select: { landlordId: true } } },
+    });
+    if (!booking) return null;
+    const role = booking.tenantId === userId ? 'TENANT' : booking.property.landlordId === userId ? 'LANDLORD' : null;
+    if (!role) return null;
+    return { bookingId: booking.id, status: booking.status, requestedDate: booking.requestedDate, role };
+  }
+
   /// The property a tenant–landlord chat is about, with its details, once
   /// the tenant in it has paid for it (any booking from payment through
   /// move-in, or a paid shortlet). Null otherwise.
@@ -418,7 +441,7 @@ export class ChatService {
             priceUnit: true,
             bedrooms: true,
             bathrooms: true,
-      kitchens: true,
+            kitchens: true,
             description: true,
             imageUrl: true,
             galleryUrls: true,
@@ -462,6 +485,7 @@ export class ChatService {
     const lockedReason = isParticipant && !isAdmin ? await this.threadBlockReason(threadId, userId) : null;
     const lastTransfer = thread.transferLogs[0];
     const bookedProperty = isParticipant && !isAdmin ? await this.paidBookingProperty(thread) : null;
+    const inspection = isParticipant && !isAdmin ? await this.threadInspection(thread, userId) : null;
     // Customers only ever see a support admin's first name.
     const publicPerson = (u: { id: string; fullName: string | null; firstName: string | null; role?: UserRole; profilePhotoUrl?: string | null }) => ({
       id: u.id,
@@ -475,6 +499,8 @@ export class ChatService {
       // for: the app pins a preview of it (with a View property pop-up)
       // for both of them.
       bookedProperty,
+      // The inspection either side can book or change from this chat.
+      inspection,
       supportTopic: thread.supportTopic,
       priority: thread.priority,
       resolved,

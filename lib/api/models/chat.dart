@@ -1,3 +1,4 @@
+import 'booking.dart';
 import 'support_tools.dart';
 import '../../features/dashboard/models/property.dart';
 
@@ -297,6 +298,35 @@ class ThreadPersonRef {
   }
 }
 
+/// The inspection a tenant–landlord chat can arrange (see backend
+/// ChatService.threadInspection): the tenant's paid, not-yet-moved-in
+/// rental booking for the chat's property, and which side the viewer is.
+/// The tenant proposes or changes a date (a confirmed one goes back to the
+/// landlord); the landlord accepts or declines a proposed date, or sets or
+/// changes one directly.
+class ChatInspection {
+  const ChatInspection({required this.bookingId, required this.status, required this.isTenant, this.requestedDate});
+
+  final String bookingId;
+
+  /// paidAwaitingInspection, inspectionProposed or inspectionConfirmed.
+  final BookingStatus status;
+  final DateTime? requestedDate;
+
+  /// True for the tenant, false for the landlord.
+  final bool isTenant;
+
+  static ChatInspection? fromApi(Object? json) {
+    if (json is! Map<String, dynamic>) return null;
+    return ChatInspection(
+      bookingId: json['bookingId'] as String,
+      status: bookingStatusFromApi(json['status'] as String),
+      requestedDate: json['requestedDate'] != null ? DateTime.parse(json['requestedDate'] as String).toLocal() : null,
+      isTenant: json['role'] == 'TENANT',
+    );
+  }
+}
+
 /// Where a thread stands now, for the signed-in user — `GET
 /// /threads/:id/summary` (see backend ChatService.getThreadSummary). Shown
 /// when a chat notification is opened.
@@ -308,6 +338,7 @@ class ThreadSummary {
     required this.canView,
     required this.canReply,
     this.bookedProperty,
+    this.inspection,
     required this.otherParticipants,
     this.canReassign = false,
     this.lockedReason,
@@ -323,6 +354,9 @@ class ThreadSummary {
   /// The property this tenant–landlord chat is about, once the tenant has
   /// paid for it — pinned at the top of the chat for both of them.
   final Property? bookedProperty;
+
+  /// The inspection either side can book or change from this chat, if any.
+  final ChatInspection? inspection;
 
   final String id;
   final bool isSupport;
@@ -358,6 +392,7 @@ class ThreadSummary {
       bookedProperty: json['bookedProperty'] is Map<String, dynamic>
           ? Property.fromApi(json['bookedProperty'] as Map<String, dynamic>)
           : null,
+      inspection: ChatInspection.fromApi(json['inspection']),
       resolved: json['resolved'] as bool? ?? false,
       resolvedAt: json['resolvedAt'] != null ? DateTime.parse(json['resolvedAt'] as String) : null,
       assignedAdmin: ThreadPersonRef.fromApi(json['assignedAdmin']),

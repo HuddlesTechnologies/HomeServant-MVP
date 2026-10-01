@@ -6,7 +6,7 @@ import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/admin_models.dart';
-import '../../api/models/chat.dart' show HandoffKind, MessageQuote, MessageType, ThreadHandlingHistory, ThreadHandoff, ThreadParticipant, ThreadPersonRef;
+import '../../api/models/chat.dart' show ChatInspection, HandoffKind, MessageQuote, MessageType, ThreadHandlingHistory, ThreadHandoff, ThreadParticipant, ThreadPersonRef;
 import '../../api/models/marketplace_api.dart';
 import '../../api/models/support_tools.dart' show SupportTopic;
 import '../../core/date_format.dart';
@@ -139,6 +139,12 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   /// paid (from the thread summary) — pinned above the messages.
   Property? _bookedProperty;
 
+  /// The inspection either side can book or change here (see
+  /// ChatInspection), refreshed with the rest of the summary, including
+  /// whenever a system note lands (the server posts one on every change).
+  ChatInspection? _inspection;
+  bool _inspectionBusy = false;
+
   MessageQuote _quoteOf(ChatMessage m) => MessageQuote(
     id: m.id!,
     body: m.text,
@@ -172,7 +178,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
         property: property,
         showTenantStatus: isTenant,
         // The in-chat date picker needs the chat's own property.
-        onBookInspection: widget.property?.id == property.id
+        onBookInspection: widget.property?.id == property.id || _inspection?.isTenant == true
             ? () {
                 Navigator.of(sheetContext).pop();
                 _bookInspection();
@@ -507,6 +513,7 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
           _isSupportThread = summary.isSupport;
           _supportTopic = summary.supportTopic;
           _bookedProperty = summary.bookedProperty;
+          _inspection = summary.inspection;
         });
       }
       if (!isAdmin && summary.isSupport && summary.resolved) {
@@ -834,7 +841,99 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     await _deliver(message, threadId);
   }
 
+  /// A date and time from today onwards (up to 90 days ahead), or null if
+  /// the picker was dismissed.
+  Future<DateTime?> _pickInspectionDateTime({DateTime? current}) async {
+    final theme = widget.theme;
+    final now = DateTime.now();
+    final initial = current != null && current.isAfter(now) ? current : now.add(const Duration(days: 1));
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(colorScheme: ColorScheme.light(primary: theme.accent)),
+        child: child!,
+      ),
+    );
+    if (date == null || !mounted) return null;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: current != null ? TimeOfDay.fromDateTime(current) : const TimeOfDay(hour: 10, minute: 0),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(colorScheme: ColorScheme.light(primary: theme.accent)),
+        child: child!,
+      ),
+    );
+    if (time == null || !mounted) return null;
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  /// Runs one inspection action, then reloads the summary so the bar shows
+  /// the new state straight away (the other side's updates arrive with the
+  /// server's chat note).
+  Future<void> _runInspectionAction(Future<String> Function() action) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final appState = context.read<AppState>();
+    setState(() => _inspectionBusy = true);
+    try {
+      messenger.showSnackBar(SnackBar(content: Text(await action())));
+      unawaited(appState.loadMyBookings().catchError((_) {}));
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _inspectionBusy = false);
+      if (mounted) await _refreshAccess();
+    }
+  }
+
+  /// Tenant: book a date, or change one (a confirmed date goes back to the
+  /// landlord to accept).
+  Future<void> _tenantProposeDate(ChatInspection inspection) async {
+    final scheduled = await _pickInspectionDateTime(current: inspection.requestedDate);
+    if (scheduled == null || !mounted) return;
+    final appState = context.read<AppState>();
+    await _runInspectionAction(() async {
+      await appState.proposeInspection(inspection.bookingId, scheduled);
+      return 'Inspection date sent to the landlord: ${_formatScheduledDateTime(scheduled)}';
+    });
+  }
+
+  /// Landlord: set the date, pick another instead of the tenant's, or move
+  /// a confirmed one. Confirmed straight away; the tenant is told.
+  Future<void> _landlordSetDate(ChatInspection inspection) async {
+    final scheduled = await _pickInspectionDateTime(current: inspection.requestedDate);
+    if (scheduled == null || !mounted) return;
+    final appState = context.read<AppState>();
+    await _runInspectionAction(() async {
+      await appState.scheduleInspection(inspection.bookingId, scheduled);
+      return 'Inspection set for ${_formatScheduledDateTime(scheduled)}. The tenant has been told.';
+    });
+  }
+
+  /// Landlord: accept or decline the tenant's proposed date.
+  Future<void> _landlordRespond(ChatInspection inspection, {required bool accepted}) async {
+    if (!accepted) {
+      final ok = await showConfirmSheet(
+        context,
+        title: 'Decline this inspection date?',
+        body: 'The tenant can propose another date, or you can pick one yourself. The booking itself stays as it is.',
+        actionLabel: 'Decline date',
+        destructive: true,
+      );
+      if (!ok || !mounted) return;
+    }
+    final appState = context.read<AppState>();
+    await _runInspectionAction(() async {
+      await appState.respondToInspection(inspection.bookingId, accepted: accepted);
+      return accepted ? 'Inspection date confirmed. The tenant has been told.' : 'Inspection date declined.';
+    });
+  }
+
   Future<void> _bookInspection() async {
+    final inspection = _inspection;
+    if (inspection != null && inspection.isTenant) return _tenantProposeDate(inspection);
     final property = widget.property;
     if (property == null) return;
     final theme = widget.theme;
@@ -1118,7 +1217,19 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
                   },
                 ),
               ),
-              if (widget.property != null)
+              if (_inspection != null && !_readOnly)
+                _InspectionBar(
+                  theme: theme,
+                  inspection: _inspection!,
+                  busy: _inspectionBusy,
+                  onTenantPropose: () => _tenantProposeDate(_inspection!),
+                  onLandlordSet: () => _landlordSetDate(_inspection!),
+                  onLandlordAccept: () => _landlordRespond(_inspection!, accepted: true),
+                  onLandlordDecline: () => _landlordRespond(_inspection!, accepted: false),
+                )
+              // Before anything is paid for, a tenant can still suggest a
+              // date as a message.
+              else if (widget.property != null && context.read<AppState>().role == UserRole.tenant)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: SizedBox(

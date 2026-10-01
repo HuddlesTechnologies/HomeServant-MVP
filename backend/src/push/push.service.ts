@@ -62,7 +62,15 @@ export class PushService {
   /// deleted.
   async sendToUser(userId: string, payload: PushPayload): Promise<void> {
     if (!this.enabled) return;
-    const subscriptions = await this.prisma.pushSubscription.findMany({ where: { userId } });
+    // Callers don't wait for this (NotificationsService.create), so nothing
+    // may escape: an unhandled rejection would take the whole API down.
+    let subscriptions: { id: string; endpoint: string; p256dh: string; auth: string }[];
+    try {
+      subscriptions = await this.prisma.pushSubscription.findMany({ where: { userId } });
+    } catch (error) {
+      this.logger.warn(`Push to ${userId} skipped: couldn't load subscriptions (${(error as Error).message})`);
+      return;
+    }
     await Promise.all(
       subscriptions.map(async (sub) => {
         try {

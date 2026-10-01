@@ -217,7 +217,10 @@ class _TenantBookingStatusPanelState extends State<_TenantBookingStatusPanel> {
         const Color(0xFF1F6FA8),
         '${date == null ? 'Your inspection is confirmed.' : 'Your inspection is confirmed for $date.'} '
             "Once you're ready to move in, confirm it here.",
-        [_button('Moved In', () => _confirmMovedIn(booking))],
+        [
+          _button('Moved In', () => _confirmMovedIn(booking)),
+          if (widget.onBookInspection != null) _button('Change date', widget.onBookInspection!, outlined: true),
+        ],
       ),
       BookingStatus.movedIn => (
         'Rented',
@@ -299,6 +302,124 @@ class _TenantBookingStatusPanelState extends State<_TenantBookingStatusPanel> {
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(backgroundColor: theme.accent, padding: padding, shape: shape),
       child: Text(label, style: AppTextStyles.body(color: theme.onAccent, size: 13, weight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Above the composer in a tenant–landlord chat while an inspection is
+/// being arranged: where it stands and what this side can do. The tenant
+/// books or changes a date (a confirmed one goes back to the landlord to
+/// accept); the landlord accepts or declines a proposed date, or sets or
+/// changes one directly. Drawn on theme.surface, so text is theme.onSurface
+/// and buttons theme.accent/onAccent or onSurface-outlined (fixed pairs in
+/// every DashboardTheme).
+class _InspectionBar extends StatelessWidget {
+  const _InspectionBar({
+    required this.theme,
+    required this.inspection,
+    required this.busy,
+    required this.onTenantPropose,
+    required this.onLandlordSet,
+    required this.onLandlordAccept,
+    required this.onLandlordDecline,
+  });
+
+  final DashboardTheme theme;
+  final ChatInspection inspection;
+  final bool busy;
+  final VoidCallback onTenantPropose;
+  final VoidCallback onLandlordSet;
+  final VoidCallback onLandlordAccept;
+  final VoidCallback onLandlordDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = theme.onSurface;
+    final date = inspection.requestedDate == null ? null : _formatScheduledDateTime(inspection.requestedDate!);
+    final (String title, String detail, List<Widget> actions) = switch ((inspection.isTenant, inspection.status)) {
+      (true, BookingStatus.inspectionProposed) => (
+        'Inspection date proposed',
+        date == null ? 'Waiting for the landlord to confirm.' : '$date. Waiting for the landlord to confirm.',
+        [_button('Change date', onTenantPropose, outlined: true)],
+      ),
+      (true, BookingStatus.inspectionConfirmed) => (
+        'Inspection confirmed',
+        '${date ?? 'Date confirmed'}. Need another time? The landlord confirms the new date.',
+        [_button('Change date', onTenantPropose, outlined: true)],
+      ),
+      (true, _) => ('Book your inspection', 'Pick a date and time; the landlord confirms it.', [_button('Book inspection', onTenantPropose)]),
+      (false, BookingStatus.inspectionProposed) => (
+        'Tenant proposed an inspection date',
+        date ?? 'A date is waiting for your answer.',
+        [
+          _button('Accept', onLandlordAccept),
+          _button('Pick another date', onLandlordSet, outlined: true),
+          _button('Decline', onLandlordDecline, outlined: true),
+        ],
+      ),
+      (false, BookingStatus.inspectionConfirmed) => (
+        'Inspection confirmed',
+        '${date ?? 'Date confirmed'}. You can move it; the tenant is told.',
+        [_button('Change date', onLandlordSet, outlined: true)],
+      ),
+      (false, _) => (
+        'Set the inspection date',
+        'The tenant has paid. Pick a date, or wait for them to propose one.',
+        [_button('Set date', onLandlordSet)],
+      ),
+    };
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: text.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.event_available_rounded, color: text, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTextStyles.body(color: text, size: 13.5, weight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(detail, style: AppTextStyles.body(color: text.withValues(alpha: 0.8), size: 12.5)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (busy)
+            SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: text))
+          else
+            Wrap(spacing: 8, runSpacing: 8, children: actions),
+        ],
+      ),
+    );
+  }
+
+  Widget _button(String label, VoidCallback onPressed, {bool outlined = false}) {
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(20));
+    const padding = EdgeInsets.symmetric(horizontal: 14, vertical: 8);
+    if (outlined) {
+      return OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(side: BorderSide(color: theme.onSurface, width: 1.2), padding: padding, shape: shape),
+        child: Text(label, style: AppTextStyles.body(color: theme.onSurface, size: 12.5, weight: FontWeight.w700)),
+      );
+    }
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(backgroundColor: theme.accent, elevation: 0, padding: padding, shape: shape),
+      child: Text(label, style: AppTextStyles.body(color: theme.onAccent, size: 12.5, weight: FontWeight.w700)),
     );
   }
 }
