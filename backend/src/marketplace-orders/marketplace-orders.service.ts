@@ -107,26 +107,35 @@ export class MarketplaceOrdersService {
     return this.chargeOrder(order, buyerId, buyer.email);
   }
 
-  /// Charges the buyer right after the order+items above are committed —
-  /// one Paystack transaction per item (Payment.orderItemId is unique, so
-  /// a multi-vendor order is necessarily one charge per item, never one
-  /// combined charge). A per-item failure to reach Paystack doesn't fail
-  /// the whole order (it already exists in the DB); see
-  /// PaymentsService.initiateOrderItemCharges.
-  private async chargeOrder(order: { items: { id: string; productName: string; unitPrice: number; quantity: number; vendorId: string; vendor: { userId: string } }[] }, buyerId: string, buyerEmail: string) {
-    const results = await this.payments.initiateOrderItemCharges(
+  /// Starts one Paystack checkout for the whole order right after the
+  /// order and items above are committed. The response carries the
+  /// checkout page (`checkout.authorizationUrl`); nothing counts as paid
+  /// until Paystack confirms the charge. If it can't be started, the order
+  /// is cancelled and its stock put back (see MarketplaceCheckout.start).
+  private async chargeOrder(
+    order: { id: string; items: { id: string; productName: string; unitPrice: number; quantity: number; vendor: { userId: string } }[] },
+    buyerId: string,
+    buyerEmail: string,
+  ) {
+    const checkout = await this.payments.startOrderCheckout(
+      order.id,
       order.items.map((item) => ({
         id: item.id,
         productName: item.productName,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
-        vendorId: item.vendorId,
         vendorUserId: item.vendor.userId,
       })),
       buyerId,
       buyerEmail,
     );
-    return { ...order, payments: results };
+    const fresh = await this.prisma.marketplaceOrder.findUniqueOrThrow({ where: { id: order.id }, include: orderInclude });
+    return { ...fresh, checkout };
+  }
+
+  /// The buyer is back from Paystack: see PaymentsService.confirmOrderCharge.
+  confirmPayment(buyerId: string, reference: string) {
+    return this.payments.confirmOrderCharge(reference, buyerId);
   }
 
   findMine(buyerId: string) {

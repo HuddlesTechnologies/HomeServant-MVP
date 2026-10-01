@@ -329,17 +329,14 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
         _fulfillment.clear();
       });
       _load();
-      // Placing the order only starts the charge; it counts as paid once
-      // Paystack confirms it, never before. Order History shows each item
-      // as "Awaiting Payment" until then.
-      if (order.paymentUrls.length == 1) {
-        final launched = await openPaymentPage(order.paymentUrls.single);
-        if (!launched) {
-          messenger.showSnackBar(const SnackBar(content: Text("Order placed, but the payment page couldn't open. It isn't paid yet.")));
-        }
-      } else {
+      // Placing the order only starts its one checkout (every item, every
+      // vendor); it counts as paid once Paystack confirms it, never before.
+      // Order History shows "Awaiting Payment" until then.
+      final url = order.paymentUrl;
+      final launched = url != null && await openPaymentPage(url);
+      if (!launched) {
         messenger.showSnackBar(
-          const SnackBar(content: Text("Order placed but not paid yet. Check Order History; it's confirmed only once payment goes through.")),
+          const SnackBar(content: Text("Order placed, but the payment page couldn't open. Finish paying from Order History.")),
         );
       }
     } on ApiException catch (e) {

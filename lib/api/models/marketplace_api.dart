@@ -217,7 +217,11 @@ class MarketplaceOrderItemApi {
   /// label straight from the server, then falls back to a recognized
   /// status code, then finally to the plain item [status] label if
   /// neither newer field is present yet.
-  String get progressLabel => paymentProgressLabel ?? paymentProgress?.label ?? status.label;
+  String get progressLabel {
+    // Cancelled because the order was never paid for in time.
+    if (paymentProgress == OrderItemPaymentProgress.failed && status == OrderItemStatus.cancelled) return 'Cancelled — Not Paid';
+    return paymentProgressLabel ?? paymentProgress?.label ?? status.label;
+  }
 
   /// Whether a "Mark as Received" action makes sense right now: only when
   /// the server says the buyer's payment is actually held. A checkout
@@ -309,17 +313,29 @@ class MarketplaceOrderApi {
     required this.customerPhone,
     required this.customerAddress,
     required this.items,
-    this.paymentUrls = const [],
+    this.paymentUrl,
+    this.paymentReference,
+    this.paymentExpiresAt,
   });
 
   final String id;
   final DateTime createdAt;
   final PaymentMethod paymentMethod;
 
-  /// Only on the response to placing an order: the Paystack checkout page
-  /// for each item's charge (one per item). Nothing is paid until the buyer
-  /// completes it and Paystack confirms the charge.
-  final List<String> paymentUrls;
+  /// The order's one Paystack checkout page, covering every item. Nothing
+  /// is paid until the buyer completes it and Paystack confirms the charge.
+  final String? paymentUrl;
+  final String? paymentReference;
+
+  /// An order still unpaid by then is cancelled and its stock put back.
+  final DateTime? paymentExpiresAt;
+
+  /// The buyer can still finish paying: something is awaiting payment and
+  /// the checkout hasn't run out of time.
+  bool get canCompletePayment =>
+      paymentUrl != null &&
+      items.any((i) => i.paymentProgress == OrderItemPaymentProgress.awaitingPayment) &&
+      (paymentExpiresAt == null || paymentExpiresAt!.isAfter(DateTime.now()));
   final String customerName;
   final String customerPhone;
   final String customerAddress;
@@ -345,10 +361,11 @@ class MarketplaceOrderApi {
     customerPhone: json['customerPhone'] as String,
     customerAddress: json['customerAddress'] as String,
     items: (json['items'] as List).cast<Map<String, dynamic>>().map(MarketplaceOrderItemApi.fromApi).toList(),
-    paymentUrls: [
-      for (final p in (json['payments'] as List? ?? const []).cast<Map<String, dynamic>>())
-        if (p['authorizationUrl'] is String) p['authorizationUrl'] as String,
-    ],
+    // Placing an order returns `checkout`; a listed order has the same
+    // page as `authorizationUrl`.
+    paymentUrl: (json['checkout'] as Map<String, dynamic>?)?['authorizationUrl'] as String? ?? json['authorizationUrl'] as String?,
+    paymentReference: json['paystackReference'] as String?,
+    paymentExpiresAt: json['paymentExpiresAt'] != null ? DateTime.parse(json['paymentExpiresAt'] as String).toLocal() : null,
   );
 }
 

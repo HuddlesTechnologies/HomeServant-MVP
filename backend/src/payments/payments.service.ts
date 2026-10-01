@@ -27,6 +27,7 @@ import {
   landlordPayoutMessage,
   minDate,
 } from './payment-rules';
+import { CheckoutItem, MarketplaceCheckout } from './marketplace-checkout';
 import { PayoutSender } from './payout-sender';
 import { stuckPaymentInclude, stuckPaymentsWhere, toStuckPayment } from './stuck-payouts';
 
@@ -51,6 +52,7 @@ export class PaymentsService {
   private readonly notices: PaymentNotices;
   private readonly payouts: PayoutSender;
   private readonly refunds: BookingRefunds;
+  private readonly checkout: MarketplaceCheckout;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -63,6 +65,7 @@ export class PaymentsService {
     this.notices = new PaymentNotices(notifications, mail, chat, this.logger);
     this.payouts = new PayoutSender(prisma, paystack, platform, this.notices, this.logger);
     this.refunds = new BookingRefunds(prisma, paystack, this.notices, this.logger);
+    this.checkout = new MarketplaceCheckout(prisma, paystack, this.notices, this.logger);
   }
 
   // ---------------------------------------------------------------------
@@ -70,49 +73,27 @@ export class PaymentsService {
   // ---------------------------------------------------------------------
 
   /// Called right after MarketplaceOrdersService.create commits the order
-  /// + its items — one Paystack transaction per item (Payment.orderItemId
-  /// is unique, so a multi-item/multi-vendor order is necessarily one
-  /// charge per item, never one combined charge). A per-item failure to
-  /// reach Paystack doesn't fail the whole order (it already exists); that
-  /// item just comes back with `error` set so the buyer can retry it.
-  async initiateOrderItemCharges(
-    items: { id: string; productName: string; unitPrice: number; quantity: number; vendorId: string; vendorUserId: string }[],
-    buyerId: string,
-    buyerEmail: string,
-  ): Promise<{ itemId: string; reference: string; authorizationUrl: string | null; error?: string }[]> {
-    const results: { itemId: string; reference: string; authorizationUrl: string | null; error?: string }[] = [];
-    for (const item of items) {
-      const amountNaira = item.unitPrice * item.quantity;
-      const amountKobo = amountNaira * KOBO_PER_NAIRA;
-      const platformFeeKobo = fee(amountKobo, PLATFORM_FEE_BPS);
-      const reference = generateReference('mkt');
+  /// and its items: one Paystack checkout for the whole order, however
+  /// many items or vendors (see MarketplaceCheckout). Throws, with the
+  /// order cancelled and its stock put back, if it can't be started.
+  startOrderCheckout(orderId: string, items: CheckoutItem[], buyerId: string, buyerEmail: string) {
+    return this.checkout.start(orderId, items, buyerId, buyerEmail);
+  }
 
-      await this.prisma.payment.create({
-        data: {
-          purpose: PaymentPurpose.MARKETPLACE_ORDER_ITEM,
-          orderItemId: item.id,
-          payerId: buyerId,
-          recipientUserId: item.vendorUserId,
-          amount: amountKobo,
-          platformFeeAmount: platformFeeKobo,
-          paystackReference: reference,
-          status: PaymentStatus.INITIATED,
-        },
-      });
+  /// `POST /marketplace/orders/confirm-payment`: the buyer is back from
+  /// Paystack, so their order shows as paid straight away. Only a charge
+  /// Paystack says succeeded counts.
+  confirmOrderCharge(reference: string, buyerId: string): Promise<{ paid: boolean }> {
+    return this.checkout.confirm(reference, buyerId, (ref) => this.handleChargeSuccess(ref));
+  }
 
-      try {
-        const init = await this.paystack.initializeTransaction(buyerEmail, amountKobo, reference, {
-          orderItemId: item.id,
-          purpose: 'MARKETPLACE_ORDER_ITEM',
-        });
-        results.push({ itemId: item.id, reference: init.reference, authorizationUrl: init.authorizationUrl });
-      } catch (err) {
-        this.logger.error(`Could not initialize Paystack transaction for order item ${item.id}: ${(err as Error).message}`);
-        await this.prisma.payment.update({ where: { orderItemId: item.id }, data: { status: PaymentStatus.FAILED } });
-        results.push({ itemId: item.id, reference, authorizationUrl: null, error: 'Could not start payment for this item — try again' });
-      }
-    }
-    return results;
+  /// Every 10 minutes: orders not paid within MARKETPLACE_CHECKOUT_MINUTES
+  /// are cancelled and their stock put back (after checking with Paystack).
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async expireUnpaidOrders(): Promise<number> {
+    const cancelled = await this.checkout.expireUnpaid((ref) => this.handleChargeSuccess(ref));
+    if (cancelled > 0) this.logger.log(`Cancelled ${cancelled} unpaid marketplace order(s) and restocked them`);
+    return cancelled;
   }
 
   /// `POST /marketplace-orders/items/:id/confirm-received` — buyer-only,
@@ -653,6 +634,12 @@ export class PaymentsService {
       data: { status: PaymentStatus.PAID_HELD, paidAt: new Date() },
     });
     if (count === 0) {
+      // A marketplace order's one checkout covers several payments.
+      const orderPayments = await this.checkout.onChargeSuccess(reference);
+      if (orderPayments) {
+        for (const payment of orderPayments) await this.onOrderItemPaid(payment);
+        return;
+      }
       this.logger.log(`Webhook charge.success for ${reference} ignored — unknown reference or already processed`);
       return;
     }

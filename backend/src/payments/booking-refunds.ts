@@ -1,10 +1,10 @@
-import { BadRequestException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Logger, NotFoundException } from '@nestjs/common';
 import { BookingStatus, NotificationType, Payment, PaymentStatus, PropertyCategory } from '@prisma/client';
 import { PaystackService } from '../paystack/paystack.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { withMoneyLock } from './money-lock';
 import { PaymentNotices } from './payment-notices';
-import { REFUND_FEE_BPS, bookingStillRefundable, fee } from './payment-rules';
+import { PAYOUT_LOCK_MS, REFUND_FEE_BPS, bookingStillRefundable, fee } from './payment-rules';
 
 /// Who asked for a booking refund. TENANT: before move-in, keeps the 0.2%
 /// fee. LANDLORD: rejects the booking before move-in, full refund. ADMIN:
@@ -166,6 +166,9 @@ export class BookingRefunds {
   /// kept on the payment (what was asked, by whom, and why it failed) for
   /// the admin Payouts screen.
   async refundHeldPayment(payment: Payment, amountKobo: number, requestedBy: string): Promise<void> {
+    if (payment.chargeReference && payment.chargeReference !== payment.paystackReference) {
+      return this.refundSharedChargeItem(payment, amountKobo, requestedBy);
+    }
     try {
       const already = await this.paystack.refundedSoFar(payment.paystackReference);
       if (already > 0) {
@@ -188,6 +191,72 @@ export class BookingRefunds {
         },
       });
       throw error;
+    }
+  }
+
+  /// [refundHeldPayment] for one payment out of a charge it shares with
+  /// others (a marketplace order paid in one checkout): refunds just
+  /// [amountKobo] of that charge. "Already refunded?" can't be answered by
+  /// "has the charge any refund", since other items may have been refunded
+  /// from it. So refunds against one charge run one at a time (the order's
+  /// refund lock), and Paystack's refunded total is compared with the
+  /// refunds we've recorded:
+  ///  - nothing unrecorded at Paystack: refund this one;
+  ///  - exactly this payment's earlier, unconfirmed attempt is unrecorded:
+  ///    it went through, so it isn't refunded again;
+  ///  - exactly other payments' unconfirmed attempts are unrecorded: they
+  ///    explain it, so this one is refunded;
+  ///  - anything else can't be told apart, so nothing is sent and the
+  ///    refund fails with an explanation (check the charge in Paystack).
+  private async refundSharedChargeItem(payment: Payment, amountKobo: number, requestedBy: string): Promise<void> {
+    const charge = payment.chargeReference!;
+    const lockCutoff = new Date(Date.now() - PAYOUT_LOCK_MS);
+    const claimed = await this.prisma.marketplaceOrder.updateMany({
+      where: { paystackReference: charge, OR: [{ refundLockedAt: null }, { refundLockedAt: { lt: lockCutoff } }] },
+      data: { refundLockedAt: new Date() },
+    });
+    if (claimed.count === 0) throw new ConflictException('Another refund for this order is in progress. Try again in a moment.');
+    try {
+      const all = await this.prisma.payment.findMany({ where: { chargeReference: charge } });
+      const recorded = all
+        .filter((p) => p.status === PaymentStatus.REFUNDED)
+        .reduce((sum, p) => sum + (p.refundRequestedAmount ?? p.amount), 0);
+      // Asked of Paystack but never confirmed back to us (a failure or a
+      // timeout): it may or may not have gone through.
+      const unconfirmed = (p: Payment) => p.status === PaymentStatus.PAID_HELD && p.refundLastAttemptAt !== null;
+      const self = all.find((p) => p.id === payment.id) ?? payment;
+      const othersUnconfirmed = all.filter((p) => p.id !== payment.id && unconfirmed(p)).reduce((sum, p) => sum + (p.refundRequestedAmount ?? p.amount), 0);
+      const unrecorded = (await this.paystack.refundedSoFar(charge)) - recorded;
+
+      if (unrecorded > 0) {
+        if (unconfirmed(self) && othersUnconfirmed === 0 && unrecorded === (self.refundRequestedAmount ?? amountKobo)) {
+          this.logger.warn(`Refund for payment ${payment.id}: already refunded from shared charge ${charge}; not refunding again`);
+          return;
+        }
+        if (unconfirmed(self) || unrecorded !== othersUnconfirmed) {
+          throw new ConflictException(
+            "Paystack shows a refund on this order that HomeServant hasn't recorded, so nothing was sent. Check the charge in the Paystack dashboard.",
+          );
+        }
+      }
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { refundRequestedBy: requestedBy, refundRequestedAmount: amountKobo, refundLastAttemptAt: new Date() },
+      });
+      await this.paystack.refundTransaction(charge, amountKobo);
+    } catch (error) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          refundRequestedBy: requestedBy,
+          refundRequestedAmount: amountKobo,
+          refundLastAttemptAt: new Date(),
+          refundLastError: (error as Error).message.slice(0, 500),
+        },
+      });
+      throw error;
+    } finally {
+      await this.prisma.marketplaceOrder.updateMany({ where: { paystackReference: charge }, data: { refundLockedAt: null } });
     }
   }
 }

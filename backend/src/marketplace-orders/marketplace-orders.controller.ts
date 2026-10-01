@@ -5,6 +5,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { ConfirmPaymentDto } from '../bookings/dto/confirm-payment.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { RespondOrderItemDto } from './dto/respond-order-item.dto';
 import { ShipOrderItemDto } from './dto/ship-order-item.dto';
@@ -18,6 +19,14 @@ export class MarketplaceOrdersController {
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateOrderDto) {
     return this.orders.create(user.sub, dto);
+  }
+
+  /// The buyer is back from Paystack (`?reference=` on the return URL):
+  /// marks the order paid now if Paystack confirms the charge.
+  @Post('confirm-payment')
+  @HttpCode(HttpStatus.OK)
+  confirmPayment(@CurrentUser() user: AuthenticatedUser, @Body() dto: ConfirmPaymentDto) {
+    return this.orders.confirmPayment(user.sub, dto.reference);
   }
 
   @Get('mine')
