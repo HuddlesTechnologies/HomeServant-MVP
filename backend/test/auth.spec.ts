@@ -114,4 +114,47 @@ describeDb('sign-in pages and account types (real Postgres)', () => {
     expect((await prisma.user.findUniqueOrThrow({ where: { id: landlord.id } })).googleId).toBeNull();
     await expect(auth.googleAuth({ idToken: 'x', portal: 'LANDLORD' } as never)).resolves.toHaveProperty('accessToken');
   });
+
+  /// Makes Google's token check return [payload], and records the audience
+  /// it was asked to check against.
+  function googleReturns(payload: Record<string, unknown>) {
+    const audiences: unknown[] = [];
+    const googleClient = (auth as unknown as { googleClient: { verifyIdToken: unknown } }).googleClient;
+    googleClient.verifyIdToken = async (opts: { audience: unknown }) => {
+      audiences.push(opts.audience);
+      return { getPayload: () => payload };
+    };
+    return audiences;
+  }
+
+  it("Google sign-up creates the account with the page's role, verified, checked against our client ID", async () => {
+    const audiences = googleReturns({ sub: 'google-new', email: 'New.Person@Test.local', email_verified: true, name: 'New Person' });
+    const result = await auth.googleAuth({ idToken: 'x', role: UserRole.LANDLORD, portal: 'LANDLORD' } as never);
+    expect(result).toHaveProperty('accessToken');
+    expect(audiences).toEqual(['google-client']);
+    const user = await prisma.user.findUniqueOrThrow({ where: { email: 'new.person@test.local' } });
+    expect(user).toMatchObject({ role: UserRole.LANDLORD, googleId: 'google-new', fullName: 'New Person' });
+    expect(user.emailVerifiedAt).not.toBeNull();
+    // Signing in again finds the same account rather than making another.
+    await expect(auth.googleAuth({ idToken: 'x', role: UserRole.LANDLORD, portal: 'LANDLORD' } as never)).resolves.toHaveProperty('accessToken');
+    expect(await prisma.user.count()).toBe(1);
+  });
+
+  it('Google on an existing email/password account links it and signs in', async () => {
+    const tenant = await account(UserRole.TENANT, 'tenant@test.local');
+    googleReturns({ sub: 'google-789', email: 'tenant@test.local', email_verified: true });
+    await expect(auth.googleAuth({ idToken: 'x', role: UserRole.TENANT, portal: 'TENANT' } as never)).resolves.toHaveProperty('accessToken');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: tenant.id } })).googleId).toBe('google-789');
+  });
+
+  it('a bad Google token, or one with an unverified email, is refused without creating an account', async () => {
+    const googleClient = (auth as unknown as { googleClient: { verifyIdToken: unknown } }).googleClient;
+    googleClient.verifyIdToken = async () => {
+      throw new Error('Wrong recipient, payload audience != requiredAudience');
+    };
+    await expect(auth.googleAuth({ idToken: 'x', role: UserRole.TENANT } as never)).rejects.toThrow(/Invalid Google sign-in token/);
+    googleReturns({ sub: 'google-unverified', email: 'u@test.local', email_verified: false });
+    await expect(auth.googleAuth({ idToken: 'x', role: UserRole.TENANT } as never)).rejects.toThrow(/isn't verified/);
+    expect(await prisma.user.count()).toBe(0);
+  });
 });

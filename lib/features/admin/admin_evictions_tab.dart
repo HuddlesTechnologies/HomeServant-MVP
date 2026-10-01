@@ -368,7 +368,7 @@ class _DecisionSheetState extends State<_DecisionSheet> {
   }
 }
 
-/// "Message <role>" and "Call <role>" for one side of an eviction case.
+/// "Message `role`" and "Call `role`" for one side of an eviction case.
 /// Navy on the card's white, like the Reject button; Call is disabled (and
 /// says so) when that person has no phone number on file.
 class _ContactButtons extends StatelessWidget {
