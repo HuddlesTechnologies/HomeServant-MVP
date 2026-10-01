@@ -63,6 +63,7 @@ describeDb('payouts can never be sent twice (real Postgres)', () => {
   let paystack: ReturnType<typeof fakePaystack>;
   let payments: PaymentsService;
   let settings: PlatformSettingsService;
+  let chatNotes: { tenantId: string; landlordId: string; propertyId: string; body: string }[];
 
   beforeAll(() => {
     prisma = testPrisma();
@@ -77,7 +78,13 @@ describeDb('payouts can never be sent twice (real Postgres)', () => {
     void notifier;
     const mail = fakeMail();
     settings = new PlatformSettingsService(prisma as never, notifier as never, mail as never);
-    const chat = { postBookingSystemMessage: async () => undefined };
+    chatNotes = [];
+    const chat = {
+      postBookingSystemMessage: async (note: { tenantId: string; landlordId: string; propertyId: string; body: string }) => {
+        chatNotes.push(note);
+        return 'thread-1';
+      },
+    };
     payments = new PaymentsService(prisma as never, paystack as never, notifier as never, mail as never, chat as never, settings);
   });
 
@@ -105,6 +112,15 @@ describeDb('payouts can never be sent twice (real Postgres)', () => {
   }
 
   const status = (id: string) => prisma.payment.findUniqueOrThrow({ where: { id } });
+
+  it('moving in is noted in the tenant–landlord chat, so both sides see it there', async () => {
+    const { landlord, tenant, booking } = await awaitingMoveIn();
+    await payments.releaseBookingOnMovedIn(booking.id, tenant.id);
+
+    expect(chatNotes).toHaveLength(1);
+    expect(chatNotes[0]).toMatchObject({ tenantId: tenant.id, landlordId: landlord.id, propertyId: booking.propertyId });
+    expect(chatNotes[0].body).toMatch(/marked moved in/);
+  });
 
   it('Paystack sent it but we saw an error: the tenant still moves in, and Retry records it as paid without sending again', async () => {
     const { tenant, booking, payment } = await awaitingMoveIn();
