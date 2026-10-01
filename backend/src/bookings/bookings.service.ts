@@ -372,7 +372,9 @@ export class BookingsService {
   /// `POST /bookings/:id/inspection` — tenant proposes (or re-proposes,
   /// after a decline) an inspection date. Valid any time the booking is
   /// PAID_AWAITING_INSPECTION — including much later, from the tenant's
-  /// own history, if they chose "book later" right after paying.
+  /// own history or the chat, if they chose "book later" right after
+  /// paying. Also changes a date: one still waiting on the landlord, or an
+  /// already confirmed one, which goes back to the landlord to accept.
   async proposeInspection(id: string, tenantId: string, dto: ProposeInspectionDto) {
     const booking = await this.prisma.booking.findUnique({ where: { id }, include: { property: true } });
     if (!booking) throw new NotFoundException('Booking not found');
@@ -380,26 +382,29 @@ export class BookingsService {
     if (booking.property.category === PropertyCategory.SHORTLET) {
       throw new BadRequestException('Shortlet stays have no inspection step');
     }
-    // Also while a proposed date is still waiting on the landlord, so the
-    // tenant can change it.
-    if (booking.status !== BookingStatus.PAID_AWAITING_INSPECTION && booking.status !== BookingStatus.INSPECTION_PROPOSED) {
+    if (!INSPECTION_STATUSES.includes(booking.status)) {
       throw new BadRequestException('This booking is not awaiting an inspection date right now');
     }
 
     const date = inspectionDate(dto.requestedDate);
+    const wasConfirmed = booking.status === BookingStatus.INSPECTION_CONFIRMED && booking.requestedDate;
     const updated = await this.prisma.booking.update({
       where: { id },
-      data: { requestedDate: date, status: BookingStatus.INSPECTION_PROPOSED },
+      data: { requestedDate: date, status: BookingStatus.INSPECTION_PROPOSED, inspectionConfirmedAt: null },
     });
     await this.notifications.create(
       booking.property.landlordId,
       NotificationType.BOOKING_STATUS,
-      'Inspection date proposed',
-      `A tenant proposed ${formatInspectionDate(date)} to inspect ${booking.property.title}.`,
+      wasConfirmed ? 'Inspection date change requested' : 'Inspection date proposed',
+      wasConfirmed
+        ? `Your tenant asked to move the inspection of ${booking.property.title} from ${formatInspectionDate(booking.requestedDate!)} to ${formatInspectionDate(date)}.`
+        : `A tenant proposed ${formatInspectionDate(date)} to inspect ${booking.property.title}.`,
     );
     await this.noteInChat(
       booking,
-      `Inspection date proposed for ${booking.property.title}: ${formatInspectionDate(date)}. The landlord can confirm it or pick another date.`,
+      wasConfirmed
+        ? `The tenant asked to move the inspection of ${booking.property.title} from ${formatInspectionDate(booking.requestedDate!)} to ${formatInspectionDate(date)}. The landlord can confirm it or pick another date.`
+        : `Inspection date proposed for ${booking.property.title}: ${formatInspectionDate(date)}. The landlord can confirm it or pick another date.`,
     );
     return updated;
   }
@@ -445,7 +450,8 @@ export class BookingsService {
 
   /// `POST /bookings/:id/inspection/schedule` — the landlord sets the
   /// inspection date themselves: when the tenant hasn't proposed one yet,
-  /// or instead of the date they proposed. Confirms it straight away.
+  /// instead of the date they proposed, or to move an already confirmed
+  /// one. Confirms it straight away; the tenant is told.
   async scheduleInspection(id: string, landlordId: string, dto: ProposeInspectionDto) {
     const booking = await this.prisma.booking.findUnique({ where: { id }, include: { property: true } });
     if (!booking) throw new NotFoundException('Booking not found');
@@ -455,10 +461,11 @@ export class BookingsService {
     if (booking.property.category === PropertyCategory.SHORTLET) {
       throw new BadRequestException('Shortlet stays have no inspection step');
     }
-    if (booking.status !== BookingStatus.PAID_AWAITING_INSPECTION && booking.status !== BookingStatus.INSPECTION_PROPOSED) {
+    if (!INSPECTION_STATUSES.includes(booking.status)) {
       throw new BadRequestException('This booking is not waiting on an inspection date');
     }
     const date = inspectionDate(dto.requestedDate);
+    const wasConfirmed = booking.status === BookingStatus.INSPECTION_CONFIRMED && booking.requestedDate;
     const updated = await this.prisma.booking.update({
       where: { id },
       data: { requestedDate: date, status: BookingStatus.INSPECTION_CONFIRMED, inspectionConfirmedAt: new Date() },
@@ -466,10 +473,17 @@ export class BookingsService {
     await this.notifications.create(
       booking.tenantId,
       NotificationType.BOOKING_STATUS,
-      'Inspection date set',
-      `Your landlord set ${formatInspectionDate(date)} to inspect ${booking.property.title}. Message them if that doesn't work for you.`,
+      wasConfirmed ? 'Inspection date changed' : 'Inspection date set',
+      wasConfirmed
+        ? `Your landlord moved the inspection of ${booking.property.title} from ${formatInspectionDate(booking.requestedDate!)} to ${formatInspectionDate(date)}. Message them if that doesn't work for you.`
+        : `Your landlord set ${formatInspectionDate(date)} to inspect ${booking.property.title}. Message them if that doesn't work for you.`,
     );
-    await this.noteInChat(booking, `The landlord set the inspection of ${booking.property.title} for ${formatInspectionDate(date)}.`);
+    await this.noteInChat(
+      booking,
+      wasConfirmed
+        ? `The landlord moved the inspection of ${booking.property.title} from ${formatInspectionDate(booking.requestedDate!)} to ${formatInspectionDate(date)}.`
+        : `The landlord set the inspection of ${booking.property.title} for ${formatInspectionDate(date)}.`,
+    );
     return updated;
   }
 
@@ -526,6 +540,15 @@ export class BookingsService {
 
 /// An inspection date from the app ("YYYY-MM-DD" or an ISO timestamp),
 /// refused if it's before today.
+/// Where an inspection date can be booked or changed: paid and waiting
+/// for one, one proposed and waiting on the landlord, or one confirmed
+/// (until the tenant moves in).
+const INSPECTION_STATUSES: BookingStatus[] = [
+  BookingStatus.PAID_AWAITING_INSPECTION,
+  BookingStatus.INSPECTION_PROPOSED,
+  BookingStatus.INSPECTION_CONFIRMED,
+];
+
 function inspectionDate(value: string): Date {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) throw new BadRequestException('Choose a valid inspection date');

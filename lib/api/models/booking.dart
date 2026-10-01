@@ -21,6 +21,10 @@ enum BookingStatus {
   refunded,
 }
 
+/// [BookingStatus] from the server's `Booking.status` (e.g. on a chat's
+/// inspection, see ChatInspection).
+BookingStatus bookingStatusFromApi(String value) => _statusFromApi(value);
+
 BookingStatus _statusFromApi(String value) => switch (value) {
   'ACCEPTED' => BookingStatus.accepted,
   'PAID' => BookingStatus.paid,
