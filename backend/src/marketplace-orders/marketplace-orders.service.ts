@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { FulfillmentMethod, NotificationType, OrderItemStatus } from '@prisma/client';
+import { FulfillmentMethod, NotificationType, OrderItemStatus, PaymentStatus } from '@prisma/client';
 import { DELIVERY_PROVIDER } from '../delivery/delivery.constants';
 import { DeliveryProvider } from '../delivery/delivery-provider.interface';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -147,6 +147,8 @@ export class MarketplaceOrdersService {
       include: {
         product: { select: { id: true, name: true, imageUrls: true, listingNumber: true } },
         order: { select: { id: true, createdAt: true, paymentMethod: true, customerName: true, customerPhone: true, customerAddress: true, buyerId: true } },
+        // So the vendor can tell a paid order from one the buyer never paid for.
+        payment: { select: { status: true } },
       },
       orderBy: { order: { createdAt: 'desc' } },
     });
@@ -210,6 +212,12 @@ export class MarketplaceOrdersService {
     }
     if (item.shipmentId) {
       throw new BadRequestException('This item has already been shipped');
+    }
+    // Only ship what the buyer has actually paid for (held in escrow), never
+    // a checkout that is still pending or failed.
+    const payment = await this.prisma.payment.findUnique({ where: { orderItemId: itemId }, select: { status: true } });
+    if (payment?.status !== PaymentStatus.PAID_HELD) {
+      throw new BadRequestException("The buyer hasn't paid for this item yet, so it can't be shipped");
     }
 
     const order = await this.prisma.marketplaceOrder.findUniqueOrThrow({

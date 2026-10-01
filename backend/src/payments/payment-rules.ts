@@ -77,9 +77,22 @@ export function bookingStillRefundable(
 export const PAYOUT_LOCK_MS = 10 * 60 * 1000;
 
 /// Paystack transfer states meaning the money did NOT go out, so a new
-/// attempt with a fresh reference is safe. Anything else (success, pending,
-/// processing, otp, queued, received) counts as sent.
+/// attempt with a fresh reference is safe. `otp` is neither sent nor safe
+/// to retry (see TRANSFER_OTP_ERROR). Anything else (success, pending,
+/// processing, queued, received) counts as sent.
 export const RETRYABLE_TRANSFER_STATUSES = new Set(['failed', 'reversed', 'abandoned', 'rejected']);
+
+/// Paystack's transfer status when the account requires an OTP to confirm
+/// each transfer.
+export const TRANSFER_OTP_STATUS = 'otp';
+
+/// Recorded on a payout Paystack is holding for an OTP. Payouts are sent
+/// automatically, so the Paystack account must not ask for one: the
+/// transfer is neither sent nor safe to send again (it could still be
+/// confirmed in the dashboard), so it waits on the admin Payouts screen.
+export const TRANSFER_OTP_ERROR =
+  'Paystack is holding this transfer for an OTP. Turn off OTP confirmation for transfers in the Paystack dashboard ' +
+  '(Settings → Preferences), then confirm or cancel the waiting transfer there and press Retry.';
 
 /// Start of the error recorded when a payout can't be sent because
 /// HomeServant's Paystack balance is lower than it. Such payouts are

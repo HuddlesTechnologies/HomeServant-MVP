@@ -349,7 +349,9 @@ class _OrderItemRowState extends State<_OrderItemRow> {
   }
 
   Color _progressColor(MarketplaceOrderItemApi item) {
-    if (item.paymentProgress == OrderItemPaymentProgress.refunded) return const Color(0xFFE0524B);
+    if (item.paymentProgress == OrderItemPaymentProgress.refunded || item.paymentProgress == OrderItemPaymentProgress.failed) {
+      return const Color(0xFFE0524B);
+    }
     if (item.paymentProgress == OrderItemPaymentProgress.released) return const Color(0xFF2E9E5B);
     if (item.isPaymentHeld) return const Color(0xFFEF9E00);
     return item.status.color;

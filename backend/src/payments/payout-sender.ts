@@ -8,6 +8,8 @@ import { PaymentNotices } from './payment-notices';
 import {
   CANCELLED_PAYOUT_ERROR,
   PAUSED_PAYOUT_ERROR,
+  TRANSFER_OTP_ERROR,
+  TRANSFER_OTP_STATUS,
   PayoutOutcome,
   RETRYABLE_TRANSFER_STATUSES,
   isLowBalanceError,
@@ -59,6 +61,9 @@ export class PayoutSender {
       // as the transfer reference.
       const lastReference = current.payoutReference ?? payment.id;
       const existing = await this.paystack.verifyTransfer(lastReference);
+      // Still waiting for an OTP at Paystack: not paid, and sending again
+      // could pay twice once it's confirmed.
+      if (existing === TRANSFER_OTP_STATUS) throw new BadRequestException(TRANSFER_OTP_ERROR);
       if (existing !== 'not_found' && !RETRYABLE_TRANSFER_STATUSES.has(existing)) {
         this.logger.warn(`Payout ${payment.id}: transfer ${lastReference} already exists at Paystack (${existing}); not sending again`);
         await this.markReleased(payment.id, lastReference);
@@ -87,11 +92,18 @@ export class PayoutSender {
         where: { id: payment.id },
         data: { payoutReference: reference, payoutAttempts: { increment: 1 }, payoutLastAttemptAt: new Date() },
       });
+      let transfer: { status: string } | undefined;
       try {
-        await this.paystack.initiateTransfer(amountKobo, recipientCode, opts.reason, reference);
+        transfer = await this.paystack.initiateTransfer(amountKobo, recipientCode, opts.reason, reference);
       } catch (error) {
         if (isLowBalanceError((error as Error).message)) throw new BadRequestException(lowBalanceMessage(available, amountKobo));
         throw error;
+      }
+      // Accepted but held for an OTP: the money hasn't gone out, so it isn't
+      // marked paid (and the landlord isn't told it was).
+      if (transfer?.status?.toLowerCase() === TRANSFER_OTP_STATUS) {
+        this.logger.error(`Payout ${payment.id}: Paystack is holding transfer ${reference} for an OTP; not marked as paid`);
+        throw new BadRequestException(TRANSFER_OTP_ERROR);
       }
       await this.markReleased(payment.id, reference);
     } catch (error) {

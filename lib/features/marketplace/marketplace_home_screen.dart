@@ -4,6 +4,7 @@ import '../../api/api_exception.dart';
 import '../../api/marketplace_orders_repository.dart';
 import '../../api/models/marketplace_api.dart';
 import '../../api/models/vendor.dart';
+import '../../core/open_payment_page.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
@@ -311,7 +312,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await appState.marketplaceOrders.create(
+      final order = await appState.marketplaceOrders.create(
         items: [
           for (final entry in _cart.entries)
             MarketplaceOrderItemInput(
@@ -327,8 +328,20 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
         _cart.clear();
         _fulfillment.clear();
       });
-      messenger.showSnackBar(const SnackBar(content: Text('Payment successful! Your order has been placed.')));
       _load();
+      // Placing the order only starts the charge; it counts as paid once
+      // Paystack confirms it, never before. Order History shows each item
+      // as "Awaiting Payment" until then.
+      if (order.paymentUrls.length == 1) {
+        final launched = await openPaymentPage(order.paymentUrls.single);
+        if (!launched) {
+          messenger.showSnackBar(const SnackBar(content: Text("Order placed, but the payment page couldn't open. It isn't paid yet.")));
+        }
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(content: Text("Order placed but not paid yet. Check Order History; it's confirmed only once payment goes through.")),
+        );
+      }
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }

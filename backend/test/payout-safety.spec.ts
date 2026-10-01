@@ -13,6 +13,8 @@ function fakePaystack() {
     transfers: new Map<string, string>(), // reference -> Paystack status
     sent: [] as string[],
     next: null as null | 'rejected' | 'acceptedThenTimeout',
+    /// The Paystack account asks for an OTP on every transfer.
+    otpRequired: false,
     delayMs: 0,
     refunds: new Map<string, number[]>(), // charge reference -> refunded amounts
     refundCalls: 0,
@@ -45,12 +47,13 @@ function fakePaystack() {
         this.next = null;
         throw new Error('Insufficient balance'); // nothing created at Paystack
       }
-      this.transfers.set(reference, 'success');
+      this.transfers.set(reference, this.otpRequired ? 'otp' : 'success');
       this.sent.push(reference);
       if (this.next === 'acceptedThenTimeout') {
         this.next = null;
         throw new Error('Request timed out'); // Paystack DID send it
       }
+      return { transferCode: `TRF_${reference}`, status: this.otpRequired ? 'otp' : 'success' };
     },
   };
 }
@@ -121,6 +124,28 @@ describeDb('payouts can never be sent twice (real Postgres)', () => {
     expect(await payments.stuckPayouts()).toHaveLength(0);
     await expect(payments.retryPayout(payment.id)).resolves.toEqual({ status: 'ALREADY_PAID' });
     expect(paystack.sent).toHaveLength(1);
+  });
+
+  it('Paystack holds it for an OTP: not marked paid, never sent again, paid once confirmed in the dashboard', async () => {
+    const { tenant, booking, payment } = await awaitingMoveIn();
+    paystack.otpRequired = true;
+    await payments.releaseBookingOnMovedIn(booking.id, tenant.id);
+
+    expect((await prisma.booking.findUniqueOrThrow({ where: { id: booking.id } })).status).toBe('MOVED_IN');
+    expect((await status(payment.id)).status).toBe('PAID_HELD');
+    const [stuck] = await payments.stuckPayouts();
+    expect(stuck.lastError).toMatch(/OTP/);
+
+    // Retry while it still waits for the OTP: nothing new is sent.
+    await expect(payments.retryPayout(payment.id)).rejects.toThrow(/OTP/);
+    expect(paystack.sent).toEqual([payment.id]);
+    expect((await status(payment.id)).status).toBe('PAID_HELD');
+
+    // An admin confirms it in the Paystack dashboard: Retry records it as paid.
+    paystack.transfers.set(payment.id, 'success');
+    await expect(payments.retryPayout(payment.id)).resolves.toEqual({ status: 'PAID' });
+    expect(paystack.sent).toEqual([payment.id]);
+    expect((await status(payment.id)).status).toBe('RELEASED');
   });
 
   it('Paystack refused it: Retry sends it once, with the same reference', async () => {

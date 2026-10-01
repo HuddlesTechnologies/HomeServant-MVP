@@ -30,19 +30,22 @@ extension OrderItemStatusApi on OrderItemStatus {
 
 /// Escrow/payment-derived progress for a marketplace order item — distinct
 /// from the coarser [OrderItemStatus] (PENDING/COMPLETED/CANCELLED on the
-/// item itself). Mirrors the held→released escrow lifecycle described in
-/// the payment-engine plan (see `Payment.status` server-side): a buyer's
-/// payment is held until they confirm receipt, then released to the
-/// vendor. The exact backend field/values weren't finalized when this was
-/// written, so [fromApi] tries several likely codes and simply returns
-/// null for anything unrecognized — callers fall back to [OrderItemStatus]
-/// when this is null (see [MarketplaceOrderItemApi.progressLabel]).
+/// item itself), read from the server's `Payment.status`: a checkout that
+/// hasn't been paid yet ([awaitingPayment]) or [failed], then the buyer's
+/// payment held until they confirm receipt, then released to the vendor.
+/// Only [held] and [released] mean the money actually arrived. [fromApi]
+/// returns null for anything unrecognized — callers fall back to
+/// [OrderItemStatus] (see [MarketplaceOrderItemApi.progressLabel]).
 enum OrderItemPaymentProgress {
+  awaitingPayment,
+  failed,
   held,
   released,
   refunded;
 
   String get label => switch (this) {
+    OrderItemPaymentProgress.awaitingPayment => 'Awaiting Payment',
+    OrderItemPaymentProgress.failed => 'Payment Failed',
     OrderItemPaymentProgress.held => 'Payment Held — Awaiting Your Confirmation',
     OrderItemPaymentProgress.released => 'Completed',
     OrderItemPaymentProgress.refunded => 'Refunded',
@@ -50,7 +53,11 @@ enum OrderItemPaymentProgress {
 
   static OrderItemPaymentProgress? fromApi(String? value) {
     switch (value?.toUpperCase()) {
+      // Checkout started but Paystack hasn't confirmed the charge: not paid.
       case 'INITIATED':
+        return OrderItemPaymentProgress.awaitingPayment;
+      case 'FAILED':
+        return OrderItemPaymentProgress.failed;
       case 'PAID_HELD':
       case 'HELD':
       case 'PAYMENT_HELD':
@@ -212,15 +219,11 @@ class MarketplaceOrderItemApi {
   /// neither newer field is present yet.
   String get progressLabel => paymentProgressLabel ?? paymentProgress?.label ?? status.label;
 
-  /// Whether a "Mark as Received" action makes sense right now. True when
-  /// the server explicitly says payment is held, or — until that signal is
-  /// wired in everywhere — the item is simply still PENDING with neither
-  /// new field present yet (a reasonable default: nothing has completed
-  /// or been refunded, so there's nothing wrong with letting the buyer
-  /// confirm receipt).
-  bool get isPaymentHeld =>
-      paymentProgress == OrderItemPaymentProgress.held ||
-      (paymentProgress == null && paymentProgressLabel == null && status == OrderItemStatus.pending);
+  /// Whether a "Mark as Received" action makes sense right now: only when
+  /// the server says the buyer's payment is actually held. A checkout
+  /// that's still pending or failed (or has no payment at all) never
+  /// qualifies; the server refuses to release those anyway.
+  bool get isPaymentHeld => paymentProgress == OrderItemPaymentProgress.held;
 
   /// True once this item's payment has actually cleared (held in escrow or
   /// already released to the vendor) — the gate for showing the purchased
@@ -306,11 +309,17 @@ class MarketplaceOrderApi {
     required this.customerPhone,
     required this.customerAddress,
     required this.items,
+    this.paymentUrls = const [],
   });
 
   final String id;
   final DateTime createdAt;
   final PaymentMethod paymentMethod;
+
+  /// Only on the response to placing an order: the Paystack checkout page
+  /// for each item's charge (one per item). Nothing is paid until the buyer
+  /// completes it and Paystack confirms the charge.
+  final List<String> paymentUrls;
   final String customerName;
   final String customerPhone;
   final String customerAddress;
@@ -336,6 +345,10 @@ class MarketplaceOrderApi {
     customerPhone: json['customerPhone'] as String,
     customerAddress: json['customerAddress'] as String,
     items: (json['items'] as List).cast<Map<String, dynamic>>().map(MarketplaceOrderItemApi.fromApi).toList(),
+    paymentUrls: [
+      for (final p in (json['payments'] as List? ?? const []).cast<Map<String, dynamic>>())
+        if (p['authorizationUrl'] is String) p['authorizationUrl'] as String,
+    ],
   );
 }
 
