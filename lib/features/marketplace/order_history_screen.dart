@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../api/models/marketplace_api.dart';
+import '../../core/open_payment_page.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
@@ -117,6 +118,13 @@ class _OrderCard extends StatelessWidget {
     }
   }
 
+  Future<void> _completePayment(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!await openPaymentPage(order.paymentUrl!)) {
+      messenger.showSnackBar(const SnackBar(content: Text("Couldn't open the payment page — try again.")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pickupItems = order.pickupItems;
@@ -149,6 +157,33 @@ class _OrderCard extends StatelessWidget {
               ),
             ],
           ),
+          if (order.canCompletePayment) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => _completePayment(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.accent,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+                ),
+                child: Text(
+                  'Complete payment · ₦${formatWithThousandsSeparator(order.total)}',
+                  style: AppTextStyles.body(color: theme.onAccent, size: 13.5, weight: FontWeight.w700),
+                ),
+              ),
+            ),
+            if (order.paymentExpiresAt != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Not paid yet. If unpaid by ${TimeOfDay.fromDateTime(order.paymentExpiresAt!).format(context)}, the order is cancelled.',
+                  style: AppTextStyles.body(color: theme.foreground.withValues(alpha: 0.7), size: 11.5),
+                ),
+              ),
+          ],
           if (pickupItems.isNotEmpty) ...[
             const SizedBox(height: 12),
             Wrap(
@@ -349,7 +384,9 @@ class _OrderItemRowState extends State<_OrderItemRow> {
   }
 
   Color _progressColor(MarketplaceOrderItemApi item) {
-    if (item.paymentProgress == OrderItemPaymentProgress.refunded) return const Color(0xFFE0524B);
+    if (item.paymentProgress == OrderItemPaymentProgress.refunded || item.paymentProgress == OrderItemPaymentProgress.failed) {
+      return const Color(0xFFE0524B);
+    }
     if (item.paymentProgress == OrderItemPaymentProgress.released) return const Color(0xFF2E9E5B);
     if (item.isPaymentHeld) return const Color(0xFFEF9E00);
     return item.status.color;

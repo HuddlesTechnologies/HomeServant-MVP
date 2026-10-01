@@ -892,7 +892,15 @@ class AppState extends ChangeNotifier with _NotificationsSection, _ListingsSecti
 
     if (isAuthenticated && role != UserRole.admin) {
       final paymentReference = takePaymentReturnReference();
-      if (paymentReference != null && role == UserRole.tenant) {
+      // A marketplace order's checkout (any role can shop); otherwise a
+      // tenant's rent.
+      if (paymentReference != null && paymentReference.startsWith('mkto_')) {
+        try {
+          await _marketplaceOrdersRepo.confirmPayment(paymentReference);
+        } catch (_) {
+          // The webhook still marks it paid; Order History shows it then.
+        }
+      } else if (paymentReference != null && role == UserRole.tenant) {
         try {
           await _bookingsRepo.confirmPayment(paymentReference);
         } catch (_) {

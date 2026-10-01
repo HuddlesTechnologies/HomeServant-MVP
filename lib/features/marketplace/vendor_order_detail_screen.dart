@@ -227,6 +227,7 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                 _DetailRow(theme: theme, label: 'Order ID', value: item.orderId),
                 if (order != null) _DetailRow(theme: theme, label: 'Order Date', value: formatShortDate(order.createdAt)),
                 if (order != null) _DetailRow(theme: theme, label: 'Payment Method', value: order.paymentMethod.label),
+                _DetailRow(theme: theme, label: 'Payment', value: _paymentLabel(item.paymentProgress)),
                 _DetailRow(theme: theme, label: 'Fulfillment', value: item.fulfillment.label),
                 _DetailRow(theme: theme, label: 'Item Total', value: '₦${formatWithThousandsSeparator(item.subtotal)}', showDivider: false),
               ],
@@ -265,7 +266,7 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
                   _DetailRow(theme: theme, label: 'Tracking number', value: _trackingNumber ?? '—', showDivider: false),
                 ],
               ),
-            ] else if (isDelivery && _status == OrderItemStatus.pending) ...[
+            ] else if (isDelivery && _status == OrderItemStatus.pending && item.isPaymentHeld) ...[
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: _updating ? null : _ship,
@@ -335,6 +336,17 @@ class _VendorOrderDetailScreenState extends State<VendorOrderDetailScreen> {
     );
   }
 }
+
+/// What the vendor needs to know about the buyer's payment: only "Paid"
+/// means the money has actually arrived (held until the buyer confirms
+/// receipt), so don't ship before it.
+String _paymentLabel(OrderItemPaymentProgress? progress) => switch (progress) {
+  OrderItemPaymentProgress.held => 'Paid (held until the buyer confirms receipt)',
+  OrderItemPaymentProgress.released => 'Paid out to you',
+  OrderItemPaymentProgress.refunded => 'Refunded to the buyer',
+  OrderItemPaymentProgress.failed => 'Payment failed',
+  OrderItemPaymentProgress.awaitingPayment || null => 'Not paid yet',
+};
 
 class _DetailCard extends StatelessWidget {
   const _DetailCard({required this.theme, required this.rows, this.title});

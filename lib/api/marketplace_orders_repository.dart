@@ -34,6 +34,15 @@ class MarketplaceOrdersRepository {
     });
   }
 
+  /// The buyer is back from Paystack with [reference]: true once the order
+  /// is confirmed paid.
+  Future<bool> confirmPayment(String reference) {
+    return _client.call(() async {
+      final response = await _client.dio.post('/marketplace/orders/confirm-payment', data: {'reference': reference});
+      return (response.data as Map<String, dynamic>)['paid'] as bool? ?? false;
+    });
+  }
+
   Future<List<MarketplaceOrderApi>> mine() {
     return _client.call(() async {
       final response = await _client.dio.get('/marketplace/orders/mine');

@@ -4,6 +4,7 @@ import '../../api/api_exception.dart';
 import '../../api/marketplace_orders_repository.dart';
 import '../../api/models/marketplace_api.dart';
 import '../../api/models/vendor.dart';
+import '../../core/open_payment_page.dart';
 import '../../core/responsive.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/thousands_separator.dart';
@@ -311,7 +312,7 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
     final appState = context.read<AppState>();
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await appState.marketplaceOrders.create(
+      final order = await appState.marketplaceOrders.create(
         items: [
           for (final entry in _cart.entries)
             MarketplaceOrderItemInput(
@@ -327,8 +328,17 @@ class _MarketplaceHomeScreenState extends State<MarketplaceHomeScreen> {
         _cart.clear();
         _fulfillment.clear();
       });
-      messenger.showSnackBar(const SnackBar(content: Text('Payment successful! Your order has been placed.')));
       _load();
+      // Placing the order only starts its one checkout (every item, every
+      // vendor); it counts as paid once Paystack confirms it, never before.
+      // Order History shows "Awaiting Payment" until then.
+      final url = order.paymentUrl;
+      final launched = url != null && await openPaymentPage(url);
+      if (!launched) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text("Order placed, but the payment page couldn't open. Finish paying from Order History.")),
+        );
+      }
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     }

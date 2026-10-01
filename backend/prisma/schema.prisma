@@ -171,6 +171,11 @@ model Payment {
   /// is transferred — recipient gets amount - platformFeeAmount).
   platformFeeAmount     Int
   paystackReference     String                @unique
+  /// The Paystack charge this payment was paid through, when that's shared
+  /// with other payments (a marketplace order paid in one checkout, see
+  /// MarketplaceOrder.paystackReference). Null means [paystackReference]
+  /// is the charge itself.
+  chargeReference       String?
   transferRecipientCode String?
   /// Set while this payment's release to a landlord is held because they
   /// aren't verified and PlatformSettings.payUnverifiedLandlords is off.
@@ -219,6 +224,7 @@ model Payment {
 
   @@index([bookingId])
   @@index([status])
+  @@index([chargeReference])
 }
 
 model User {
@@ -1194,6 +1200,19 @@ model MarketplaceOrder {
   customerName    String
   customerPhone   String
   customerAddress String
+  /// The one Paystack charge covering every item in the order (each item
+  /// still has its own Payment, linked by Payment.chargeReference, so it's
+  /// held, paid out and refunded on its own). [authorizationUrl] is its
+  /// checkout page, kept so the buyer can come back to finish paying.
+  paystackReference String?                @unique
+  authorizationUrl  String?
+  /// An order not paid by then is cancelled and its stock put back (see
+  /// MarketplaceCheckoutExpiryService).
+  paymentExpiresAt  DateTime?
+  /// Held while a refund for one of the order's items is being worked out,
+  /// so refunds against the shared charge run one at a time (see
+  /// BookingRefunds.refundSharedChargeItem).
+  refundLockedAt    DateTime?
   createdAt       DateTime                 @default(now())
 
   items   MarketplaceOrderItem[]
