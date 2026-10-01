@@ -555,6 +555,13 @@ export class PaymentsService {
       return { outcome, updatedBooking };
     });
 
+    // Noted in their chat, so both sides see it there: the tenant that
+    // their move-in went through, the landlord that the tenant moved in.
+    const threadId = await this.notices.postBookingSystemMessage(
+      booking,
+      `${booking.tenant.fullName?.trim() || 'The tenant'} marked moved in to ${booking.property.title}. The tenancy has started and the tenancy agreement is ready in booking history.`,
+      true,
+    );
     await this.notices.notifyAboutBooking(
       booking,
       booking.tenantId,
@@ -562,6 +569,7 @@ export class PaymentsService {
       NotificationType.BOOKING_STATUS,
       'Welcome home!',
       `You've moved into ${booking.property.title}. Your tenancy agreement is ready in your booking history.`,
+      threadId ?? undefined,
     );
     await this.notices.notifyAboutBooking(
       booking,
@@ -574,6 +582,7 @@ export class PaymentsService {
         `Your tenant has moved into ${booking.property.title}`,
         `Your tenant has moved into ${booking.property.title} and your payout has been released.`,
       ),
+      threadId ?? undefined,
     );
 
     return updatedBooking;

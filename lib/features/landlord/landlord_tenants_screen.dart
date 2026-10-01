@@ -9,6 +9,7 @@ import '../../state/app_state.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/upload_picker.dart';
 import 'tenant_profile_view_screen.dart';
+import 'widgets/message_tenant.dart';
 import '../../widgets/profile_photo_viewer.dart';
 
 enum _TenantFilter { current, former, all }
@@ -34,8 +35,9 @@ class _TenantEntry {
 }
 
 /// Landlord: everyone who has rented (moved in) or booked a paid shortlet
-/// stay at one of their properties. Search by name; tap for the tenant's
-/// profile, their tenancies and the eviction option.
+/// stay at one of their properties. Search by name; message a tenant from
+/// their card, or tap it for their profile, tenancies and the eviction
+/// option.
 class LandlordTenantsScreen extends StatefulWidget {
   const LandlordTenantsScreen({super.key});
 
@@ -311,7 +313,19 @@ class _TenantTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right_rounded, color: AppColors.hintGrey),
+                Column(
+                  children: [
+                    // Navy icon on a pale navy wash, on the white card.
+                    IconButton(
+                      tooltip: 'Message ${entry.name}',
+                      onPressed: () => messageTenant(context, b),
+                      style: IconButton.styleFrom(backgroundColor: AppColors.navy.withValues(alpha: 0.08)),
+                      icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppColors.navy, size: 20),
+                    ),
+                    const SizedBox(height: 4),
+                    const Icon(Icons.chevron_right_rounded, color: AppColors.hintGrey),
+                  ],
+                ),
               ],
             ),
           ),

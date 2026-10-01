@@ -9,6 +9,7 @@ import '../../widgets/upload_picker.dart';
 import '../../widgets/verified_badge.dart';
 import '../../widgets/labeled_value_row.dart';
 import '../../widgets/profile_photo_viewer.dart';
+import 'widgets/message_tenant.dart';
 
 /// Read-only tenant profile — reached from a landlord's booking row via
 /// "View Tenant Profile". Shows only what `GET /bookings/landlord` already
@@ -91,6 +92,23 @@ class TenantProfileViewScreen extends StatelessWidget {
                 child: Text(
                   booking.tenantEmail!,
                   style: AppTextStyles.body(color: AppColors.hintGrey, size: 13),
+                ),
+              ),
+            ],
+            if (booking.tenantId != null) ...[
+              const SizedBox(height: 16),
+              // White on navy, on the off-white page.
+              Center(
+                child: FilledButton.icon(
+                  onPressed: () => messageTenant(context, booking),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.navy,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                  ),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18, color: Colors.white),
+                  label: Text('Message tenant', style: AppTextStyles.button(color: Colors.white, size: 14.5)),
                 ),
               ),
             ],

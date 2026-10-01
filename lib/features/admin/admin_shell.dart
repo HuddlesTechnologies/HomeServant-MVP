@@ -623,7 +623,6 @@ class _AdminShellState extends State<AdminShell> {
           color: Colors.white,
           count: context.watch<AppState>().unreadNotificationCount,
           onTap: () {
-            context.read<AppState>().markAllNotificationsRead();
             // Beside the sidebar on wide screens, full screen on phones.
             final navigator = _usesSidebar(context) ? _contentNavigator.currentState : null;
             (navigator ?? Navigator.of(context)).push(

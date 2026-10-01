@@ -586,7 +586,6 @@ class _TenantDashboardScreenState extends State<TenantDashboardScreen> {
                                 color: theme.foreground,
                                 showDot: context.watch<AppState>().unreadNotificationCount > 0,
                                 onTap: () {
-                                  context.read<AppState>().markAllNotificationsRead();
                                   Navigator.of(context).push(
                                     MaterialPageRoute(
                                       builder:

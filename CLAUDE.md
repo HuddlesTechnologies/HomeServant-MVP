@@ -11,3 +11,10 @@ Concretely:
 - When giving a reusable field widget (`PillTextField`, `LabeledPillField`, `LabeledDropdownField`, etc.) a non-default `fillColor`, always pass the matching `textColor` explicitly alongside it — don't override one half of a color pair and leave the other on its default.
 - Admin console screens use the static `AppColors`/`AppTextStyles` (navy text on white/off-white) — the same rule applies: any raw `TextField` there needs an explicit `style`/`labelStyle`/`hintStyle`, since the app's global theme (`AppTheme.light` / `ColorScheme.fromSeed`) is not guaranteed to match this app's own hardcoded palette.
 - When adding a new `DashboardTheme` variant or a new themed container, sanity-check every text color drawn on it across *all* theme variants, not just whichever one you happened to be looking at while building the screen.
+
+## Rule: a fix comes with a test, and nothing is pushed unchecked
+
+Fixed bugs have kept coming back (Google sign-in, the date-of-birth calendar's invisible text) because nothing checked them after the fix. So:
+
+- Every bug fix adds a test that fails without the fix and passes with it. Before pushing, confirm the test actually catches the bug (undo the fix, watch it fail, restore). Config-level fixes (`vercel.json`'s security policy, `web/index.html`) get a guard in `test/regression_guards_test.dart`.
+- Before pushing, run what CI runs: `flutter analyze` and `flutter test` at the root (any analyzer `info` fails CI too), and in `backend/`: `npx tsc --noEmit -p tsconfig.json` and `npm test` (needs `TEST_DATABASE_URL` pointing at a disposable, migrated Postgres; see `backend/test/helpers.ts`). The SessionStart hook (`.claude/hooks/session-start.sh`) installs Flutter and the backend packages in Claude Code on the web sessions.
